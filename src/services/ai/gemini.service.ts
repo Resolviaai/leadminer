@@ -49,6 +49,7 @@ Write exactly ONE natural, genuine, specific compliment or observation (1 senten
 Focus on their niche, topic, or content consistency.
 Do not use hyperbolic flattery or generic clichés like "stumbled upon your channel".
 Do not include quotes or greetings. Output only the single sentence.
+STRICT RULE: Never use em dashes (—), en dashes (–), double hyphens (--), or semicolons under any circumstances. Write in natural, direct, human conversational English.
 
 Channel Title: ${input.channelTitle}
 Category: ${input.category || 'Content Creator'}
@@ -70,8 +71,14 @@ Description: ${input.description ? input.description.slice(0, 300) : 'Active vid
         };
       }
 
-      // Strip any wrapping quotes
-      const cleanLine = text.replace(/^["']|["']$/g, '');
+      // Strip wrapping quotes and strictly purge any em dashes, en dashes, or double hyphens
+      const cleanLine = text
+        .replace(/^["'“”‘’`]+|["'“”‘’`]+$/g, '')
+        .replace(/\s*[—–]\s*/g, ', ')
+        .replace(/--+/g, ', ')
+        .replace(/,\s*,/g, ', ')
+        .replace(/,\s*\./g, '.')
+        .trim();
 
       return {
         customLine: cleanLine,

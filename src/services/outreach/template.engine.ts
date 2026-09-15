@@ -14,6 +14,16 @@ export class TemplateEngine {
 
     let rendered = templateString;
 
+    const sanitizeNoEmDash = (s: string) =>
+      s
+        .replace(/\s*[—–]\s*/g, ', ')
+        .replace(/--+/g, ', ')
+        .replace(/,\s*,/g, ', ')
+        .replace(/,\s*\./g, '.')
+        .trim();
+
+    const rawCustomLine = variables.custom_line || 'I really enjoy the direction of your channel content.';
+
     // Substitute standard variables
     const cleanVars: Record<string, string> = {
       first_name: variables.first_name || variables.channel_name || 'there',
@@ -21,7 +31,7 @@ export class TemplateEngine {
       channel_url: variables.channel_url || '',
       subscriber_count: this.formatSubscribers(variables.subscriber_count),
       website: variables.website || '',
-      custom_line: variables.custom_line || 'I really enjoy the direction of your channel content.',
+      custom_line: sanitizeNoEmDash(rawCustomLine),
     };
 
     for (const [key, val] of Object.entries(cleanVars)) {

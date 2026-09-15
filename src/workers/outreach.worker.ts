@@ -159,6 +159,13 @@ export async function runOutreachBatch(batchLimit = 10): Promise<{ sent: number;
           // Strip outer quotes (single, double, smart quotes, backticks)
           candidate = candidate.replace(/^["'“”‘’`]+|["'“”‘’`]+$/g, '').trim();
           candidate = candidate.replace(/[\r\n]+/g, ' ').trim();
+          // Purge any em dashes, en dashes, or double hyphens
+          candidate = candidate
+            .replace(/\s*[—–]\s*/g, ', ')
+            .replace(/--+/g, ', ')
+            .replace(/,\s*,/g, ', ')
+            .replace(/,\s*\./g, '.')
+            .trim();
 
           // Ensure customLine is non-empty and length <= 120 chars
           if (candidate.length > 0 && candidate.length <= 120) {

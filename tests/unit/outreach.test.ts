@@ -35,6 +35,19 @@ describe('Template Engine', () => {
     expect(vars).toContain('channel_name');
     expect(vars).toContain('custom_line');
   });
+
+  it('should strictly sanitize and purge em-dashes and en-dashes from custom_line', () => {
+    const template = 'Hey {{first_name}},\n\n{{custom_line}}';
+    const inputWithEmDash = 'Loved your latest breakdown — the pacing was spot-on — really enjoyed it.';
+    const rendered = templateEngine.render(template, {
+      first_name: 'Alex',
+      custom_line: inputWithEmDash,
+    });
+    expect(rendered).not.toContain('—');
+    expect(rendered).not.toContain('–');
+    expect(rendered).not.toContain('--');
+    expect(rendered).toBe('Hey Alex,\n\nLoved your latest breakdown, the pacing was spot-on, really enjoyed it.');
+  });
 });
 
 describe('Gemini Personalizer Service', () => {
