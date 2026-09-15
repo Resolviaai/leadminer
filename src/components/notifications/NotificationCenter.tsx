@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
@@ -83,25 +83,45 @@ export function NotificationCenter() {
     setReadIds(new Set(notifications.map((n) => n.id)));
   };
 
+  const showPushNotification = (title: string, body: string, url = "/") => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.ready
+        .then((reg) => {
+          reg.showNotification(title, {
+            body,
+            icon: "/icon-192.png",
+            badge: "/icon-192.png",
+            data: { url },
+          });
+        })
+        .catch(() => {
+          new Notification(title, { body, icon: "/icon-192.png" });
+        });
+    } else {
+      new Notification(title, { body, icon: "/icon-192.png" });
+    }
+  };
+
   const requestPush = async () => {
     if (typeof window !== "undefined" && "Notification" in window) {
       const perm = await Notification.requestPermission();
       setPushPermission(perm);
       if (perm === "granted") {
-        new Notification("LeadMiner Alerts Enabled", {
-          body: "You will now receive alerts for incoming lead replies and system events!",
-          icon: "/favicon.ico",
-        });
+        showPushNotification(
+          "LeadMiner Alerts Enabled",
+          "You will now receive alerts for incoming lead replies and system events!"
+        );
       }
     }
   };
 
   const sendTestNotification = () => {
     if (typeof window !== "undefined" && "Notification" in window && pushPermission === "granted") {
-      new Notification("LeadMiner: Prospect Replied!", {
-        body: "The Rogan Clips replied to your outreach email. Tap to view message.",
-        icon: "/favicon.ico",
-      });
+      showPushNotification(
+        "LeadMiner: Prospect Replied!",
+        "The Rogan Clips replied to your outreach email. Tap to view message.",
+        "/replies"
+      );
     }
   };
 

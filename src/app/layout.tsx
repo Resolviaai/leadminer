@@ -1,20 +1,30 @@
-import './globals.css';
+﻿import './globals.css';
 import React from 'react';
 import Link from 'next/link';
 import { Navigation } from '../components/navigation';
 import { NotificationCenter } from '../components/notifications/NotificationCenter';
+import { PwaRegister } from '../components/pwa/PwaRegister';
 import { Radio } from 'lucide-react';
 import { env } from '../config/env';
 
 export const metadata = {
   title: 'LeadMiner | YouTube Outreach Platform',
   description: 'Autonomous, incremental YouTube lead-generation & cold outreach engine',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'LeadMiner',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
       <body className="bg-studio text-text-main min-h-screen flex flex-col md:flex-row antialiased selection:bg-primary/20 selection:text-primary">
+        {/* Silent PWA Service Worker Registration */}
+        <PwaRegister />
+
         {/* Responsive Desktop Sidebar + Mobile Topbar & Floating Bottom Nav */}
         <Navigation dryRun={env.DRY_RUN} />
 
