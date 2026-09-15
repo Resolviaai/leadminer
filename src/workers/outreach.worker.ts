@@ -1,6 +1,7 @@
 import { db } from '../db/client';
 import { campaigns, leads, contacts, templates, messages, systemSettings, gmailAccounts } from '../db/schema';
-import { eq, and, isNotNull, sql } from 'drizzle-orm';
+import { eq, and, isNotNull, inArray, sql } from 'drizzle-orm';
+import { env } from '../config/env';
 import { templateEngine } from '../services/outreach/template.engine';
 import { geminiService } from '../services/ai/gemini.service';
 import { gmailSendingService } from '../services/outreach/gmail.service';
@@ -17,6 +18,10 @@ export async function runOutreachBatch(batchLimit = 10): Promise<{ sent: number;
     console.warn('⛔ [Kill Switch Active] STOP ALL OUTREACH is enabled in dashboard. Halting.');
     return { sent: 0, skipped: 0, errors: 0 };
   }
+
+  // Pipeline recovery: recover any stale jobs, keywords, or abandoned queued leads
+  await jobRunner.recoverStaleJobsAndKeywords(env.WORKER_STALE_TIMEOUT_MINUTES);
+  await jobRunner.recoverStaleOutreachLeads(env.WORKER_STALE_TIMEOUT_MINUTES);
 
   const jobId = await jobRunner.createJob('CAMPAIGN_SEND', { batchLimit });
 
@@ -51,7 +56,7 @@ export async function runOutreachBatch(batchLimit = 10): Promise<{ sent: number;
 
     const template = templateRecord[0];
 
-    // 4. Fetch QUALIFIED leads with VALID email that have not been contacted yet
+    // 4. Fetch QUALIFIED leads with VALID, DOMAIN_VALID, or MAILBOX_VERIFIED email that have not been contacted yet
     const candidateLeads = await db
       .select({
         leadId: leads.id,
@@ -70,7 +75,7 @@ export async function runOutreachBatch(batchLimit = 10): Promise<{ sent: number;
           eq(leads.qualificationStatus, 'QUALIFIED'),
           eq(leads.outreachStatus, 'UNPROCESSED'),
           eq(leads.suppressionStatus, false),
-          eq(contacts.emailStatus, 'VALID'),
+          inArray(contacts.emailStatus, ['VALID', 'DOMAIN_VALID', 'MAILBOX_VERIFIED']),
           isNotNull(contacts.email)
         )
       )
@@ -82,18 +87,27 @@ export async function runOutreachBatch(batchLimit = 10): Promise<{ sent: number;
       return { sent: 0, skipped: 0, errors: 0 };
     }
 
-    console.log(`📬 Found ${candidateLeads.length} qualified leads for outreach.`);
+    // Deduplicate candidate leads by leadId
+    const seenLeadIds = new Set<number>();
+    const uniqueCandidateLeads = candidateLeads.filter((l) => {
+      if (seenLeadIds.has(l.leadId)) return false;
+      seenLeadIds.add(l.leadId);
+      return true;
+    });
+
+    console.log(`📬 Found ${uniqueCandidateLeads.length} unique qualified leads for outreach.`);
 
     let sentCount = 0;
     let skippedCount = 0;
     let errorCount = 0;
 
-    for (const lead of candidateLeads) {
+    for (const lead of uniqueCandidateLeads) {
       if (!lead.email) continue;
 
       const idempotencyKey = `campaign_${campaign.id}_lead_${lead.leadId}`;
 
-      // Check if message already exists with this idempotency key
+      // Atomic locking / guard:
+      // Step A: Check if message already exists with this idempotency key
       const existing = await db
         .select({ id: messages.id })
         .from(messages)
@@ -102,28 +116,65 @@ export async function runOutreachBatch(batchLimit = 10): Promise<{ sent: number;
 
       if (existing.length > 0) {
         console.log(`  [Skip] Message already exists for lead ${lead.leadId} (idempotency enforced)`);
+        await db
+          .update(leads)
+          .set({ outreachStatus: 'CONTACTED', updatedAt: new Date() })
+          .where(eq(leads.id, lead.leadId));
+        skippedCount++;
+        continue;
+      }
+
+      // Step B: Atomically mark lead as QUEUED to prevent concurrent workers from processing the same lead
+      const lockResult = await db
+        .update(leads)
+        .set({ outreachStatus: 'QUEUED', updatedAt: new Date() })
+        .where(and(eq(leads.id, lead.leadId), eq(leads.outreachStatus, 'UNPROCESSED')))
+        .returning({ id: leads.id });
+
+      if (lockResult.length === 0) {
+        console.log(`  [Skip] Lead ${lead.leadId} already locked or processed by another worker`);
         skippedCount++;
         continue;
       }
 
       console.log(`\n[Outreach] Preparing message for "${lead.channelTitle}" (${lead.email})...`);
 
-      // 5. Optional Gemini Personalization
-      let customLine = 'I really enjoy the direction of your channel content.';
+      // 5. Gemini Personalization with strict validation
+      const DEFAULT_CUSTOM_LINE = 'I really enjoy the direction of your channel content.';
+      let customLine = DEFAULT_CUSTOM_LINE;
       let personalizationStatus: 'NONE' | 'CUSTOMIZED' | 'FALLBACK' | 'FAILED' = 'NONE';
       let modelUsed: string | undefined;
 
       if (campaign.enableGeminiPersonalization) {
-        const aiRes = await geminiService.generateCustomLine({
-          channelTitle: lead.channelTitle,
-          description: lead.description || undefined,
-          subscriberCount: lead.subscriberCount || undefined,
-        });
+        try {
+          const aiRes = await geminiService.generateCustomLine({
+            channelTitle: lead.channelTitle,
+            description: lead.description || undefined,
+            subscriberCount: lead.subscriberCount || undefined,
+          });
 
-        customLine = aiRes.customLine;
-        personalizationStatus = aiRes.status;
-        modelUsed = aiRes.model;
-        console.log(`  Gemini Hook: "${customLine}" (${personalizationStatus})`);
+          modelUsed = aiRes.model;
+          let candidate = (aiRes.customLine || '').trim();
+
+          // Strip outer quotes (single, double, smart quotes, backticks)
+          candidate = candidate.replace(/^["'“”‘’`]+|["'“”‘’`]+$/g, '').trim();
+          candidate = candidate.replace(/[\r\n]+/g, ' ').trim();
+
+          // Ensure customLine is non-empty and length <= 120 chars
+          if (candidate.length > 0 && candidate.length <= 120) {
+            customLine = candidate;
+            personalizationStatus = aiRes.status;
+            console.log(`  Gemini Hook: "${customLine}" (${personalizationStatus})`);
+          } else {
+            console.warn(`  ⚠️ Gemini hook invalid or exceeds 120 chars (len=${candidate.length}). Using safe default.`);
+            customLine = DEFAULT_CUSTOM_LINE;
+            personalizationStatus = 'FALLBACK';
+          }
+        } catch (err: any) {
+          console.warn(`  ⚠️ Gemini personalization error: ${err.message}. Using safe default.`);
+          customLine = DEFAULT_CUSTOM_LINE;
+          personalizationStatus = 'FALLBACK';
+        }
       }
 
       // 6. Render Template
@@ -167,6 +218,18 @@ export async function runOutreachBatch(batchLimit = 10): Promise<{ sent: number;
       } else {
         errorCount++;
         console.error(`  ❌ Send failed: ${sendResult.error || sendResult.skippedReason}`);
+        if (sendResult.skippedReason === 'RECIPIENT_SUPPRESSED') {
+          await db
+            .update(leads)
+            .set({ outreachStatus: 'UNSUBSCRIBED', suppressionStatus: true, updatedAt: new Date() })
+            .where(eq(leads.id, lead.leadId));
+        } else {
+          // Revert to UNPROCESSED so pipeline checkpoint allows clean retry on next run
+          await db
+            .update(leads)
+            .set({ outreachStatus: 'UNPROCESSED', updatedAt: new Date() })
+            .where(eq(leads.id, lead.leadId));
+        }
         await jobRunner.logEvent(jobId, 'MESSAGE_FAILED', 'WARN', `Failed to send to ${lead.email}: ${sendResult.error || sendResult.skippedReason}`);
       }
 

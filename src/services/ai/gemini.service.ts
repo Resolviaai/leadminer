@@ -55,10 +55,10 @@ Category: ${input.category || 'Content Creator'}
 Description: ${input.description ? input.description.slice(0, 300) : 'Active video creator'}
 `.trim();
 
-      // Wrap in a 5-second timeout to protect worker throughput
+      // Wrap in a 3.5-second timeout to protect worker throughput
       const result = await Promise.race([
         model.generateContent(prompt),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Gemini API request timed out')), 5000)),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Gemini API request timed out')), 3500)),
       ]);
 
       const text = result.response.text()?.trim();

@@ -66,6 +66,6 @@ describe('Lead Qualification Service', () => {
 
     const res = leadQualificationService.qualify(candidate, defaultCriteria);
     expect(res.qualified).toBe(false);
-    expect(res.reason).toContain('not verified as VALID');
+    expect(res.reason).toContain('not verified as deliverable');
   });
 });

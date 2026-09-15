@@ -44,6 +44,10 @@ const envSchema = z.object({
   SESSION_SECRET: z.string().default('default-session-secret-change-in-production'),
   ENCRYPTION_KEY: z.string().default('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'),
 
+  // Discovery Quality Filter Thresholds (n8n Reintegration)
+  MIN_DISCOVERY_SUBSCRIBERS: z.coerce.number().default(10),
+  MIN_DISCOVERY_VIDEOS: z.coerce.number().default(10),
+
   // Worker Config
   WORKER_BATCH_SIZE: z.coerce.number().default(10),
   WORKER_MAX_RETRIES: z.coerce.number().default(3),
@@ -56,9 +60,26 @@ export type Env = z.infer<typeof envSchema>;
 let parsedEnv: Env;
 try {
   parsedEnv = envSchema.parse(process.env);
-} catch (error) {
+} catch (error: any) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(`[FATAL] Invalid environment variables in production: ${error.message}`);
+  }
   console.warn('⚠️ Warning: Some environment variables are not set. Using safe defaults for dry run mode.');
   parsedEnv = envSchema.parse({});
+}
+
+// Production runtime security enforcement (bypass during build-time page data collection)
+const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build' || process.env.npm_lifecycle_event === 'build';
+if (parsedEnv.NODE_ENV === 'production' && !isBuildPhase) {
+  if (!process.env.SESSION_SECRET || parsedEnv.SESSION_SECRET === 'default-session-secret-change-in-production') {
+    throw new Error('[SECURITY FATAL] Insecure SESSION_SECRET default detected in production. A cryptographically strong SESSION_SECRET is required.');
+  }
+  if (!process.env.ENCRYPTION_KEY || parsedEnv.ENCRYPTION_KEY === '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef') {
+    throw new Error('[SECURITY FATAL] Insecure ENCRYPTION_KEY default detected in production. A unique 32-byte (64 hex char) ENCRYPTION_KEY is required.');
+  }
+  if (!process.env.DATABASE_URL || parsedEnv.DATABASE_URL.includes('localhost')) {
+    throw new Error('[SECURITY FATAL] Production DATABASE_URL must point to a live external database.');
+  }
 }
 
 export const env = parsedEnv;

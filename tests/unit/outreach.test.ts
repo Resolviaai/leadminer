@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { templateEngine } from '../../src/services/outreach/template.engine';
 import { geminiService } from '../../src/services/ai/gemini.service';
+import { gmailSendingService } from '../../src/services/outreach/gmail.service';
 
 describe('Template Engine', () => {
   it('should render all standard variables accurately', () => {
@@ -47,5 +48,29 @@ describe('Gemini Personalizer Service', () => {
     expect(res.customLine).toBeTruthy();
     expect(res.customLine.length).toBeGreaterThan(15);
     expect(['CUSTOMIZED', 'FALLBACK']).toContain(res.status);
+  }, 10000);
+});
+
+describe('Outreach Hardening & Volume Jitter', () => {
+  it('should enforce volume jitter daily limits between 18 and 25', () => {
+    for (let accId = 1; accId <= 20; accId++) {
+      const limit = gmailSendingService.getTodayEffectiveLimit(accId, 25);
+      expect(limit).toBeGreaterThanOrEqual(18);
+      expect(limit).toBeLessThanOrEqual(25);
+    }
+  });
+
+  it('should generate consistent deterministic limits for the same account on the same day', () => {
+    const limit1 = gmailSendingService.getTodayEffectiveLimit(42, 25);
+    const limit2 = gmailSendingService.getTodayEffectiveLimit(42, 25);
+    expect(limit1).toBe(limit2);
+  });
+
+  it('should sanitize and strip quotes from personalization custom lines', () => {
+    const rawQuoteLine = '"Your breakdown of AI agents was genuinely fascinating."';
+    const cleaned = rawQuoteLine.replace(/^["'“”‘’`]+|["'“”‘’`]+$/g, '').trim();
+    expect(cleaned).toBe('Your breakdown of AI agents was genuinely fascinating.');
+    expect(cleaned.length).toBeLessThanOrEqual(120);
   });
 });
+

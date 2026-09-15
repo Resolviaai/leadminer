@@ -1,7 +1,7 @@
 import { google, gmail_v1 } from 'googleapis';
 import { db } from '../../db/client';
 import { gmailAccounts, systemSettings, suppressions, messages, leads } from '../../db/schema';
-import { eq, and, lt } from 'drizzle-orm';
+import { eq, and, lt, gte, sql } from 'drizzle-orm';
 import { env } from '../../config/env';
 
 export interface SendEmailParams {
@@ -60,8 +60,8 @@ export class GmailSendingService {
       hash = (hash << 5) - hash + str.charCodeAt(i);
       hash |= 0;
     }
-    const min = Math.max(18, baseLimit - 7); // 18 minimum
-    const max = baseLimit; // 25 maximum
+    const max = Math.min(baseLimit || 25, 25);
+    const min = Math.min(18, max); // 18 minimum (or bounded by max if baseLimit < 18)
     const range = max - min + 1;
     const jitter = Math.abs(hash) % range;
     return min + jitter;
@@ -75,13 +75,69 @@ export class GmailSendingService {
         .where(and(eq(gmailAccounts.status, 'ACTIVE')))
         .limit(10);
 
-      // Pick first account that has not reached its randomized daily limit for today
-      const eligible = accounts.find((a) => {
-        const todayLimit = this.getTodayEffectiveLimit(a.id, a.dailyLimit);
-        return a.sentToday < todayLimit;
-      });
-      return eligible || null;
+      const now = new Date();
+      const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+
+      for (const account of accounts) {
+        let sentToday = account.sentToday ?? 0;
+
+        // 1. Check account.lastSendAt. If it was before today's UTC midnight, reset account.sentToday = 0 in DB
+        if (!account.lastSendAt || new Date(account.lastSendAt) < todayUtc) {
+          sentToday = 0;
+          try {
+            await db
+              .update(gmailAccounts)
+              .set({ sentToday: 0, updatedAt: new Date() })
+              .where(eq(gmailAccounts.id, account.id));
+          } catch (e) {
+            // DB write fallback
+          }
+        }
+
+        // 2. Also check count of sent messages today:
+        // SELECT count(*) FROM messages WHERE gmail_account_id = account.id AND send_status = 'SENT' AND sent_at >= todayUtc
+        let actualSentToday = 0;
+        try {
+          const messageCountRes = await db
+            .select({ count: sql<number>`count(*)::int` })
+            .from(messages)
+            .where(
+              and(
+                eq(messages.gmailAccountId, account.id),
+                eq(messages.sendStatus, 'SENT'),
+                gte(messages.sentAt, todayUtc)
+              )
+            );
+          actualSentToday = Number(messageCountRes[0]?.count || 0);
+        } catch (e) {
+          actualSentToday = sentToday;
+        }
+
+        const effectiveSentToday = Math.max(sentToday, actualSentToday);
+        if (effectiveSentToday !== account.sentToday) {
+          try {
+            await db
+              .update(gmailAccounts)
+              .set({ sentToday: effectiveSentToday, updatedAt: new Date() })
+              .where(eq(gmailAccounts.id, account.id));
+          } catch (e) {
+            // DB write fallback
+          }
+        }
+
+        // 3. Enforce daily limit with volume jitter (18-25, max 25)
+        const todayLimit = this.getTodayEffectiveLimit(account.id, account.dailyLimit);
+        if (effectiveSentToday < todayLimit) {
+          return {
+            ...account,
+            sentToday: effectiveSentToday,
+          };
+        }
+      }
+
+      return null;
     } catch (e) {
+      console.error('[GmailService] Error getting available account:', e);
       return null;
     }
   }
@@ -121,8 +177,14 @@ export class GmailSendingService {
     // 3. Select Sending Account
     const account = await this.getAvailableAccount();
 
+    // When DRY_RUN = false and no available account: do NOT fake send!
+    if (!env.DRY_RUN && !account) {
+      console.warn('⛔ [Outreach] No healthy Gmail account available with remaining quota. Aborting send.');
+      return { success: false, skippedReason: 'NO_HEALTHY_GMAIL_ACCOUNT' };
+    }
+
     // 4. DRY RUN Mode Handler
-    if (env.DRY_RUN || !account) {
+    if (env.DRY_RUN) {
       const mockMessageId = `mock_msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const mockThreadId = `mock_thread_${Date.now()}`;
 
@@ -168,6 +230,10 @@ export class GmailSendingService {
     }
 
     // 5. Live Gmail Send Execution
+    if (!account) {
+      return { success: false, skippedReason: 'NO_HEALTHY_GMAIL_ACCOUNT' };
+    }
+
     try {
       const oauth2Client = new google.auth.OAuth2(
         env.GOOGLE_CLIENT_ID,

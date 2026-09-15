@@ -20,7 +20,20 @@ export class TelegramNotificationService {
   }
 
   public async sendMessage(text: string): Promise<boolean> {
-    if (!this.botToken || !this.chatId) {
+    const isMockOrPlaceholder =
+      !this.botToken ||
+      !this.chatId ||
+      this.botToken.startsWith('mock_') ||
+      this.botToken.includes('[YOUR') ||
+      this.botToken.startsWith('your_') ||
+      this.chatId.includes('[YOUR');
+
+    if (
+      process.env.NODE_ENV === 'test' ||
+      env.NODE_ENV === 'test' ||
+      env.DRY_RUN ||
+      isMockOrPlaceholder
+    ) {
       console.log(`[Telegram Notification (Simulated)]:\n${text}`);
       return true;
     }

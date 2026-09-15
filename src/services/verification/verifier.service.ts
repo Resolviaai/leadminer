@@ -24,6 +24,8 @@ export class EmailVerificationService {
         email: '',
         status: 'INVALID',
         reason: 'Empty email provided',
+        reasonCode: 'SYNTAX_INVALID',
+        isRoleBased: false,
         provider: 'none',
         timestamp: new Date(),
       };
@@ -43,9 +45,28 @@ export class EmailVerificationService {
         email,
         status: 'FAILED',
         reason: error.message || 'Unknown verification error',
+        reasonCode: 'VERIFICATION_ERROR',
+        isRoleBased: false,
         provider: this.verifier.providerName,
         timestamp: new Date(),
       };
+    }
+  }
+
+  public async verifyBatch(emails: string[], concurrency?: number): Promise<VerificationResult[]> {
+    if (!emails || emails.length === 0) {
+      return [];
+    }
+
+    try {
+      return await this.verifier.verifyBatch(emails, concurrency);
+    } catch (error: any) {
+      console.error(`Batch verification error with provider ${this.verifier.providerName}:`, error);
+      if (this.verifier !== localVerifier) {
+        console.warn('Falling back to local DNS verifier for batch...');
+        return await localVerifier.verifyBatch(emails, concurrency);
+      }
+      throw error;
     }
   }
 }

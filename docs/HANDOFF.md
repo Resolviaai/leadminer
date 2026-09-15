@@ -38,7 +38,7 @@ The LeadMiner YouTube lead-generation and cold-outreach platform is **100% imple
 | `npm run db:seed` | Ingests the 25,391 keywords and seeds default templates and settings. |
 | `npm run dev` | Launches the Next.js SaaS dashboard on `http://localhost:3000`. |
 | `npm run build` | Produces an optimized production build of the Next.js dashboard. |
-| `npm run test` | Executes all 33 unit and integration tests. |
+| `npm run test` | Executes all 42 unit and integration tests. |
 | `npm run worker:discovery` | Runs an incremental batch of YouTube keyword searches and lead extractions. |
 | `npm run worker:verification` | Runs email verification (DNS MX) and lead qualification. |
 | `npm run worker:outreach` | Dispatches outbound outreach emails (simulated safely in Dry Run mode). |

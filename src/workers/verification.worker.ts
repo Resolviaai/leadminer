@@ -1,5 +1,5 @@
 import { db } from '../db/client';
-import { contacts, leads, keywords, suppressions } from '../db/schema';
+import { contacts, leads, keywords, suppressions, campaigns } from '../db/schema';
 import { eq, and, isNotNull, sql } from 'drizzle-orm';
 import { emailVerificationService } from '../services/verification/verifier.service';
 import { leadQualificationService } from '../services/qualification/qualification.service';
@@ -38,37 +38,70 @@ export async function runVerificationBatch(limit = 25): Promise<{ verified: numb
 
     console.log(`📋 Found ${unverified.length} unverified contacts to verify.`);
 
+    // 2. Extract emails and run parallel batch verification
+    const emailsToVerify = unverified.map((item) => item.email || '');
+    const verificationResults = await emailVerificationService.verifyBatch(emailsToVerify, 20);
+
+    // 3. Dynamically fetch active campaign qualification criteria
+    const activeCampaign = await db
+      .select()
+      .from(campaigns)
+      .where(eq(campaigns.status, 'ACTIVE'))
+      .limit(1);
+
+    const minSubs = activeCampaign[0]?.minSubscribers ?? 1000;
+    const maxSubs = activeCampaign[0]?.maxSubscribers ?? 1000000;
+
     let verifiedCount = 0;
     let qualifiedCount = 0;
 
-    for (const item of unverified) {
-      if (!item.email) continue;
+    // 4. Map results back to contact IDs and persist checkpoints immediately
+    for (let i = 0; i < unverified.length; i++) {
+      const item = unverified[i];
+      const vResult = verificationResults[i];
+      if (!item.email || !vResult) continue;
 
-      console.log(`\n[Contact ${item.contactId}] Verifying email: ${item.email}...`);
+      console.log(
+        `\n[Contact ${item.contactId}] Verified: ${item.email} -> ${vResult.status} [${vResult.reasonCode || ''}]`
+      );
 
-      // 2. Run Verification
-      const vResult = await emailVerificationService.verifyEmail(item.email);
-      console.log(`  Result: ${vResult.status} (${vResult.reason || 'verified'})`);
+      // Build descriptive verification reason including role-based flag if applicable
+      const reasonParts: string[] = [];
+      if (vResult.reason) {
+        reasonParts.push(vResult.reason);
+      }
+      if (vResult.isRoleBased && !vResult.reason?.includes('role-based')) {
+        reasonParts.push('(role-based address flagged)');
+      }
+      const verificationReason = reasonParts.length > 0 ? reasonParts.join(' ') : (vResult.reasonCode || 'verified');
 
-      // 3. Update Contact Record
+      // Checkpoint: update contact record immediately in DB
       await db
         .update(contacts)
         .set({
           emailStatus: vResult.status,
           verificationProvider: vResult.provider,
-          verificationReason: vResult.reason,
-          verificationTimestamp: new Date(),
+          verificationReason,
+          verificationTimestamp: vResult.timestamp || new Date(),
           updatedAt: new Date(),
         })
         .where(eq(contacts.id, item.contactId));
 
-      await jobRunner.logEvent(jobId, 'EMAIL_VERIFIED', 'INFO', `Verified ${item.email}: ${vResult.status}`, {
-        contactId: item.contactId,
-        email: item.email,
-        status: vResult.status,
-      });
+      await jobRunner.logEvent(
+        jobId,
+        'EMAIL_VERIFIED',
+        'INFO',
+        `Verified ${item.email}: ${vResult.status} [${vResult.reasonCode || ''}]`,
+        {
+          contactId: item.contactId,
+          email: item.email,
+          status: vResult.status,
+          reasonCode: vResult.reasonCode,
+          isRoleBased: vResult.isRoleBased,
+        }
+      );
 
-      // 4. Run Lead Qualification
+      // 5. Run Lead Qualification
       const qResult = leadQualificationService.qualify(
         {
           subscriberCount: item.subscriberCount || 0,
@@ -79,8 +112,8 @@ export async function runVerificationBatch(limit = 25): Promise<{ verified: numb
           alreadyContacted: false,
         },
         {
-          minSubscribers: 1000,
-          maxSubscribers: 1000000,
+          minSubscribers: minSubs,
+          maxSubscribers: maxSubs,
           requireEmail: true,
           requireValidEmail: true,
         }
@@ -97,13 +130,15 @@ export async function runVerificationBatch(limit = 25): Promise<{ verified: numb
 
       if (qResult.qualified) {
         qualifiedCount++;
-        await jobRunner.logEvent(jobId, 'LEAD_QUALIFIED', 'INFO', `Lead ${item.channelTitle} marked QUALIFIED`, { leadId: item.leadId });
+        await jobRunner.logEvent(jobId, 'LEAD_QUALIFIED', 'INFO', `Lead ${item.channelTitle} marked QUALIFIED`, {
+          leadId: item.leadId,
+        });
       }
 
       verifiedCount++;
-      await jobRunner.updateHeartbeat(jobId, verifiedCount, 0);
     }
 
+    await jobRunner.updateHeartbeat(jobId, verifiedCount, 0);
     await jobRunner.completeJob(jobId, verifiedCount);
     console.log(`\n✅ Verification batch completed: ${verifiedCount} emails verified, ${qualifiedCount} leads qualified.`);
     return { verified: verifiedCount, qualified: qualifiedCount };

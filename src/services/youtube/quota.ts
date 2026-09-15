@@ -5,34 +5,42 @@ import { env } from '../../config/env';
 import { QuotaState } from './types';
 
 export class YouTubeQuotaManager {
-  private inMemoryQuota: QuotaState = {
-    searchCallsDailyLimit: env.YOUTUBE_DAILY_SEARCH_LIMIT,
-    searchCallsUsedToday: 0,
-    generalQuotaDailyLimit: env.YOUTUBE_DAILY_GENERAL_LIMIT,
-    generalQuotaUsedToday: 0,
-    lastResetPt: new Date().toISOString(),
-  };
+  private inMemoryQuota: QuotaState;
+  private inMemoryOnly: boolean;
+
+  constructor(inMemoryOnly?: boolean) {
+    this.inMemoryOnly = inMemoryOnly ?? (process.env.NODE_ENV === 'test' || env.NODE_ENV === 'test');
+    this.inMemoryQuota = {
+      searchCallsDailyLimit: env.YOUTUBE_DAILY_SEARCH_LIMIT,
+      searchCallsUsedToday: 0,
+      generalQuotaDailyLimit: env.YOUTUBE_DAILY_GENERAL_LIMIT,
+      generalQuotaUsedToday: 0,
+      lastResetPt: new Date().toISOString(),
+    };
+  }
 
   private getPacificDateString(date: Date = new Date()): string {
     return date.toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles' });
   }
 
   public async syncQuotaState(): Promise<QuotaState> {
-    try {
-      const record = await db.select().from(systemSettings).where(eq(systemSettings.key, 'youtube_quota')).limit(1);
+    if (!this.inMemoryOnly) {
+      try {
+        const record = await db.select().from(systemSettings).where(eq(systemSettings.key, 'youtube_quota')).limit(1);
 
-      if (record.length > 0 && record[0].value) {
-        const val = record[0].value as any;
-        this.inMemoryQuota = {
-          searchCallsDailyLimit: val.search_calls_daily_limit ?? env.YOUTUBE_DAILY_SEARCH_LIMIT,
-          searchCallsUsedToday: val.search_calls_used_today ?? 0,
-          generalQuotaDailyLimit: val.general_quota_daily_limit ?? env.YOUTUBE_DAILY_GENERAL_LIMIT,
-          generalQuotaUsedToday: val.general_quota_used_today ?? 0,
-          lastResetPt: val.last_reset_pt ?? new Date().toISOString(),
-        };
+        if (record.length > 0 && record[0].value) {
+          const val = record[0].value as any;
+          this.inMemoryQuota = {
+            searchCallsDailyLimit: val.search_calls_daily_limit ?? env.YOUTUBE_DAILY_SEARCH_LIMIT,
+            searchCallsUsedToday: val.search_calls_used_today ?? 0,
+            generalQuotaDailyLimit: val.general_quota_daily_limit ?? env.YOUTUBE_DAILY_GENERAL_LIMIT,
+            generalQuotaUsedToday: val.general_quota_used_today ?? 0,
+            lastResetPt: val.last_reset_pt ?? new Date().toISOString(),
+          };
+        }
+      } catch (e) {
+        // If DB is offline or not yet migrated, maintain in-memory quota
       }
-    } catch (e) {
-      // If DB is offline or not yet migrated, maintain in-memory quota
     }
 
     // Check if midnight in Pacific Time has passed
@@ -51,6 +59,9 @@ export class YouTubeQuotaManager {
   }
 
   public async persistQuotaState(): Promise<void> {
+    if (this.inMemoryOnly) {
+      return;
+    }
     try {
       await db
         .insert(systemSettings)

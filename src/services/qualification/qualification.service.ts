@@ -40,8 +40,11 @@ export class LeadQualificationService {
     }
 
     // 4. Email validity check
-    if (criteria.requireValidEmail && candidate.emailStatus !== 'VALID') {
-      return { qualified: false, reason: `Email is not verified as VALID (current status: ${candidate.emailStatus || 'UNKNOWN'})` };
+    const isDeliverable = candidate.emailStatus === 'VALID' ||
+                          candidate.emailStatus === 'DOMAIN_VALID' ||
+                          candidate.emailStatus === 'MAILBOX_VERIFIED';
+    if (criteria.requireValidEmail && !isDeliverable) {
+      return { qualified: false, reason: `Email is not verified as deliverable (current status: ${candidate.emailStatus || 'UNKNOWN'})` };
     }
 
     // 5. Subscriber count bounds

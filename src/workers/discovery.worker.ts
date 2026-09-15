@@ -1,11 +1,18 @@
 import { db } from '../db/client';
-import { keywords, leads, contacts } from '../db/schema';
-import { eq, and, sql, lt } from 'drizzle-orm';
+import { keywords, leads, contacts, leadKeywordSources } from '../db/schema';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { env } from '../config/env';
 import { youtubeDiscoveryService } from '../services/youtube/discovery.service';
 import { emailExtractor } from '../services/extraction/email.extractor';
 import { socialExtractor } from '../services/extraction/social.extractor';
 import { jobRunner } from '../services/jobs/job.runner';
+
+export function calculatePriorityScore(newLeadsCount: number): number {
+  if (newLeadsCount >= 11) return 90; // High yield
+  if (newLeadsCount >= 4) return 65;  // Normal yield
+  if (newLeadsCount >= 1) return 40;  // Low yield
+  return 20;                          // Very low yield (0 new leads)
+}
 
 export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SIZE): Promise<{ processed: number; leadsDiscovered: number; quotaReached: boolean }> {
   console.log(`\n======================================================`);
@@ -18,12 +25,11 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
   // 2. Register job
   const jobId = await jobRunner.createJob('DISCOVERY_BATCH', { batchSize });
 
-  // 3. Atomically claim batch of PENDING or RETRY keywords
+  // 3. Atomically claim batch of PENDING or RETRY keywords ordered by priorityScore DESC, id ASC
   const pool = db;
   let claimedKeywords: typeof keywords.$inferSelect[] = [];
 
   try {
-    // Atomic update with subquery
     claimedKeywords = await pool
       .update(keywords)
       .set({
@@ -36,7 +42,7 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
         sql`${keywords.id} IN (
           SELECT id FROM ${keywords}
           WHERE status IN ('PENDING', 'RETRY') AND attempt_count < ${env.WORKER_MAX_RETRIES}
-          ORDER BY id ASC
+          ORDER BY priority_score DESC, id ASC
           LIMIT ${batchSize}
           FOR UPDATE SKIP LOCKED
         )`
@@ -54,17 +60,21 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
     return { processed: 0, leadsDiscovered: 0, quotaReached: false };
   }
 
-  console.log(`📋 Claimed ${claimedKeywords.length} keywords for discovery execution.`);
+  console.log(`📋 Claimed ${claimedKeywords.length} keywords for discovery execution (priority-ordered).`);
 
   let processedCount = 0;
-  let leadsCount = 0;
+  let totalNewLeadsCount = 0;
   let quotaReached = false;
 
   for (const kw of claimedKeywords) {
-    console.log(`\n[Keyword ${kw.id}] Processing: "${kw.keyword}" (${kw.category} / ${kw.entity})...`);
+    console.log(`\n[Keyword ${kw.id}] Processing: "${kw.keyword}" (${kw.category} / ${kw.entity}) [Priority: ${kw.priorityScore}]...`);
+
+    let kwNewLeadsCount = 0;
+    let kwEmailsFoundCount = 0;
 
     try {
-      const searchResult = await youtubeDiscoveryService.searchChannelsByKeyword({
+      // 4. Call search.list ONLY
+      const searchResult = await youtubeDiscoveryService.searchChannelIds({
         query: kw.keyword,
         maxResults: env.YOUTUBE_MAX_RESULTS_PER_SEARCH,
       });
@@ -73,7 +83,7 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
         console.warn(`⚠️ [YouTube Quota Reached] Stopping discovery batch cleanly.`);
         quotaReached = true;
 
-        // Reset current and remaining claimed keywords to PENDING so they are not lost
+        // Reset current keyword to PENDING so it can be resumed
         await pool
           .update(keywords)
           .set({ status: 'PENDING', updatedAt: new Date() })
@@ -82,32 +92,89 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
         break;
       }
 
-      const channels = searchResult.channels;
-      console.log(`  Found ${channels.length} channels for keyword "${kw.keyword}".`);
+      // 5. In-Memory Channel ID Deduplication
+      const rawIds = searchResult.channelIds;
+      const uniqueChannelIds = Array.from(new Set(rawIds));
+      console.log(`  Found ${rawIds.length} raw channels -> ${uniqueChannelIds.length} unique channel IDs.`);
 
-      for (const ch of channels) {
-        // 4. Deduplicate & Upsert Lead
-        let leadId: number;
+      if (uniqueChannelIds.length === 0) {
+        // Keyword returned 0 results -> mark SKIPPED and adjust priority
+        await pool
+          .update(keywords)
+          .set({
+            status: 'SKIPPED',
+            channelsFound: 0,
+            priorityScore: 20,
+            lastRunAt: new Date(),
+            completedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(keywords.id, kw.id));
 
-        const existingLead = await pool
-          .select({ id: leads.id })
-          .from(leads)
-          .where(eq(leads.channelId, ch.channelId))
-          .limit(1);
+        processedCount++;
+        continue;
+      }
 
-        if (existingLead.length > 0) {
-          leadId = existingLead[0].id;
-          // Update stats without duplicating lead
+      // 6. Batch Query PostgreSQL for Already-Known Channels (Zero-Waste Enrichment)
+      const existingLeads = await pool
+        .select({ id: leads.id, channelId: leads.channelId })
+        .from(leads)
+        .where(inArray(leads.channelId, uniqueChannelIds));
+
+      const existingMap = new Map<string, number>();
+      for (const el of existingLeads) {
+        existingMap.set(el.channelId, el.id);
+      }
+
+      console.log(`  Identified ${existingLeads.length} existing channels in database.`);
+
+      // 7. Update Provenance for Known Channels without Calling channels.list
+      for (const el of existingLeads) {
+        await pool
+          .insert(leadKeywordSources)
+          .values({
+            leadId: el.id,
+            keywordId: kw.id,
+            firstSeenAt: new Date(),
+            lastSeenAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: [leadKeywordSources.leadId, leadKeywordSources.keywordId],
+            set: { lastSeenAt: new Date() },
+          });
+
+        // Update lead's last seen time
+        await pool
+          .update(leads)
+          .set({ updatedAt: new Date() })
+          .where(eq(leads.id, el.id));
+      }
+
+      // 8. Filter Genuinely New Channels for channels.list Enrichment
+      const genuinelyNewChannelIds = uniqueChannelIds.filter((id) => !existingMap.has(id));
+      console.log(`  Enriching ${genuinelyNewChannelIds.length} genuinely new channels via channels.list...`);
+
+      if (genuinelyNewChannelIds.length > 0) {
+        const enrichResult = await youtubeDiscoveryService.enrichChannelsBatch(genuinelyNewChannelIds);
+
+        if (enrichResult.quotaReached) {
+          console.warn(`⚠️ [YouTube Quota Reached during enrichment] Pausing batch.`);
+          quotaReached = true;
           await pool
-            .update(leads)
-            .set({
-              subscriberCount: ch.subscriberCount,
-              videoCount: ch.videoCount,
-              viewCount: ch.viewCount,
-              updatedAt: new Date(),
-            })
-            .where(eq(leads.id, leadId));
-        } else {
+            .update(keywords)
+            .set({ status: 'PENDING', updatedAt: new Date() })
+            .where(eq(keywords.id, kw.id));
+          break;
+        }
+
+        for (const ch of enrichResult.channels) {
+          // 9. Discovery Quality Filter (Lightweight n8n Pre-Filter)
+          if (ch.subscriberCount < env.MIN_DISCOVERY_SUBSCRIBERS || ch.videoCount < env.MIN_DISCOVERY_VIDEOS) {
+            console.log(`  ⏩ Skipping low-volume channel: "${ch.title}" (${ch.subscriberCount} subs, ${ch.videoCount} vids)`);
+            continue;
+          }
+
+          // 10. Persist New Lead
           const [newLead] = await pool
             .insert(leads)
             .values({
@@ -129,54 +196,87 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
             })
             .returning({ id: leads.id });
 
-          leadId = newLead.id;
-          leadsCount++;
-          await jobRunner.logEvent(jobId, 'LEAD_CREATED', 'INFO', `Created lead: ${ch.title} (${ch.channelId})`, { leadId, channelId: ch.channelId });
-        }
+          const leadId = newLead.id;
+          kwNewLeadsCount++;
+          totalNewLeadsCount++;
 
-        // 5. Contact Extraction (Email & Socials)
-        const extractedEmails = emailExtractor.extractEmails(ch.description || '');
-        const extractedSocials = socialExtractor.extractSocials(ch.description || '');
-        const primaryEmail = extractedEmails.length > 0 ? extractedEmails[0].email : null;
+          // 11. Record Provenance in lead_keyword_sources
+          await pool
+            .insert(leadKeywordSources)
+            .values({
+              leadId,
+              keywordId: kw.id,
+              firstSeenAt: new Date(),
+              lastSeenAt: new Date(),
+            })
+            .onConflictDoNothing();
 
-        // Upsert into contacts table
-        await pool
-          .insert(contacts)
-          .values({
-            leadId,
-            email: primaryEmail,
-            emailStatus: primaryEmail ? 'UNKNOWN' : 'INVALID',
-            instagram: extractedSocials.instagram,
-            twitter: extractedSocials.twitter,
-            discord: extractedSocials.discord,
-            tiktok: extractedSocials.tiktok,
-            linkedin: extractedSocials.linkedin,
-          })
-          .onConflictDoUpdate({
-            target: contacts.leadId,
-            set: {
-              email: primaryEmail || sql`contacts.email`,
-              instagram: extractedSocials.instagram || sql`contacts.instagram`,
-              twitter: extractedSocials.twitter || sql`contacts.twitter`,
-              discord: extractedSocials.discord || sql`contacts.discord`,
-              tiktok: extractedSocials.tiktok || sql`contacts.tiktok`,
-              linkedin: extractedSocials.linkedin || sql`contacts.linkedin`,
-              updatedAt: new Date(),
-            },
-          });
+          // 12. Contact Extraction: Preserve ALL Discovered Emails and Links
+          const extractedEmails = emailExtractor.extractEmails(ch.description || '');
+          const extractedSocials = socialExtractor.extractSocials(ch.description || '');
 
-        if (primaryEmail) {
-          await jobRunner.logEvent(jobId, 'CONTACT_FOUND', 'INFO', `Discovered email for ${ch.title}: ${primaryEmail}`, { leadId, email: primaryEmail });
+          // Insert ALL discovered unique emails
+          for (let i = 0; i < extractedEmails.length; i++) {
+            const emailObj = extractedEmails[i];
+            const cleanEmail = emailObj.email.toLowerCase().trim();
+
+            await pool
+              .insert(contacts)
+              .values({
+                leadId,
+                contactType: 'EMAIL',
+                value: cleanEmail,
+                normalizedValue: cleanEmail,
+                source: emailObj.source,
+                isPrimary: i === 0,
+                email: cleanEmail,
+                emailStatus: 'UNKNOWN',
+              })
+              .onConflictDoNothing();
+
+            kwEmailsFoundCount++;
+            if (i === 0) {
+              await jobRunner.logEvent(jobId, 'CONTACT_FOUND', 'INFO', `Discovered email for ${ch.title}: ${cleanEmail}`, { leadId, email: cleanEmail });
+            }
+          }
+
+          // Insert structured social/profile links (Linktree, Beacons, Instagram, Twitter, etc.)
+          for (const item of extractedSocials.items) {
+            if (item.type === 'EMAIL') continue; // Handled above
+
+            await pool
+              .insert(contacts)
+              .values({
+                leadId,
+                contactType: item.type,
+                value: item.value,
+                normalizedValue: item.normalizedValue,
+                source: item.source,
+                isPrimary: false,
+                instagram: item.type === 'INSTAGRAM' ? item.normalizedValue : undefined,
+                twitter: item.type === 'TWITTER_X' ? item.normalizedValue : undefined,
+                discord: item.type === 'DISCORD' ? item.value : undefined,
+                tiktok: item.type === 'TIKTOK' ? item.normalizedValue : undefined,
+                linkedin: item.type === 'LINKEDIN' ? item.value : undefined,
+              })
+              .onConflictDoNothing();
+          }
         }
       }
 
-      // Mark keyword completed or skipped
-      const finalStatus = channels.length > 0 ? 'COMPLETED' : 'SKIPPED';
+      // 13. Keyword Performance Feedback Loop & Priority Re-scoring
+      const newScore = calculatePriorityScore(kwNewLeadsCount);
+      console.log(`  Keyword summary: ${uniqueChannelIds.length} found, ${kwNewLeadsCount} new leads, ${kwEmailsFoundCount} emails. New Priority Score: ${newScore}`);
+
       await pool
         .update(keywords)
         .set({
-          status: finalStatus,
-          channelsFound: channels.length,
+          status: 'COMPLETED',
+          channelsFound: uniqueChannelIds.length,
+          newChannelsFound: sql`${keywords.newChannelsFound} + ${kwNewLeadsCount}`,
+          emailsFound: sql`${keywords.emailsFound} + ${kwEmailsFoundCount}`,
+          priorityScore: newScore,
+          lastRunAt: new Date(),
           completedAt: new Date(),
           updatedAt: new Date(),
         })
@@ -199,13 +299,13 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
   }
 
   if (quotaReached) {
-    await jobRunner.stopJobQuota(jobId, 'YouTube API search limit reached for today');
+    await jobRunner.stopJobQuota(jobId, 'YouTube API quota reached for today');
   } else {
     await jobRunner.completeJob(jobId, processedCount);
   }
 
-  console.log(`\n✅ Discovery batch completed: ${processedCount} keywords processed, ${leadsCount} new leads recorded.`);
-  return { processed: processedCount, leadsDiscovered: leadsCount, quotaReached };
+  console.log(`\n✅ Discovery batch completed: ${processedCount} keywords processed, ${totalNewLeadsCount} new leads recorded.`);
+  return { processed: processedCount, leadsDiscovered: totalNewLeadsCount, quotaReached };
 }
 
 if (require.main === module) {

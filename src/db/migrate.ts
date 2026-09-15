@@ -8,16 +8,28 @@ export async function runMigrations() {
   const client = await pool.connect();
 
   try {
-    const migrationPath = path.join(process.cwd(), 'migrations', '0000_init_schema.sql');
-    if (!fs.existsSync(migrationPath)) {
-      throw new Error(`Migration file not found at ${migrationPath}`);
+    const migrationsDir = path.join(process.cwd(), 'migrations');
+    if (!fs.existsSync(migrationsDir)) {
+      throw new Error(`Migrations directory not found at ${migrationsDir}`);
     }
 
-    const sql = fs.readFileSync(migrationPath, 'utf8');
-    await client.query('BEGIN');
-    await client.query(sql);
-    await client.query('COMMIT');
-    console.log('✅ Database migrations executed successfully.');
+    const files = fs
+      .readdirSync(migrationsDir)
+      .filter((f) => f.endsWith('.sql'))
+      .sort();
+
+    console.log(`Found ${files.length} migration file(s): ${files.join(', ')}`);
+
+    for (const file of files) {
+      console.log(`Running migration: ${file}...`);
+      const filePath = path.join(migrationsDir, file);
+      const sql = fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/, '');
+      await client.query('BEGIN');
+      await client.query(sql);
+      await client.query('COMMIT');
+      console.log(`✅ ${file} applied successfully.`);
+    }
+    console.log('✅ All database migrations executed successfully.');
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('❌ Migration failed:', error);

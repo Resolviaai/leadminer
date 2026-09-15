@@ -5,7 +5,7 @@ describe('YouTube Quota Manager', () => {
   let qm: YouTubeQuotaManager;
 
   beforeEach(() => {
-    qm = new YouTubeQuotaManager();
+    qm = new YouTubeQuotaManager(true);
   });
 
   it('should initialize with default limits (100 search calls, 10000 general units)', async () => {

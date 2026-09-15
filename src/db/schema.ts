@@ -42,10 +42,25 @@ export const leadOutreachStatusEnum = pgEnum('lead_outreach_status', [
 export const emailVerificationStatusEnum = pgEnum('email_verification_status', [
   'UNKNOWN',
   'VALID',
+  'DOMAIN_VALID',
+  'MAILBOX_VERIFIED',
   'INVALID',
   'RISKY',
   'DISPOSABLE',
   'FAILED',
+]);
+
+export const contactTypeEnum = pgEnum('contact_type', [
+  'EMAIL',
+  'WEBSITE',
+  'INSTAGRAM',
+  'TWITTER_X',
+  'TIKTOK',
+  'DISCORD',
+  'LINKEDIN',
+  'LINKTREE',
+  'BEACONS',
+  'OTHER',
 ]);
 
 export const campaignStatusEnum = pgEnum('campaign_status', [
@@ -113,6 +128,12 @@ export const keywords = pgTable(
     status: keywordStatusEnum('status').notNull().default('PENDING'),
     attemptCount: integer('attempt_count').notNull().default(0),
     channelsFound: integer('channels_found').notNull().default(0),
+    newChannelsFound: integer('new_channels_found').notNull().default(0),
+    qualifiedLeadsFound: integer('qualified_leads_found').notNull().default(0),
+    emailsFound: integer('emails_found').notNull().default(0),
+    verifiedEmails: integer('verified_emails').notNull().default(0),
+    priorityScore: integer('priority_score').notNull().default(50),
+    lastRunAt: timestamp('last_run_at', { withTimezone: true }),
     lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }),
     completedAt: timestamp('completed_at', { withTimezone: true }),
     lastError: text('last_error'),
@@ -122,6 +143,7 @@ export const keywords = pgTable(
   (table) => [
     uniqueIndex('uq_keywords_normalized').on(table.normalizedKeyword),
     index('idx_keywords_status_attempts').on(table.status, table.attemptCount),
+    index('idx_keywords_priority_status').on(table.priorityScore, table.status, table.attemptCount),
     index('idx_keywords_category').on(table.category),
     index('idx_keywords_last_attempt').on(table.lastAttemptAt),
   ]
@@ -159,12 +181,34 @@ export const leads = pgTable(
   ]
 );
 
-// 3. contacts
+// 2b. lead_keyword_sources (Provenance Tracking)
+export const leadKeywordSources = pgTable(
+  'lead_keyword_sources',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    leadId: bigint('lead_id', { mode: 'number' }).notNull().references(() => leads.id, { onDelete: 'cascade' }),
+    keywordId: bigint('keyword_id', { mode: 'number' }).notNull().references(() => keywords.id, { onDelete: 'cascade' }),
+    firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('uq_lead_keyword_source').on(table.leadId, table.keywordId),
+    index('idx_lead_keyword_lead_id').on(table.leadId),
+    index('idx_lead_keyword_keyword_id').on(table.keywordId),
+  ]
+);
+
+// 3. contacts (Supports 1:N contacts per lead: all emails, social handles, Linktree, etc.)
 export const contacts = pgTable(
   'contacts',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     leadId: bigint('lead_id', { mode: 'number' }).notNull().references(() => leads.id, { onDelete: 'cascade' }),
+    contactType: contactTypeEnum('contact_type').notNull().default('EMAIL'),
+    value: text('value'),
+    normalizedValue: text('normalized_value'),
+    source: varchar('source', { length: 100 }).default('description'),
+    isPrimary: boolean('is_primary').notNull().default(true),
     email: varchar('email', { length: 255 }),
     emailStatus: emailVerificationStatusEnum('email_status').notNull().default('UNKNOWN'),
     verificationProvider: varchar('verification_provider', { length: 100 }),
@@ -180,7 +224,8 @@ export const contacts = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex('uq_contacts_lead_id').on(table.leadId),
+    uniqueIndex('uq_contacts_lead_type_value').on(table.leadId, table.contactType, table.normalizedValue),
+    index('idx_contacts_lead_type').on(table.leadId, table.contactType),
     index('idx_contacts_email_status').on(table.emailStatus),
     index('idx_contacts_email').on(table.email),
   ]
@@ -363,6 +408,7 @@ export const systemSettings = pgTable('system_settings', {
 // Relations
 export const keywordsRelations = relations(keywords, ({ many }) => ({
   leads: many(leads),
+  keywordSources: many(leadKeywordSources),
 }));
 
 export const leadsRelations = relations(leads, ({ one, many }) => ({
@@ -370,12 +416,21 @@ export const leadsRelations = relations(leads, ({ one, many }) => ({
     fields: [leads.sourceKeywordId],
     references: [keywords.id],
   }),
-  contact: one(contacts, {
-    fields: [leads.id],
-    references: [contacts.leadId],
-  }),
+  contacts: many(contacts),
+  keywordSources: many(leadKeywordSources),
   messages: many(messages),
   replies: many(replies),
+}));
+
+export const leadKeywordSourcesRelations = relations(leadKeywordSources, ({ one }) => ({
+  lead: one(leads, {
+    fields: [leadKeywordSources.leadId],
+    references: [leads.id],
+  }),
+  keyword: one(keywords, {
+    fields: [leadKeywordSources.keywordId],
+    references: [keywords.id],
+  }),
 }));
 
 export const contactsRelations = relations(contacts, ({ one }) => ({

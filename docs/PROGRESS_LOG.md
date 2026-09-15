@@ -68,3 +68,44 @@ All development activities, audits, architectural decisions, and milestones are 
     - Authored 33 Vitest tests across 8 test suites; 100% passing (`npm run test`).
     - Verified Next.js production build (`npm run build`) passing with 0 errors.
     - Created `src/scripts/healthcheck.ts`, `.env.example`, `.gitignore`, `README.md`.
+
+---
+
+## 2026-09-15 — Session 5 (Comprehensive Hardening, Verification Engine Upgrade & Pipeline Checkpoints)
+- **Agent:** Antigravity (with specialized subagents)
+- **Actions Completed:**
+  - **YouTube Discovery Hardening (Zero Quota Waste):**
+    - Decoupled `searchChannelIds` from `enrichChannelsBatch`.
+    - Added in-memory Set deduplication of channel IDs immediately after `search.list`.
+    - Implemented database batch pre-check: skips `channels.list` enrichment for already-known channel IDs.
+    - Added lightweight discovery quality filters: `MIN_DISCOVERY_SUBSCRIBERS=10`, `MIN_DISCOVERY_VIDEOS=10`.
+  - **1:N Multi-Contact Schema & Extraction:**
+    - Migration `0001_hardening_schema.sql` applied cleanly to Supabase PostgreSQL.
+    - Updated `contacts` table to 1:N supporting `contact_type` (`EMAIL`, `LINKTREE`, `BEACONS`, `INSTAGRAM`, `TWITTER_X`, `TIKTOK`, `LINKEDIN`, etc.), `value`, `normalized_value`, `is_primary`.
+    - Expanded `social.extractor.ts` to capture Linktree, Beacons, and clean URLs.
+  - **Keyword Yield Tracking & Schedulable Checkpoints:**
+    - Added `lead_keyword_sources` table for multi-keyword provenance.
+    - Tracked per-keyword yield metrics (`new_channels_found`, `qualified_leads_found`, `emails_found`, `verified_emails`, `priority_score`).
+    - Priority-scored keyword queueing ensures high-yield keywords run first.
+  - **Fast-Quality Email Verification Engine (`docs/verify-app.py` logic):**
+    - Strict RFC syntax validation (`SYNTAX_INVALID`).
+    - 17 disposable domain filters (`DISPOSABLE_DOMAIN`).
+    - Role-based detection (`isRoleBased: true`) flagged rather than rejected; deliverable domains proceed as `DOMAIN_VALID`.
+    - Major-provider optimization classified as `DOMAIN_VALID` (never `MAILBOX_VERIFIED` without SMTP probing).
+    - DNS MX resolution with strict 3-second timeout (`DNS_TIMEOUT = 3000ms`). No SMTP probing.
+    - Concurrent batch verification helper (`verifyBatch`) running up to 20 verifications in parallel.
+  - **Pipeline Checkpoints & Crash Recovery:**
+    - Unverified contacts processed in batches and checkpointed per record.
+    - Outreach worker uses atomic locking (`UPDATE leads SET outreach_status = 'QUEUED'...`) and automatic stale lead recovery (`jobRunner.recoverStaleOutreachLeads`).
+    - Staged pipeline guarantees only deliverable (`VALID`, `DOMAIN_VALID`, `MAILBOX_VERIFIED`) leads enter outreach.
+  - **Outreach & Gmail Hardening:**
+    - Removed fake fallback (`if (env.DRY_RUN || !account)`); returns `NO_HEALTHY_GMAIL_ACCOUNT` in live mode if no healthy inbox is available.
+    - Day-aware sent quota tracking with UTC midnight reset.
+    - Natural volume jitter (18–25 emails/day, max 25).
+    - Gemini personalization output validation (checks length <= 120 chars, strips quotes, safe fallback).
+  - **Real Gmail Reply Detection:**
+    - Polling worker inspects Google Gmail threads (`threads.get`) using OAuth refresh tokens.
+    - Detects inbound creator replies and fires Telegram alerts.
+  - **Quality Gates:**
+    - All 42 Vitest unit tests passing across 8 test suites (100% pass rate).
+    - Next.js production build (`npm run build`) succeeded with 0 errors across 25 routes.
