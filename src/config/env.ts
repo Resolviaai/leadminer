@@ -23,6 +23,8 @@ const envSchema = z.object({
   YOUTUBE_DAILY_GENERAL_LIMIT: z.coerce.number().default(10000),
   YOUTUBE_BATCH_SIZE: z.coerce.number().default(10),
   YOUTUBE_MAX_RESULTS_PER_SEARCH: z.coerce.number().default(15),
+  YOUTUBE_TARGET_REGION: z.string().default('US'),
+  YOUTUBE_TARGET_LANGUAGE: z.string().default('en'),
 
   // Gemini API
   GEMINI_API_KEY: z.string().optional().default(''),

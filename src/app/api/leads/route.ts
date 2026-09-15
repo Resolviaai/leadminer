@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "../../../db/client";
 import { leads, contacts, keywords } from "../../../db/schema";
 import { eq, desc, lt } from "drizzle-orm";
@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
         subscriberCount: leads.subscriberCount,
         qualificationStatus: leads.qualificationStatus,
         outreachStatus: leads.outreachStatus,
+        country: leads.country,
         discoveredAt: leads.discoveredAt,
         email: contacts.email,
         emailStatus: contacts.emailStatus,

@@ -2,6 +2,8 @@ export interface YouTubeSearchParams {
   query: string;
   maxResults?: number;
   pageToken?: string;
+  regionCode?: string;
+  relevanceLanguage?: string;
 }
 
 export interface YouTubeChannelSearchResult {
@@ -23,6 +25,7 @@ export interface YouTubeChannelDetails {
   videoCount: number;
   viewCount: number;
   website?: string;
+  country?: string;
   rawPayload: any;
 }
 

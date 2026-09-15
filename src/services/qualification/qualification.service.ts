@@ -5,7 +5,10 @@ export interface QualificationCriteria {
   requireValidEmail?: boolean;
   requireWebsite?: boolean;
   categoryWhitelist?: string[];
+  targetCountry?: string;
 }
+
+export type LeadQualificationCriteria = QualificationCriteria;
 
 export interface QualificationCandidate {
   subscriberCount: number;
@@ -13,9 +16,12 @@ export interface QualificationCandidate {
   emailStatus?: string | null;
   website?: string | null;
   category?: string | null;
+  country?: string | null;
   isSuppressed?: boolean;
   alreadyContacted?: boolean;
 }
+
+export type LeadCandidate = QualificationCandidate;
 
 export interface QualificationResult {
   qualified: boolean;
@@ -60,6 +66,16 @@ export class LeadQualificationService {
     if (criteria.categoryWhitelist && criteria.categoryWhitelist.length > 0) {
       if (!candidate.category || !criteria.categoryWhitelist.includes(candidate.category)) {
         return { qualified: false, reason: `Category '${candidate.category || 'unknown'}' not in campaign target list` };
+      }
+    }
+
+    // 7. Country match check
+    if (criteria.targetCountry && candidate.country) {
+      if (candidate.country.toUpperCase() !== criteria.targetCountry.toUpperCase()) {
+        return {
+          qualified: false,
+          reason: `Channel country (${candidate.country}) does not match target (${criteria.targetCountry})`,
+        };
       }
     }
 

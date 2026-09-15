@@ -23,6 +23,7 @@ export async function runVerificationBatch(limit = 25): Promise<{ verified: numb
         subscriberCount: leads.subscriberCount,
         category: keywords.category,
         suppressionStatus: leads.suppressionStatus,
+        country: leads.country,
       })
       .from(contacts)
       .innerJoin(leads, eq(contacts.leadId, leads.id))
@@ -108,6 +109,7 @@ export async function runVerificationBatch(limit = 25): Promise<{ verified: numb
           email: item.email,
           emailStatus: vResult.status,
           category: item.category,
+          country: item.country || undefined,
           isSuppressed: item.suppressionStatus,
           alreadyContacted: false,
         },
@@ -116,6 +118,7 @@ export async function runVerificationBatch(limit = 25): Promise<{ verified: numb
           maxSubscribers: maxSubs,
           requireEmail: true,
           requireValidEmail: true,
+          targetCountry: activeCampaign[0]?.targetCountry || undefined,
         }
       );
 

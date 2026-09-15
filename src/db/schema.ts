@@ -171,6 +171,7 @@ export const leads = pgTable(
     suppressionStatus: boolean('suppression_status').notNull().default(false),
     discoveredAt: timestamp('discovered_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    country: varchar('country', { length: 10 }),
     rawPayload: jsonb('raw_payload'),
   },
   (table) => [
@@ -178,6 +179,7 @@ export const leads = pgTable(
     index('idx_leads_qualification').on(table.qualificationStatus, table.outreachStatus),
     index('idx_leads_subscriber_count').on(table.subscriberCount),
     index('idx_leads_source_keyword').on(table.sourceKeywordId),
+    index('idx_leads_country').on(table.country),
   ]
 );
 
@@ -254,6 +256,7 @@ export const campaigns = pgTable(
     dailyLimit: integer('daily_limit').notNull().default(50),
     minSubscribers: bigint('min_subscribers', { mode: 'number' }).default(1000),
     maxSubscribers: bigint('max_subscribers', { mode: 'number' }).default(1000000),
+    targetCountry: varchar('target_country', { length: 10 }).default('US'),
     targetCategories: jsonb('target_categories').default([]),
     enableGeminiPersonalization: boolean('enable_gemini_personalization').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

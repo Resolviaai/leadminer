@@ -68,4 +68,93 @@ describe('Lead Qualification Service', () => {
     expect(res.qualified).toBe(false);
     expect(res.reason).toContain('not verified as deliverable');
   });
+
+  it('should qualify leads when country matches targetCountry', () => {
+    const candidate = {
+      subscriberCount: 25000,
+      email: 'creator@podcasts.com',
+      emailStatus: 'VALID',
+      category: 'Top Podcasters',
+      country: 'US',
+      isSuppressed: false,
+      alreadyContacted: false,
+    };
+
+    const res = leadQualificationService.qualify(candidate, {
+      ...defaultCriteria,
+      targetCountry: 'US',
+    });
+    expect(res.qualified).toBe(true);
+  });
+
+  it('should handle targetCountry case-insensitively', () => {
+    const candidate = {
+      subscriberCount: 25000,
+      email: 'creator@podcasts.com',
+      emailStatus: 'VALID',
+      category: 'Top Podcasters',
+      country: 'us',
+      isSuppressed: false,
+      alreadyContacted: false,
+    };
+
+    const res = leadQualificationService.qualify(candidate, {
+      ...defaultCriteria,
+      targetCountry: 'US',
+    });
+    expect(res.qualified).toBe(true);
+  });
+
+  it('should reject leads when country does not match targetCountry', () => {
+    const candidate = {
+      subscriberCount: 25000,
+      email: 'creator@podcasts.com',
+      emailStatus: 'VALID',
+      category: 'Top Podcasters',
+      country: 'GB',
+      isSuppressed: false,
+      alreadyContacted: false,
+    };
+
+    const res = leadQualificationService.qualify(candidate, {
+      ...defaultCriteria,
+      targetCountry: 'US',
+    });
+    expect(res.qualified).toBe(false);
+    expect(res.reason).toBe('Channel country (GB) does not match target (US)');
+  });
+
+  it('should not reject leads when country is undefined or null even if targetCountry is set', () => {
+    const candidateUndefined = {
+      subscriberCount: 25000,
+      email: 'creator@podcasts.com',
+      emailStatus: 'VALID',
+      category: 'Top Podcasters',
+      country: undefined,
+      isSuppressed: false,
+      alreadyContacted: false,
+    };
+
+    const res1 = leadQualificationService.qualify(candidateUndefined, {
+      ...defaultCriteria,
+      targetCountry: 'US',
+    });
+    expect(res1.qualified).toBe(true);
+
+    const candidateNull = {
+      subscriberCount: 25000,
+      email: 'creator@podcasts.com',
+      emailStatus: 'VALID',
+      category: 'Top Podcasters',
+      country: null,
+      isSuppressed: false,
+      alreadyContacted: false,
+    };
+
+    const res2 = leadQualificationService.qualify(candidateNull, {
+      ...defaultCriteria,
+      targetCountry: 'US',
+    });
+    expect(res2.qualified).toBe(true);
+  });
 });

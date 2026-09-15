@@ -70,6 +70,8 @@ export class YouTubeDiscoveryService {
           type: ['channel'],
           maxResults: params.maxResults || env.YOUTUBE_MAX_RESULTS_PER_SEARCH,
           pageToken: params.pageToken,
+          regionCode: params.regionCode || env.YOUTUBE_TARGET_REGION || 'US',
+          relevanceLanguage: params.relevanceLanguage || env.YOUTUBE_TARGET_LANGUAGE || 'en',
         });
       });
 
@@ -123,6 +125,7 @@ export class YouTubeDiscoveryService {
         videoCount: 120 * (index + 1),
         viewCount: 1500000 * (index + 1),
         website: `https://${id.toLowerCase().slice(-6)}.com`,
+        country: 'US',
         rawPayload: { mock: true, channelId: id },
       }));
       return { channels: mockChannels, quotaReached: false };
@@ -158,6 +161,7 @@ export class YouTubeDiscoveryService {
             subscriberCount: Number(stats.subscriberCount) || 0,
             videoCount: Number(stats.videoCount) || 0,
             viewCount: Number(stats.viewCount) || 0,
+            country: snippet.country || undefined,
             rawPayload: c,
           });
         }

@@ -21,6 +21,7 @@ async function getData() {
           subscriberCount: leads.subscriberCount,
           qualificationStatus: leads.qualificationStatus,
           outreachStatus: leads.outreachStatus,
+          country: leads.country,
           discoveredAt: leads.discoveredAt,
           email: contacts.email,
           emailStatus: contacts.emailStatus,

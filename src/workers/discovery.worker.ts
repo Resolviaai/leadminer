@@ -192,6 +192,7 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
               sourceKeywordId: kw.id,
               qualificationStatus: 'UNQUALIFIED',
               outreachStatus: 'UNPROCESSED',
+              country: ch.country || null,
               rawPayload: ch.rawPayload,
             })
             .returning({ id: leads.id });

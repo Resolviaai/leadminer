@@ -21,6 +21,7 @@ type Lead = {
   subscriberCount: number | null;
   qualificationStatus: string;
   outreachStatus: string;
+  country?: string | null;
   discoveredAt: Date | string | null;
   email: string | null;
   emailStatus: string | null;
@@ -171,8 +172,13 @@ export function LeadsInfiniteList({ initialData, total }: Props) {
             <Card key={lead.id} className="p-3.5 space-y-2.5">
               <div className="flex items-start justify-between gap-2">
                 <div className="space-y-0.5">
-                  <div className="flex items-center space-x-1.5">
+                  <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
                     <span className="font-semibold text-xs text-text-main">{lead.channelTitle}</span>
+                    {lead.country && (
+                      <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 uppercase font-mono text-text-muted">
+                        {lead.country}
+                      </Badge>
+                    )}
                     <a href={lead.channelUrl} target="_blank" rel="noreferrer" className="text-text-muted hover:text-text-main">
                       <ExternalLink className="w-3 h-3" />
                     </a>
@@ -231,6 +237,11 @@ export function LeadsInfiniteList({ initialData, total }: Props) {
                     <TableCell>
                       <div className="flex items-center space-x-1.5">
                         <span className="font-medium text-text-main">{lead.channelTitle}</span>
+                        {lead.country && (
+                          <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 uppercase font-mono text-text-muted">
+                            {lead.country}
+                          </Badge>
+                        )}
                         <a href={lead.channelUrl} target="_blank" rel="noreferrer" className="text-text-muted hover:text-text-main">
                           <ExternalLink className="w-3 h-3" />
                         </a>
