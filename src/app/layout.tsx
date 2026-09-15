@@ -2,6 +2,7 @@ import './globals.css';
 import React from 'react';
 import Link from 'next/link';
 import { Navigation } from '../components/navigation';
+import { NotificationCenter } from '../components/notifications/NotificationCenter';
 import { Radio } from 'lucide-react';
 import { env } from '../config/env';
 
@@ -31,6 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </div>
 
             <div className="flex items-center space-x-4 text-xs">
+              <NotificationCenter />
               <div className="flex items-center space-x-1.5 text-text-secondary">
                 <Radio className="w-3.5 h-3.5 text-primary" />
                 <span>Search Quota: 100/day</span>

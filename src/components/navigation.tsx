@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { NotificationCenter } from './notifications/NotificationCenter';
 import {
   LayoutDashboard,
   Layers,
@@ -112,6 +113,7 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
         </Link>
 
         <div className="flex items-center space-x-2">
+          <NotificationCenter />
           <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-[11px] text-primary font-medium">
             <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
             <span>Online</span>

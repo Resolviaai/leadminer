@@ -8,9 +8,6 @@ import {
   Radio,
   ArrowUpRight,
   ShieldAlert,
-  Play,
-  CheckCircle2,
-  AlertTriangle,
 } from 'lucide-react';
 import { db } from '../db/client';
 import { keywords, leads, contacts, messages, replies, campaigns, systemSettings } from '../db/schema';
@@ -18,7 +15,6 @@ import { eq, sql } from 'drizzle-orm';
 import { quotaManager } from '../services/youtube/quota';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 
 export const dynamic = 'force-dynamic';
@@ -115,37 +111,6 @@ export default async function OverviewPage() {
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto">
-      {/* Top Banner / System Status */}
-      <Card className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-border">
-        <div className="space-y-1">
-          <div className="flex items-center space-x-2">
-            <h1 className="text-base sm:text-lg font-semibold text-text-main tracking-tight">
-              System Overview
-            </h1>
-            <Badge variant="default" className="text-[10px]">
-              Autonomous
-            </Badge>
-          </div>
-          <p className="text-xs text-text-secondary">
-            Continuous YouTube creator discovery, email verification, and incremental outreach.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2.5 shrink-0">
-          <Link href="/keywords">
-            <Button size="sm" variant="default" className="gap-1.5 w-full sm:w-auto">
-              <Play className="w-3.5 h-3.5 fill-current" />
-              <span>Process Batch</span>
-            </Button>
-          </Link>
-          <Link href="/settings">
-            <Button size="sm" variant="outline" className="w-full sm:w-auto">
-              Settings
-            </Button>
-          </Link>
-        </div>
-      </Card>
-
       {/* Grid: 4 Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* Keywords */}
