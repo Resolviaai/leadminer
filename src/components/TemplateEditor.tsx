@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, {
   useState,
@@ -79,8 +79,20 @@ function useAutoResize(ref: React.RefObject<HTMLTextAreaElement>, value: string)
   }, [ref, value]);
 }
 
+interface TemplateEditorProps {
+  template: Template;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (id: number) => void;
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
-export function TemplateEditor({ template }: { template: Template }) {
+export function TemplateEditor({
+  template,
+  selectable = false,
+  selected = false,
+  onToggleSelect,
+}: TemplateEditorProps) {
   const router = useRouter();
 
   // ── State ──
