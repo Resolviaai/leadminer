@@ -37,6 +37,12 @@ const envSchema = z.object({
   // Email Verification
   EMAIL_VERIFICATION_PROVIDER: z.enum(['local', 'hunter', 'zerobounce', 'neverbounce']).default('local'),
   EMAIL_VERIFICATION_API_KEY: z.string().optional().default(''),
+  ALLOW_DOMAIN_VALID_OUTREACH: z
+    .preprocess(
+      (val) => (typeof val === 'string' ? val.toLowerCase() === 'true' || val === '1' : Boolean(val)),
+      z.boolean()
+    )
+    .default(false),
 
   // Google OAuth / Gmail
   GOOGLE_CLIENT_ID: z.string().optional().default(''),

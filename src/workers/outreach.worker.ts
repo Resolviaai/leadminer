@@ -54,16 +54,11 @@ export async function runOutreachBatch(batchLimit?: number): Promise<{ sent: num
   const jobId = await jobRunner.createJob('CAMPAIGN_SEND', { batchLimit: effectiveBatchLimit });
 
   try {
-    // 2. Fetch Active Campaigns (or fall back to first campaign in draft for testing if none active)
-    let activeCampaigns = await db.select().from(campaigns).where(eq(campaigns.status, 'ACTIVE')).limit(5);
+    // 2. Fetch Active Campaigns (STRICT: Never fall back to draft or inactive campaigns)
+    const activeCampaigns = await db.select().from(campaigns).where(eq(campaigns.status, 'ACTIVE')).limit(5);
 
     if (activeCampaigns.length === 0) {
-      console.log('ℹ️ No campaigns currently marked ACTIVE. Checking for any available campaign...');
-      activeCampaigns = await db.select().from(campaigns).limit(1);
-    }
-
-    if (activeCampaigns.length === 0) {
-      console.log('ℹ️ No campaigns found in database. Please create a campaign first.');
+      console.log('ℹ️ [Outreach] No campaigns currently marked ACTIVE. Halting outreach (will not send without an ACTIVE campaign).');
       await jobRunner.completeJob(jobId, 0);
       return { sent: 0, skipped: 0, errors: 0 };
     }
@@ -84,7 +79,14 @@ export async function runOutreachBatch(batchLimit?: number): Promise<{ sent: num
 
     const template = templateRecord[0];
 
-    // 4. Fetch QUALIFIED leads with VALID, DOMAIN_VALID, or MAILBOX_VERIFIED email that have not been contacted yet
+    // 4. Determine allowed email verification statuses for outreach.
+    // By default, ONLY MAILBOX_VERIFIED emails are sendable.
+    // DOMAIN_VALID is strictly blocked from live outreach unless explicitly configured via ALLOW_DOMAIN_VALID_OUTREACH=true.
+    const allowedEmailStatuses: ('MAILBOX_VERIFIED' | 'VALID' | 'DOMAIN_VALID')[] = env.ALLOW_DOMAIN_VALID_OUTREACH
+      ? ['MAILBOX_VERIFIED', 'VALID', 'DOMAIN_VALID']
+      : ['MAILBOX_VERIFIED'];
+
+    // Fetch QUALIFIED leads with allowed email status that have not been contacted yet
     const candidateLeads = await db
       .select({
         leadId: leads.id,
@@ -103,7 +105,7 @@ export async function runOutreachBatch(batchLimit?: number): Promise<{ sent: num
           eq(leads.qualificationStatus, 'QUALIFIED'),
           eq(leads.outreachStatus, 'UNPROCESSED'),
           eq(leads.suppressionStatus, false),
-          inArray(contacts.emailStatus, ['VALID', 'DOMAIN_VALID', 'MAILBOX_VERIFIED']),
+          inArray(contacts.emailStatus, allowedEmailStatuses),
           isNotNull(contacts.email)
         )
       )

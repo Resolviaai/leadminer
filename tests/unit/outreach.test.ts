@@ -85,5 +85,10 @@ describe('Outreach Hardening & Volume Jitter', () => {
     expect(cleaned).toBe('Your breakdown of AI agents was genuinely fascinating.');
     expect(cleaned.length).toBeLessThanOrEqual(120);
   });
+
+  it('should expose reserveSendingAccount and releaseAccountReservation methods', () => {
+    expect(typeof gmailSendingService.reserveSendingAccount).toBe('function');
+    expect(typeof gmailSendingService.releaseAccountReservation).toBe('function');
+  });
 });
 

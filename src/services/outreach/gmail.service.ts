@@ -67,78 +67,87 @@ export class GmailSendingService {
     return min + jitter;
   }
 
-  private async getAvailableAccount(): Promise<typeof gmailAccounts.$inferSelect | null> {
+  /**
+   * Concurrency-safe atomic quota reservation:
+   * Atomically claims 1 sending slot on an ACTIVE account using a conditional UPDATE ... WHERE sent_today < limit RETURNING *.
+   * PostgreSQL row-level locks ensure that even if multiple workers or asynchronous tasks run concurrently,
+   * no two workers can select or exceed the same remaining daily quota limit.
+   */
+  public async reserveSendingAccount(): Promise<typeof gmailAccounts.$inferSelect | null> {
     try {
       const accounts = await db
         .select()
         .from(gmailAccounts)
-        .where(and(eq(gmailAccounts.status, 'ACTIVE')))
+        .where(eq(gmailAccounts.status, 'ACTIVE'))
         .limit(10);
 
       const now = new Date();
       const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
 
       for (const account of accounts) {
-        let sentToday = account.sentToday ?? 0;
-
-        // 1. Check account.lastSendAt. If it was before today's UTC midnight, reset account.sentToday = 0 in DB
+        // 1. Midnight rollover check: reset sentToday if lastSendAt was before today UTC
         if (!account.lastSendAt || new Date(account.lastSendAt) < todayUtc) {
-          sentToday = 0;
           try {
             await db
               .update(gmailAccounts)
               .set({ sentToday: 0, updatedAt: new Date() })
-              .where(eq(gmailAccounts.id, account.id));
-          } catch (e) {
-            // DB write fallback
+              .where(
+                and(
+                  eq(gmailAccounts.id, account.id),
+                  sql`(${gmailAccounts.lastSendAt} < ${todayUtc} OR ${gmailAccounts.lastSendAt} IS NULL)`
+                )
+              );
+          } catch {
+            // Non-blocking fallback
           }
         }
 
-        // 2. Also check count of sent messages today:
-        // SELECT count(*) FROM messages WHERE gmail_account_id = account.id AND send_status = 'SENT' AND sent_at >= todayUtc
-        let actualSentToday = 0;
-        try {
-          const messageCountRes = await db
-            .select({ count: sql<number>`count(*)::int` })
-            .from(messages)
-            .where(
-              and(
-                eq(messages.gmailAccountId, account.id),
-                eq(messages.sendStatus, 'SENT'),
-                gte(messages.sentAt, todayUtc)
-              )
-            );
-          actualSentToday = Number(messageCountRes[0]?.count || 0);
-        } catch (e) {
-          actualSentToday = sentToday;
-        }
-
-        const effectiveSentToday = Math.max(sentToday, actualSentToday);
-        if (effectiveSentToday !== account.sentToday) {
-          try {
-            await db
-              .update(gmailAccounts)
-              .set({ sentToday: effectiveSentToday, updatedAt: new Date() })
-              .where(eq(gmailAccounts.id, account.id));
-          } catch (e) {
-            // DB write fallback
-          }
-        }
-
-        // 3. Enforce daily limit with volume jitter (18-25, max 25)
+        // 2. Enforce daily limit with volume jitter (18-25, max 25)
         const todayLimit = this.getTodayEffectiveLimit(account.id, account.dailyLimit);
-        if (effectiveSentToday < todayLimit) {
-          return {
-            ...account,
-            sentToday: effectiveSentToday,
-          };
+
+        // 3. Atomically claim 1 quota slot with PostgreSQL row lock
+        const reserved = await db
+          .update(gmailAccounts)
+          .set({
+            sentToday: sql`COALESCE(${gmailAccounts.sentToday}, 0) + 1`,
+            lastSendAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(gmailAccounts.id, account.id),
+              eq(gmailAccounts.status, 'ACTIVE'),
+              sql`COALESCE(${gmailAccounts.sentToday}, 0) < ${todayLimit}`
+            )
+          )
+          .returning();
+
+        if (reserved && reserved.length > 0) {
+          return reserved[0];
         }
       }
 
       return null;
     } catch (e) {
-      console.error('[GmailService] Error getting available account:', e);
+      console.error('[GmailService] Error reserving sending account:', e);
       return null;
+    }
+  }
+
+  /**
+   * Releases an atomic quota reservation if sending fails or is aborted.
+   */
+  public async releaseAccountReservation(accountId: number): Promise<void> {
+    try {
+      await db
+        .update(gmailAccounts)
+        .set({
+          sentToday: sql`GREATEST(0, COALESCE(${gmailAccounts.sentToday}, 0) - 1)`,
+          updatedAt: new Date(),
+        })
+        .where(eq(gmailAccounts.id, accountId));
+    } catch (e) {
+      console.error(`[GmailService] Failed to release quota reservation for account ${accountId}:`, e);
     }
   }
 
@@ -174,10 +183,10 @@ export class GmailSendingService {
       return { success: false, skippedReason: 'RECIPIENT_SUPPRESSED' };
     }
 
-    // 3. Select Sending Account
-    const account = await this.getAvailableAccount();
+    // 3. Atomically Reserve Sending Account Slot (Concurrency-safe)
+    const account = await this.reserveSendingAccount();
 
-    // When DRY_RUN = false and no available account: do NOT fake send!
+    // When DRY_RUN = false and no available account with remaining quota:
     if (!env.DRY_RUN && !account) {
       console.warn('⛔ [Outreach] No healthy Gmail account available with remaining quota. Aborting send.');
       return { success: false, skippedReason: 'NO_HEALTHY_GMAIL_ACCOUNT' };
@@ -257,7 +266,7 @@ export class GmailSendingService {
       const messageId = response.data.id || `live_msg_${Date.now()}`;
       const threadId = response.data.threadId || `live_thread_${Date.now()}`;
 
-      // 6. Atomically record sent state and update quota
+      // 6. Record sent message state (Quota was already claimed atomically during reservation)
       await db.insert(messages).values({
         leadId: params.leadId,
         campaignId: params.campaignId,
@@ -276,15 +285,6 @@ export class GmailSendingService {
       });
 
       await db
-        .update(gmailAccounts)
-        .set({
-          sentToday: account.sentToday + 1,
-          lastSendAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(gmailAccounts.id, account.id));
-
-      await db
         .update(leads)
         .set({ outreachStatus: 'CONTACTED', updatedAt: new Date() })
         .where(eq(leads.id, params.leadId));
@@ -297,6 +297,9 @@ export class GmailSendingService {
       };
     } catch (error: any) {
       console.error(`[Gmail Send Error] Account ${account.email}:`, error);
+
+      // Release the reserved quota slot since sending failed
+      await this.releaseAccountReservation(account.id);
 
       if (error?.status === 401 || error?.message?.includes('invalid_grant')) {
         await db

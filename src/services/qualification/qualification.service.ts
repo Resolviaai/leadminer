@@ -1,3 +1,5 @@
+import { env } from '../../config/env';
+
 export interface QualificationCriteria {
   minSubscribers?: number;
   maxSubscribers?: number;
@@ -46,9 +48,11 @@ export class LeadQualificationService {
     }
 
     // 4. Email validity check
-    const isDeliverable = candidate.emailStatus === 'VALID' ||
-                          candidate.emailStatus === 'DOMAIN_VALID' ||
-                          candidate.emailStatus === 'MAILBOX_VERIFIED';
+    // Strictly require MAILBOX_VERIFIED (or VALID) by default.
+    // DOMAIN_VALID is only treated as deliverable if explicitly configured via ALLOW_DOMAIN_VALID_OUTREACH.
+    const isDeliverable = candidate.emailStatus === 'MAILBOX_VERIFIED' ||
+                          candidate.emailStatus === 'VALID' ||
+                          (Boolean(env.ALLOW_DOMAIN_VALID_OUTREACH) && candidate.emailStatus === 'DOMAIN_VALID');
     if (criteria.requireValidEmail && !isDeliverable) {
       return { qualified: false, reason: `Email is not verified as deliverable (current status: ${candidate.emailStatus || 'UNKNOWN'})` };
     }

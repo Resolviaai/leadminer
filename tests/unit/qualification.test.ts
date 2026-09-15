@@ -69,6 +69,35 @@ describe('Lead Qualification Service', () => {
     expect(res.reason).toContain('not verified as deliverable');
   });
 
+  it('should qualify leads with MAILBOX_VERIFIED email', () => {
+    const candidate = {
+      subscriberCount: 25000,
+      email: 'verified@podcasts.com',
+      emailStatus: 'MAILBOX_VERIFIED',
+      category: 'Top Podcasters',
+      isSuppressed: false,
+      alreadyContacted: false,
+    };
+
+    const res = leadQualificationService.qualify(candidate, defaultCriteria);
+    expect(res.qualified).toBe(true);
+  });
+
+  it('should reject leads with DOMAIN_VALID email by default when ALLOW_DOMAIN_VALID_OUTREACH is false', () => {
+    const candidate = {
+      subscriberCount: 25000,
+      email: 'domainonly@podcasts.com',
+      emailStatus: 'DOMAIN_VALID',
+      category: 'Top Podcasters',
+      isSuppressed: false,
+      alreadyContacted: false,
+    };
+
+    const res = leadQualificationService.qualify(candidate, defaultCriteria);
+    expect(res.qualified).toBe(false);
+    expect(res.reason).toContain('not verified as deliverable');
+  });
+
   it('should qualify leads when country matches targetCountry', () => {
     const candidate = {
       subscriberCount: 25000,
