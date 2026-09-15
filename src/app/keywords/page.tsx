@@ -10,22 +10,38 @@ import { KeywordsInfiniteList } from "@/components/keywords/KeywordsInfiniteList
 export const dynamic = "force-dynamic";
 
 async function getData() {
-  const [list, [counts]] = await Promise.all([
-    db
-      .select()
-      .from(keywords)
-      .orderBy(desc(keywords.id))
-      .limit(50),
-    db
-      .select({
-        total: sql<number>`count(*)::int`,
-        pending: sql<number>`count(*) filter (where status = 'PENDING')::int`,
-        completed: sql<number>`count(*) filter (where status = 'COMPLETED')::int`,
-        failed: sql<number>`count(*) filter (where status = 'FAILED')::int`,
-      })
-      .from(keywords),
-  ]);
-  return { list, counts: counts ?? { total: 0, pending: 0, completed: 0, failed: 0 } };
+  try {
+    const [listResult, countResult] = await Promise.all([
+      db
+        .select()
+        .from(keywords)
+        .orderBy(desc(keywords.id))
+        .limit(50),
+      db
+        .select({
+          total: sql<number>`count(*)::int`,
+          pending: sql<number>`count(*) filter (where status = 'PENDING')::int`,
+          completed: sql<number>`count(*) filter (where status = 'COMPLETED')::int`,
+          failed: sql<number>`count(*) filter (where status = 'FAILED')::int`,
+        })
+        .from(keywords),
+    ]);
+
+    const counts = countResult?.[0] || {
+      total: 0,
+      pending: 0,
+      completed: 0,
+      failed: 0,
+    };
+
+    return { list: listResult || [], counts };
+  } catch (err) {
+    console.error("[KeywordsPage Error]", err);
+    return {
+      list: [],
+      counts: { total: 0, pending: 0, completed: 0, failed: 0 },
+    };
+  }
 }
 
 export default async function KeywordsPage() {

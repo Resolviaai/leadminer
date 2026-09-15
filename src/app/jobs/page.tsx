@@ -9,11 +9,17 @@ import { JobsInfiniteList } from "@/components/jobs/JobsInfiniteList";
 export const dynamic = "force-dynamic";
 
 async function getData() {
-  const [list, [{ total }]] = await Promise.all([
-    db.select().from(jobs).orderBy(desc(jobs.id)).limit(50),
-    db.select({ total: sql<number>`count(*)::int` }).from(jobs),
-  ]);
-  return { list, total: total ?? 0 };
+  try {
+    const [listResult, countResult] = await Promise.all([
+      db.select().from(jobs).orderBy(desc(jobs.id)).limit(50),
+      db.select({ total: sql<number>`count(*)::int` }).from(jobs),
+    ]);
+    const total = countResult?.[0]?.total ?? 0;
+    return { list: listResult || [], total };
+  } catch (err) {
+    console.error("[JobsPage Error]", err);
+    return { list: [], total: 0 };
+  }
 }
 
 export default async function JobsPage() {

@@ -9,11 +9,17 @@ import { LogsInfiniteList } from "@/components/logs/LogsInfiniteList";
 export const dynamic = "force-dynamic";
 
 async function getData() {
-  const [list, [{ total }]] = await Promise.all([
-    db.select().from(logs).orderBy(desc(logs.id)).limit(50),
-    db.select({ total: sql<number>`count(*)::int` }).from(logs),
-  ]);
-  return { list, total: total ?? 0 };
+  try {
+    const [listResult, countResult] = await Promise.all([
+      db.select().from(logs).orderBy(desc(logs.id)).limit(50),
+      db.select({ total: sql<number>`count(*)::int` }).from(logs),
+    ]);
+    const total = countResult?.[0]?.total ?? 0;
+    return { list: listResult || [], total };
+  } catch (err) {
+    console.error("[LogsPage Error]", err);
+    return { list: [], total: 0 };
+  }
 }
 
 export default async function LogsPage() {
@@ -25,11 +31,11 @@ export default async function LogsPage() {
         <div className="flex items-center space-x-2">
           <Terminal className="w-5 h-5 text-primary" />
           <h1 className="text-base sm:text-lg font-semibold text-text-main tracking-tight">
-            System Telemetry &amp; Audit Logs
+            System Telemetry & Audit Logs
           </h1>
         </div>
         <p className="text-xs text-text-secondary mt-0.5">
-          {total.toLocaleString()} events — real-time stream of discoveries, verifications, message dispatches, quota alerts, and worker lifecycles.
+          {total.toLocaleString()} log entries — structured machine and operational logs across all workers, schedulers, and quota monitors.
         </p>
       </Card>
 

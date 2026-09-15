@@ -10,30 +10,37 @@ import { LeadsInfiniteList } from "@/components/leads/LeadsInfiniteList";
 export const dynamic = "force-dynamic";
 
 async function getData() {
-  const [list, [{ total }]] = await Promise.all([
-    db
-      .select({
-        id: leads.id,
-        channelId: leads.channelId,
-        channelTitle: leads.channelTitle,
-        channelUrl: leads.channelUrl,
-        subscriberCount: leads.subscriberCount,
-        qualificationStatus: leads.qualificationStatus,
-        outreachStatus: leads.outreachStatus,
-        discoveredAt: leads.discoveredAt,
-        email: contacts.email,
-        emailStatus: contacts.emailStatus,
-        sourceKeyword: keywords.keyword,
-        category: keywords.category,
-      })
-      .from(leads)
-      .leftJoin(contacts, eq(leads.id, contacts.leadId))
-      .leftJoin(keywords, eq(leads.sourceKeywordId, keywords.id))
-      .orderBy(desc(leads.id))
-      .limit(50),
-    db.select({ total: sql<number>`count(*)::int` }).from(leads),
-  ]);
-  return { list, total: total ?? 0 };
+  try {
+    const [listResult, countResult] = await Promise.all([
+      db
+        .select({
+          id: leads.id,
+          channelId: leads.channelId,
+          channelTitle: leads.channelTitle,
+          channelUrl: leads.channelUrl,
+          subscriberCount: leads.subscriberCount,
+          qualificationStatus: leads.qualificationStatus,
+          outreachStatus: leads.outreachStatus,
+          discoveredAt: leads.discoveredAt,
+          email: contacts.email,
+          emailStatus: contacts.emailStatus,
+          sourceKeyword: keywords.keyword,
+          category: keywords.category,
+        })
+        .from(leads)
+        .leftJoin(contacts, eq(leads.id, contacts.leadId))
+        .leftJoin(keywords, eq(leads.sourceKeywordId, keywords.id))
+        .orderBy(desc(leads.id))
+        .limit(50),
+      db.select({ total: sql<number>`count(*)::int` }).from(leads),
+    ]);
+
+    const total = countResult?.[0]?.total ?? 0;
+    return { list: listResult || [], total };
+  } catch (err) {
+    console.error("[LeadsPage Error]", err);
+    return { list: [], total: 0 };
+  }
 }
 
 export default async function LeadsPage() {
@@ -50,13 +57,14 @@ export default async function LeadsPage() {
             </h1>
           </div>
           <p className="text-xs text-text-secondary mt-0.5">
-            {total.toLocaleString()} deduplicated YouTube channels with extracted emails, verification status, and outreach qualification.
+            {total.toLocaleString()} leads — deduplicated YouTube channels, extracted emails, verification status, and outreach qualification.
           </p>
         </div>
+
         <form action="/api/workers/verification" method="POST">
           <Button size="sm" variant="default" className="gap-1.5 w-full sm:w-auto">
             <Play className="w-3.5 h-3.5 fill-current" />
-            <span>Verify &amp; Qualify Batch</span>
+            <span>Verify & Qualify Batch</span>
           </Button>
         </form>
       </Card>
