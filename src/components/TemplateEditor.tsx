@@ -21,7 +21,6 @@ import {
   Power,
   GripVertical,
   Tag,
-  ArrowDown,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -548,20 +547,9 @@ export function TemplateEditor({
       {/* ── Variable insertion toolbar with drag & drop (editing only) ── */}
       {editing && (
         <div className="p-3 rounded-xl bg-surface-200/90 border border-border space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-text-secondary tracking-wide uppercase">
-              <Tag className="w-3.5 h-3.5 text-primary" />
-              <span>Available Merge Tags</span>
-            </div>
-            <span className="text-[10px] text-text-muted">
-              {draggingToken ? (
-                <span className="text-primary font-medium flex items-center gap-1 animate-pulse">
-                  <ArrowDown className="w-3 h-3" /> Drop into Subject or Body
-                </span>
-              ) : (
-                "Drag & drop or click to insert"
-              )}
-            </span>
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-text-secondary tracking-wide uppercase">
+            <Tag className="w-3.5 h-3.5 text-primary" />
+            <span>Available Merge Tags</span>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 pt-0.5">
@@ -627,20 +615,8 @@ export function TemplateEditor({
               }`}
             >
               <div className="flex items-center justify-between">
-                <label className="text-[10px] text-text-muted uppercase font-semibold tracking-wider flex items-center gap-1.5">
-                  <span>Subject Line</span>
-                  {editing && draggingToken && (
-                    <span
-                      className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded transition-colors ${
-                        isSubjectOver
-                          ? "bg-primary text-white font-medium"
-                          : "text-primary font-medium"
-                      }`}
-                    >
-                      <ArrowDown className="w-2.5 h-2.5" />
-                      {isSubjectOver ? "Release to drop" : "Drop target"}
-                    </span>
-                  )}
+                <label className="text-[10px] text-text-muted uppercase font-semibold tracking-wider">
+                  Subject Line
                 </label>
                 {editing && (
                   <span className={`text-[10px] font-mono font-medium ${subjectLengthColor(subjectLen)}`}>
@@ -691,20 +667,8 @@ export function TemplateEditor({
               }`}
             >
               <div className="flex items-center justify-between">
-                <label className="text-[10px] text-text-muted uppercase font-semibold tracking-wider flex items-center gap-1.5">
-                  <span>Email Body</span>
-                  {editing && draggingToken && (
-                    <span
-                      className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded transition-colors ${
-                        isBodyOver
-                          ? "bg-primary text-white font-medium"
-                          : "text-primary font-medium"
-                      }`}
-                    >
-                      <ArrowDown className="w-2.5 h-2.5" />
-                      {isBodyOver ? "Release to drop" : "Drop target"}
-                    </span>
-                  )}
+                <label className="text-[10px] text-text-muted uppercase font-semibold tracking-wider">
+                  Email Body
                 </label>
                 {editing && (
                   <span className="text-[10px] text-text-muted font-mono">
