@@ -50,8 +50,8 @@ export async function runVerificationBatch(limit = 25): Promise<{ verified: numb
       .where(eq(campaigns.status, 'ACTIVE'))
       .limit(1);
 
-    const minSubs = activeCampaign[0]?.minSubscribers ?? 1000;
-    const maxSubs = activeCampaign[0]?.maxSubscribers ?? 1000000;
+    const minSubs = activeCampaign[0]?.minSubscribers ? Number(activeCampaign[0].minSubscribers) : 10;
+    const maxSubs = activeCampaign[0]?.maxSubscribers ? Number(activeCampaign[0].maxSubscribers) : undefined;
 
     let verifiedCount = 0;
     let qualifiedCount = 0;

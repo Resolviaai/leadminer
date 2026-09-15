@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { env } from '../../src/config/env';
 import { leadQualificationService } from '../../src/services/qualification/qualification.service';
 
 describe('Lead Qualification Service', () => {
@@ -83,7 +84,7 @@ describe('Lead Qualification Service', () => {
     expect(res.qualified).toBe(true);
   });
 
-  it('should reject leads with DOMAIN_VALID email by default when ALLOW_DOMAIN_VALID_OUTREACH is false', () => {
+  it('should qualify or reject DOMAIN_VALID email depending on ALLOW_DOMAIN_VALID_OUTREACH', () => {
     const candidate = {
       subscriberCount: 25000,
       email: 'domainonly@podcasts.com',
@@ -93,9 +94,19 @@ describe('Lead Qualification Service', () => {
       alreadyContacted: false,
     };
 
-    const res = leadQualificationService.qualify(candidate, defaultCriteria);
-    expect(res.qualified).toBe(false);
-    expect(res.reason).toContain('not verified as deliverable');
+    const originalVal = env.ALLOW_DOMAIN_VALID_OUTREACH;
+    try {
+      env.ALLOW_DOMAIN_VALID_OUTREACH = false;
+      const resFalse = leadQualificationService.qualify(candidate, defaultCriteria);
+      expect(resFalse.qualified).toBe(false);
+      expect(resFalse.reason).toContain('not verified as deliverable');
+
+      env.ALLOW_DOMAIN_VALID_OUTREACH = true;
+      const resTrue = leadQualificationService.qualify(candidate, defaultCriteria);
+      expect(resTrue.qualified).toBe(true);
+    } finally {
+      env.ALLOW_DOMAIN_VALID_OUTREACH = originalVal;
+    }
   });
 
   it('should qualify leads when country matches targetCountry', () => {

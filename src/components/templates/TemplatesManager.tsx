@@ -17,6 +17,9 @@ import {
   ChevronUp,
   Layers,
   AlertCircle,
+  GripVertical,
+  Tag,
+  ArrowDown,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -87,7 +90,12 @@ export function TemplatesManager({
   const [newServerError, setNewServerError] = useState<string | null>(null);
   const [showNewPreview, setShowNewPreview] = useState(true);
 
+  const newSubjectRef = useRef<HTMLInputElement>(null);
   const newBodyRef = useRef<HTMLTextAreaElement>(null);
+  const lastFocusedField = useRef<"subject" | "body">("body");
+  const [draggingToken, setDraggingToken] = useState<string | null>(null);
+  const [isSubjectOver, setIsSubjectOver] = useState(false);
+  const [isBodyOver, setIsBodyOver] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   const activeCount = initialTemplates.filter((t) => t.isActive).length;
@@ -181,19 +189,130 @@ export function TemplatesManager({
   };
 
   // ── New Template Creation ──
-  const insertVariableIntoNew = (token: string) => {
-    const el = newBodyRef.current;
-    if (!el) {
+  const insertVariableIntoNew = (token: string, targetField?: "subject" | "body") => {
+    const field = targetField ?? lastFocusedField.current;
+    if (field === "subject") {
+      const el = newSubjectRef.current;
+      if (!el) {
+        setSubject((p) => p + token);
+        return;
+      }
+      const start = el.selectionStart ?? subject.length;
+      const end = el.selectionEnd ?? subject.length;
+      const updated = subject.slice(0, start) + token + subject.slice(end);
+      setSubject(updated);
+      setNewErrors((p) => ({ ...p, subject: "" }));
+      requestAnimationFrame(() => {
+        el.focus();
+        el.selectionStart = el.selectionEnd = start + token.length;
+      });
+    } else {
+      const el = newBodyRef.current;
+      if (!el) {
+        setBody((p) => p + token);
+        return;
+      }
+      const start = el.selectionStart ?? body.length;
+      const end = el.selectionEnd ?? body.length;
+      const updated = body.slice(0, start) + token + body.slice(end);
+      setBody(updated);
+      setNewErrors((p) => ({ ...p, body: "" }));
+      requestAnimationFrame(() => {
+        el.focus();
+        el.selectionStart = el.selectionEnd = start + token.length;
+      });
+    }
+  };
+
+  const handleSubjectDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsSubjectOver(false);
+    setDraggingToken(null);
+
+    const token =
+      e.dataTransfer.getData("application/x-mergetag") ||
+      e.dataTransfer.getData("text/plain") ||
+      e.dataTransfer.getData("text");
+    if (!token) return;
+
+    const input = newSubjectRef.current;
+    if (!input) {
+      setSubject((p) => p + token);
+      return;
+    }
+
+    let insertPos = input.selectionStart ?? input.value.length;
+    try {
+      if (typeof (document as any).caretPositionFromPoint === "function") {
+        const pos = (document as any).caretPositionFromPoint(e.clientX, e.clientY);
+        if (pos && typeof pos.offset === "number" && (pos.offsetNode === input || input.contains(pos.offsetNode))) {
+          insertPos = pos.offset;
+        }
+      } else if (typeof document.caretRangeFromPoint === "function") {
+        const range = document.caretRangeFromPoint(e.clientX, e.clientY);
+        if (range && typeof range.startOffset === "number" && (range.startContainer === input || input.contains(range.startContainer))) {
+          insertPos = range.startOffset;
+        }
+      }
+    } catch {}
+
+    insertPos = Math.max(0, Math.min(insertPos, input.value.length));
+    const nextVal = input.value.slice(0, insertPos) + token + input.value.slice(insertPos);
+    setSubject(nextVal);
+    setNewErrors((p) => ({ ...p, subject: "" }));
+    lastFocusedField.current = "subject";
+
+    requestAnimationFrame(() => {
+      input.focus();
+      try {
+        input.setSelectionRange(insertPos + token.length, insertPos + token.length);
+      } catch {}
+    });
+  };
+
+  const handleBodyDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsBodyOver(false);
+    setDraggingToken(null);
+
+    const token =
+      e.dataTransfer.getData("application/x-mergetag") ||
+      e.dataTransfer.getData("text/plain") ||
+      e.dataTransfer.getData("text");
+    if (!token) return;
+
+    const textarea = newBodyRef.current;
+    if (!textarea) {
       setBody((p) => p + token);
       return;
     }
-    const start = el.selectionStart ?? body.length;
-    const end = el.selectionEnd ?? body.length;
-    const updated = body.slice(0, start) + token + body.slice(end);
-    setBody(updated);
+
+    let insertPos = textarea.selectionStart ?? textarea.value.length;
+    try {
+      if (typeof (document as any).caretPositionFromPoint === "function") {
+        const pos = (document as any).caretPositionFromPoint(e.clientX, e.clientY);
+        if (pos && typeof pos.offset === "number" && (pos.offsetNode === textarea || textarea.contains(pos.offsetNode))) {
+          insertPos = pos.offset;
+        }
+      } else if (typeof document.caretRangeFromPoint === "function") {
+        const range = document.caretRangeFromPoint(e.clientX, e.clientY);
+        if (range && typeof range.startOffset === "number" && (range.startContainer === textarea || textarea.contains(range.startContainer))) {
+          insertPos = range.startOffset;
+        }
+      }
+    } catch {}
+
+    insertPos = Math.max(0, Math.min(insertPos, textarea.value.length));
+    const nextVal = textarea.value.slice(0, insertPos) + token + textarea.value.slice(insertPos);
+    setBody(nextVal);
+    setNewErrors((p) => ({ ...p, body: "" }));
+    lastFocusedField.current = "body";
+
     requestAnimationFrame(() => {
-      el.selectionStart = el.selectionEnd = start + token.length;
-      el.focus();
+      textarea.focus();
+      try {
+        textarea.setSelectionRange(insertPos + token.length, insertPos + token.length);
+      } catch {}
     });
   };
 
@@ -491,10 +610,42 @@ export function TemplatesManager({
                   )}
                 </div>
 
-                <div className="space-y-1">
+                {/* Subject Line with Drop Target */}
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "copy";
+                    if (!isSubjectOver) setIsSubjectOver(true);
+                  }}
+                  onDragLeave={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                      setIsSubjectOver(false);
+                    }
+                  }}
+                  onDrop={handleSubjectDrop}
+                  className={`space-y-1 p-2 rounded-xl transition-all ${
+                    isSubjectOver
+                      ? "ring-2 ring-primary border border-primary bg-primary/[0.05]"
+                      : draggingToken
+                      ? "ring-1 ring-primary/40 border border-dashed border-primary/50 bg-primary/[0.02]"
+                      : "border border-transparent"
+                  }`}
+                >
                   <div className="flex items-center justify-between">
-                    <label className="text-[10px] text-text-muted uppercase font-semibold tracking-wider">
-                      Subject Line
+                    <label className="text-[10px] text-text-muted uppercase font-semibold tracking-wider flex items-center gap-1.5">
+                      <span>Subject Line</span>
+                      {draggingToken && (
+                        <span
+                          className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded transition-colors ${
+                            isSubjectOver
+                              ? "bg-primary text-white font-medium"
+                              : "text-primary font-medium"
+                          }`}
+                        >
+                          <ArrowDown className="w-2.5 h-2.5" />
+                          {isSubjectOver ? "Release to drop" : "Drop target"}
+                        </span>
+                      )}
                     </label>
                     <span
                       className={`text-[10px] font-mono font-medium ${subjectLengthColor(
@@ -505,14 +656,18 @@ export function TemplatesManager({
                     </span>
                   </div>
                   <input
+                    ref={newSubjectRef}
                     value={subject}
+                    onFocus={() => {
+                      lastFocusedField.current = "subject";
+                    }}
                     onChange={(e) => {
                       setSubject(e.target.value);
                       setNewErrors((p) => ({ ...p, subject: "" }));
                     }}
                     placeholder="e.g. Quick question for {{channel_name}}"
                     maxLength={500}
-                    className={`w-full bg-surface-200 border rounded-lg px-3 py-2 text-xs font-mono text-text-main focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-text-muted ${
+                    className={`w-full bg-surface-200 border rounded-lg px-3 py-2 text-xs font-mono text-text-main focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-text-muted transition-shadow ${
                       newErrors.subject ? "border-rose-500/60" : "border-border"
                     }`}
                   />
@@ -523,27 +678,88 @@ export function TemplatesManager({
                   )}
                 </div>
 
-                {/* Variable insertion toolbar */}
-                <div className="flex flex-wrap items-center gap-1.5 p-2 rounded-lg bg-brand-soft border border-primary/20">
-                  <span className="text-[10px] text-brand-accent font-semibold uppercase tracking-wider mr-1">
-                    Insert:
-                  </span>
-                  {VARIABLES.map((v) => (
-                    <button
-                      key={v.token}
-                      type="button"
-                      onClick={() => insertVariableIntoNew(v.token)}
-                      className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-surface-300 border border-border text-brand-accent hover:bg-primary/10 hover:border-primary/30 active:scale-95 transition-all"
-                    >
-                      {v.token}
-                    </button>
-                  ))}
+                {/* Variable insertion toolbar with drag & drop */}
+                <div className="p-3 rounded-xl bg-surface-200/90 border border-border space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-text-secondary tracking-wide uppercase">
+                      <Tag className="w-3.5 h-3.5 text-primary" />
+                      <span>Available Merge Tags</span>
+                    </div>
+                    <span className="text-[10px] text-text-muted">
+                      {draggingToken ? (
+                        <span className="text-primary font-medium flex items-center gap-1 animate-pulse">
+                          <ArrowDown className="w-3 h-3" /> Drop into Subject or Body
+                        </span>
+                      ) : (
+                        "Drag & drop or click to insert"
+                      )}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                    {VARIABLES.map((v) => (
+                      <div
+                        key={v.token}
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData("text/plain", v.token);
+                          e.dataTransfer.setData("text", v.token);
+                          e.dataTransfer.setData("application/x-mergetag", v.token);
+                          e.dataTransfer.effectAllowed = "copy";
+                          setDraggingToken(v.token);
+                        }}
+                        onDragEnd={() => {
+                          setDraggingToken(null);
+                          setIsSubjectOver(false);
+                          setIsBodyOver(false);
+                        }}
+                        onClick={() => insertVariableIntoNew(v.token)}
+                        title={`Drag into Subject or Body, or click to insert ${v.token}`}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-300 border border-border/80 text-primary hover:text-white hover:bg-primary/20 hover:border-primary/50 cursor-grab active:cursor-grabbing hover:scale-[1.03] active:scale-[0.97] transition-all shadow-sm select-none group text-xs font-mono"
+                      >
+                        <GripVertical className="w-3 h-3 text-text-muted group-hover:text-primary transition-colors shrink-0" />
+                        <span>{v.token}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
-                <div className="space-y-1">
+                {/* Email Body with Drop Target */}
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "copy";
+                    if (!isBodyOver) setIsBodyOver(true);
+                  }}
+                  onDragLeave={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                      setIsBodyOver(false);
+                    }
+                  }}
+                  onDrop={handleBodyDrop}
+                  className={`space-y-1 p-2 rounded-xl transition-all ${
+                    isBodyOver
+                      ? "ring-2 ring-primary border border-primary bg-primary/[0.05]"
+                      : draggingToken
+                      ? "ring-1 ring-primary/40 border border-dashed border-primary/50 bg-primary/[0.02]"
+                      : "border border-transparent"
+                  }`}
+                >
                   <div className="flex items-center justify-between">
-                    <label className="text-[10px] text-text-muted uppercase font-semibold tracking-wider">
-                      Email Body
+                    <label className="text-[10px] text-text-muted uppercase font-semibold tracking-wider flex items-center gap-1.5">
+                      <span>Email Body</span>
+                      {draggingToken && (
+                        <span
+                          className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded transition-colors ${
+                            isBodyOver
+                              ? "bg-primary text-white font-medium"
+                              : "text-primary font-medium"
+                          }`}
+                        >
+                          <ArrowDown className="w-2.5 h-2.5" />
+                          {isBodyOver ? "Release to drop" : "Drop target"}
+                        </span>
+                      )}
                     </label>
                     <span className="text-[10px] text-text-muted font-mono">
                       {body.trim() ? body.trim().split(/\s+/).length : 0} words
@@ -552,13 +768,16 @@ export function TemplatesManager({
                   <textarea
                     ref={newBodyRef}
                     value={body}
+                    onFocus={() => {
+                      lastFocusedField.current = "body";
+                    }}
                     onChange={(e) => {
                       setBody(e.target.value);
                       setNewErrors((p) => ({ ...p, body: "" }));
                     }}
                     rows={10}
                     placeholder={"Hi {{first_name}},\n\n{{custom_line}}\n\nI noticed your channel {{channel_name}} has reached {{subscriber_count}} subscribers..."}
-                    className={`w-full bg-surface-200 border rounded-lg px-3 py-2 text-[11px] font-mono text-text-main leading-relaxed resize-y focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-text-muted ${
+                    className={`w-full bg-surface-200 border rounded-lg px-3 py-2 text-[11px] font-mono text-text-main leading-relaxed resize-y focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-text-muted transition-shadow ${
                       newErrors.body ? "border-rose-500/60" : "border-border"
                     }`}
                   />
