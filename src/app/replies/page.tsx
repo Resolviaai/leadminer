@@ -2,7 +2,18 @@ import React from 'react';
 import { db } from '../../db/client';
 import { replies, leads, campaigns } from '../../db/schema';
 import { eq, desc } from 'drizzle-orm';
-import { Inbox, MessageSquare, ExternalLink, ShieldOff, Check } from 'lucide-react';
+import { Inbox, ExternalLink } from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from '@/components/ui/table';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,70 +48,115 @@ export default async function RepliesPage() {
   const list = await getRepliesData();
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      <div className="p-4 rounded-lg bg-white/[0.02] border border-white/10">
+    <div className="space-y-5 max-w-7xl mx-auto">
+      <Card className="p-4 sm:p-5 border-border">
         <div className="flex items-center space-x-2">
-          <Inbox className="w-5 h-5 text-rose-400" />
-          <h1 className="text-lg font-semibold text-white tracking-tight">Creator Replies Inbox</h1>
+          <Inbox className="w-5 h-5 text-primary" />
+          <h1 className="text-base sm:text-lg font-semibold text-text-main tracking-tight">
+            Creator Replies Inbox
+          </h1>
         </div>
-        <p className="text-xs text-slate-400 mt-0.5">
-          Inbound responses detected from outreach threads. High-signal replies automatically trigger Telegram alerts.
+        <p className="text-xs text-text-secondary mt-0.5">
+          Inbound responses detected from outreach threads. High-signal replies trigger real-time notifications.
         </p>
+      </Card>
+
+      {/* Mobile Card List (< md) */}
+      <div className="md:hidden space-y-2.5">
+        {list.length === 0 ? (
+          <Card className="p-8 text-center text-xs text-text-muted">
+            No creator replies recorded yet.
+          </Card>
+        ) : (
+          list.map((r) => (
+            <Card key={r.id} className="p-3.5 space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <span className="font-semibold text-xs text-text-main block">
+                    {r.channelTitle || 'Unknown Creator'}
+                  </span>
+                  <span className="font-mono text-[11px] text-text-muted">{r.senderEmail}</span>
+                </div>
+                <Badge variant="secondary" className="text-[10px]">
+                  {r.campaignName || 'General'}
+                </Badge>
+              </div>
+
+              <p className="text-xs text-text-secondary italic p-2 rounded bg-surface-200 border border-border/50 line-clamp-3">
+                "{r.snippet || 'No preview available'}"
+              </p>
+
+              <div className="flex items-center justify-between text-[11px] text-text-muted pt-1">
+                <span>{r.receivedAt ? new Date(r.receivedAt).toLocaleDateString() : 'Recent'}</span>
+                <a
+                  href={`https://mail.google.com/mail/u/0/#inbox/${r.threadId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1">
+                    <span>Open in Gmail</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </Button>
+                </a>
+              </div>
+            </Card>
+          ))
+        )}
       </div>
 
-      <div className="rounded-lg bg-white/[0.02] border border-white/10 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-white/[0.03] border-b border-white/10 text-slate-400 font-medium uppercase tracking-wider text-[10px]">
-              <tr>
-                <th className="px-4 py-3">Channel / Sender</th>
-                <th className="px-4 py-3">Reply Message Snippet</th>
-                <th className="px-4 py-3">Campaign</th>
-                <th className="px-4 py-3">Received</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {list.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
-                    No creator replies recorded yet. Incoming responses will appear here automatically.
-                  </td>
-                </tr>
-              ) : (
-                list.map((r) => (
-                  <tr key={r.id} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-white">{r.channelTitle || 'Unknown Channel'}</div>
-                      <div className="text-slate-400 font-mono text-[11px]">{r.senderEmail}</div>
-                    </td>
-                    <td className="px-4 py-3 max-w-md">
-                      <p className="text-slate-200 line-clamp-2 italic text-[11px]">
-                        "{r.snippet || 'No preview available'}"
-                      </p>
-                    </td>
-                    <td className="px-4 py-3 text-slate-400 text-[11px]">{r.campaignName || 'General'}</td>
-                    <td className="px-4 py-3 text-slate-400 text-[11px]">
-                      {r.receivedAt ? new Date(r.receivedAt).toLocaleString() : 'Recent'}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <a
-                        href={`https://mail.google.com/mail/u/0/#inbox/${r.threadId}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center space-x-1 px-2.5 py-1 rounded bg-white/[0.05] hover:bg-white/[0.1] text-indigo-400 text-xs font-medium transition-colors"
-                      >
+      {/* Desktop Table (md+) */}
+      <Card className="hidden md:block overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Channel / Sender</TableHead>
+              <TableHead>Reply Message Snippet</TableHead>
+              <TableHead>Campaign</TableHead>
+              <TableHead>Received</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {list.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} className="h-24 text-center text-text-muted">
+                  No creator replies recorded yet.
+                </TableCell>
+              </TableRow>
+            ) : (
+              list.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell>
+                    <div className="font-medium text-text-main">{r.channelTitle || 'Unknown Channel'}</div>
+                    <div className="text-text-muted font-mono text-[11px]">{r.senderEmail}</div>
+                  </TableCell>
+                  <TableCell className="max-w-md">
+                    <p className="text-text-secondary line-clamp-2 italic text-xs">
+                      "{r.snippet || 'No preview available'}"
+                    </p>
+                  </TableCell>
+                  <TableCell className="text-text-secondary text-xs">{r.campaignName || 'General'}</TableCell>
+                  <TableCell className="text-text-muted text-[11px]">
+                    {r.receivedAt ? new Date(r.receivedAt).toLocaleString() : 'Recent'}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <a
+                      href={`https://mail.google.com/mail/u/0/#inbox/${r.threadId}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
                         <span>Gmail</span>
                         <ExternalLink className="w-3 h-3" />
-                      </a>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                      </Button>
+                    </a>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </Card>
     </div>
   );
 }

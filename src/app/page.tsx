@@ -3,22 +3,24 @@ import Link from 'next/link';
 import {
   Layers,
   Users,
-  MailCheck,
   Send,
   MessageSquare,
-  Flame,
   Radio,
-  Activity,
   ArrowUpRight,
   ShieldAlert,
   Play,
+  CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react';
 import { db } from '../db/client';
 import { keywords, leads, contacts, messages, replies, campaigns, systemSettings } from '../db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { quotaManager } from '../services/youtube/quota';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
 
-// Dynamic SSR to fetch live database stats
 export const dynamic = 'force-dynamic';
 
 async function getDashboardStats() {
@@ -85,7 +87,6 @@ async function getDashboardStats() {
       isKillSwitchActive,
     };
   } catch (e) {
-    // Graceful fallback if database is offline or during build phase
     return {
       keywords: { total: 25391, pending: 25391, completed: 0, failed: 0 },
       leads: { total: 0, qualified: 0 },
@@ -93,7 +94,13 @@ async function getDashboardStats() {
       outreach: { sentTotal: 0, sentToday: 0 },
       replies: { totalReplies: 0 },
       campaigns: { active: 0 },
-      quota: { searchCallsDailyLimit: 100, searchCallsUsedToday: 0, generalQuotaDailyLimit: 10000, generalQuotaUsedToday: 0, lastResetPt: new Date().toISOString() },
+      quota: {
+        searchCallsDailyLimit: 100,
+        searchCallsUsedToday: 0,
+        generalQuotaDailyLimit: 10000,
+        generalQuotaUsedToday: 0,
+        lastResetPt: new Date().toISOString(),
+      },
       isKillSwitchActive: false,
     };
   }
@@ -101,183 +108,245 @@ async function getDashboardStats() {
 
 export default async function OverviewPage() {
   const stats = await getDashboardStats();
-  const replyRate = stats.outreach.sentTotal > 0
-    ? ((stats.replies.totalReplies / stats.outreach.sentTotal) * 100).toFixed(1)
-    : '0.0';
+  const replyRate =
+    stats.outreach.sentTotal > 0
+      ? ((stats.replies.totalReplies / stats.outreach.sentTotal) * 100).toFixed(1)
+      : '0.0';
+
+  const kwPercent = stats.keywords.total > 0
+    ? (stats.keywords.completed / stats.keywords.total) * 100
+    : 0;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-5 max-w-7xl mx-auto">
       {/* Top Banner / System Status */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-lg bg-white/[0.02] border border-white/10">
-        <div>
-          <h1 className="text-lg font-semibold text-white tracking-tight">Overview Dashboard</h1>
-          <p className="text-xs text-slate-400">
-            Autonomous YouTube discovery, lead extraction, and Gmail outreach engine.
+      <Card className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-border">
+        <div className="space-y-1">
+          <div className="flex items-center space-x-2">
+            <h1 className="text-base sm:text-lg font-semibold text-text-main tracking-tight">
+              System Overview
+            </h1>
+            <Badge variant="default" className="text-[10px]">
+              Autonomous
+            </Badge>
+          </div>
+          <p className="text-xs text-text-secondary">
+            Continuous YouTube creator discovery, email verification, and incremental outreach.
           </p>
         </div>
 
-        <div className="flex items-center space-x-3">
-          <span className="text-xs px-2.5 py-1 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-medium">
-            Next Scheduled Run: Idle
-          </span>
-          <Link
-            href="/keywords"
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors"
-          >
-            <Play className="w-3.5 h-3.5" />
-            <span>Process Next Batch</span>
+        <div className="flex items-center gap-2.5 shrink-0">
+          <Link href="/keywords">
+            <Button size="sm" variant="default" className="gap-1.5 w-full sm:w-auto">
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>Process Batch</span>
+            </Button>
+          </Link>
+          <Link href="/settings">
+            <Button size="sm" variant="outline" className="w-full sm:w-auto">
+              Settings
+            </Button>
           </Link>
         </div>
-      </div>
+      </Card>
 
       {/* Grid: 4 Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* Keywords */}
-        <div className="p-4 rounded-lg bg-white/[0.02] border border-white/10 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-medium uppercase tracking-wider">Keyword Queue</span>
-            <Layers className="w-4 h-4 text-indigo-400" />
-          </div>
-          <div className="flex items-baseline justify-between">
-            <span className="text-2xl font-bold text-white tracking-tight">{stats.keywords.total.toLocaleString()}</span>
-            <span className="text-xs text-slate-400">{stats.keywords.completed} completed</span>
-          </div>
-          <div className="mt-3 w-full bg-black/40 rounded-full h-1.5 overflow-hidden">
-            <div
-              className="bg-indigo-500 h-full rounded-full"
-              style={{ width: `${stats.keywords.total > 0 ? (stats.keywords.completed / stats.keywords.total) * 100 : 0}%` }}
-            ></div>
-          </div>
-        </div>
+        <Card className="flex flex-col justify-between hover:border-primary/40 transition-colors">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-xs font-medium text-text-secondary uppercase tracking-wider">
+              Keyword Queue
+            </CardTitle>
+            <Layers className="w-4 h-4 text-primary" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-baseline justify-between">
+              <span className="text-2xl font-bold text-text-main tracking-tight font-mono">
+                {stats.keywords.total.toLocaleString()}
+              </span>
+              <span className="text-xs text-text-secondary font-mono">
+                {stats.keywords.completed.toLocaleString()} done
+              </span>
+            </div>
+            <Progress value={stats.keywords.completed} max={stats.keywords.total || 1} />
+            <div className="flex items-center justify-between text-[11px] text-text-muted pt-1">
+              <span>Pending</span>
+              <span className="font-mono text-text-secondary">{stats.keywords.pending.toLocaleString()}</span>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Leads */}
-        <div className="p-4 rounded-lg bg-white/[0.02] border border-white/10 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-medium uppercase tracking-wider">Discovered Leads</span>
-            <Users className="w-4 h-4 text-emerald-400" />
-          </div>
-          <div className="flex items-baseline justify-between">
-            <span className="text-2xl font-bold text-white tracking-tight">{stats.leads.total.toLocaleString()}</span>
-            <span className="text-xs text-emerald-400">{stats.leads.qualified} qualified</span>
-          </div>
-          <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400">
-            <span>Verified emails</span>
-            <span className="font-mono text-slate-200">{stats.contacts.verified}</span>
-          </div>
-        </div>
+        <Card className="flex flex-col justify-between hover:border-primary/40 transition-colors">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-xs font-medium text-text-secondary uppercase tracking-wider">
+              Discovered Leads
+            </CardTitle>
+            <Users className="w-4 h-4 text-primary" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-baseline justify-between">
+              <span className="text-2xl font-bold text-text-main tracking-tight font-mono">
+                {stats.leads.total.toLocaleString()}
+              </span>
+              <Badge variant="success" className="text-[10px]">
+                {stats.leads.qualified} qualified
+              </Badge>
+            </div>
+            <div className="h-2 w-full rounded-full bg-surface-200 border border-border/40 overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full"
+                style={{
+                  width: `${stats.leads.total > 0 ? (stats.leads.qualified / stats.leads.total) * 100 : 0}%`,
+                }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-text-muted pt-1">
+              <span>Verified emails</span>
+              <span className="font-mono text-text-main font-semibold">{stats.contacts.verified}</span>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Outreach */}
-        <div className="p-4 rounded-lg bg-white/[0.02] border border-white/10 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-medium uppercase tracking-wider">Emails Sent</span>
-            <Send className="w-4 h-4 text-blue-400" />
-          </div>
-          <div className="flex items-baseline justify-between">
-            <span className="text-2xl font-bold text-white tracking-tight">{stats.outreach.sentTotal.toLocaleString()}</span>
-            <span className="text-xs text-blue-400">{stats.outreach.sentToday} today</span>
-          </div>
-          <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400">
-            <span>Active campaigns</span>
-            <span className="font-mono text-slate-200">{stats.campaigns.active}</span>
-          </div>
-        </div>
+        <Card className="flex flex-col justify-between hover:border-primary/40 transition-colors">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-xs font-medium text-text-secondary uppercase tracking-wider">
+              Outreach Sent
+            </CardTitle>
+            <Send className="w-4 h-4 text-primary" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-baseline justify-between">
+              <span className="text-2xl font-bold text-text-main tracking-tight font-mono">
+                {stats.outreach.sentTotal.toLocaleString()}
+              </span>
+              <span className="text-xs text-primary font-mono font-medium">
+                {stats.outreach.sentToday} today
+              </span>
+            </div>
+            <div className="h-2 w-full rounded-full bg-surface-200 border border-border/40 overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full"
+                style={{ width: `${Math.min(100, stats.outreach.sentTotal > 0 ? 100 : 0)}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-text-muted pt-1">
+              <span>Active campaigns</span>
+              <span className="font-mono text-text-secondary">{stats.campaigns.active}</span>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Replies */}
-        <div className="p-4 rounded-lg bg-white/[0.02] border border-white/10 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-medium uppercase tracking-wider">Creator Replies</span>
-            <MessageSquare className="w-4 h-4 text-rose-400" />
-          </div>
-          <div className="flex items-baseline justify-between">
-            <span className="text-2xl font-bold text-white tracking-tight">{stats.replies.totalReplies.toLocaleString()}</span>
-            <span className="text-xs text-rose-400">{replyRate}% response</span>
-          </div>
-          <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400">
-            <span>Telegram alerts</span>
-            <span className="font-mono text-emerald-400">Active</span>
-          </div>
-        </div>
+        <Card className="flex flex-col justify-between hover:border-primary/40 transition-colors">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-xs font-medium text-text-secondary uppercase tracking-wider">
+              Creator Replies
+            </CardTitle>
+            <MessageSquare className="w-4 h-4 text-primary" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-baseline justify-between">
+              <span className="text-2xl font-bold text-text-main tracking-tight font-mono">
+                {stats.replies.totalReplies.toLocaleString()}
+              </span>
+              <span className="text-xs text-warning font-mono font-medium">
+                {replyRate}% rate
+              </span>
+            </div>
+            <div className="h-2 w-full rounded-full bg-surface-200 border border-border/40 overflow-hidden">
+              <div
+                className="h-full bg-warning rounded-full"
+                style={{ width: `${Math.min(100, parseFloat(replyRate) * 5)}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-text-muted pt-1">
+              <span>Status</span>
+              <span className="font-mono text-primary font-medium">Monitoring</span>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Secondary Section: Quota & System Health */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* YouTube Quota Bucket */}
-        <div className="p-5 rounded-lg bg-white/[0.02] border border-white/10">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center space-x-2 text-xs font-semibold text-white">
-              <Radio className="w-4 h-4 text-indigo-400" />
+        <Card className="p-4 sm:p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2 text-xs font-semibold text-text-main">
+              <Radio className="w-4 h-4 text-primary" />
               <span>YouTube API Quota Allocation</span>
             </div>
-            <span className="text-[11px] text-slate-400">Resets Midnight PT</span>
+            <span className="text-[11px] text-text-muted">Resets Midnight PT</span>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-3.5">
             <div>
-              <div className="flex justify-between text-xs text-slate-300 mb-1">
+              <div className="flex justify-between text-xs text-text-secondary mb-1.5">
                 <span>Dedicated search.list Calls</span>
-                <span className="font-mono">
+                <span className="font-mono text-text-main font-medium">
                   {stats.quota.searchCallsUsedToday} / {stats.quota.searchCallsDailyLimit}
                 </span>
               </div>
-              <div className="w-full bg-black/40 rounded-full h-2 overflow-hidden">
-                <div
-                  className="bg-indigo-500 h-full rounded-full"
-                  style={{
-                    width: `${Math.min(100, (stats.quota.searchCallsUsedToday / stats.quota.searchCallsDailyLimit) * 100)}%`,
-                  }}
-                ></div>
-              </div>
+              <Progress
+                value={stats.quota.searchCallsUsedToday}
+                max={stats.quota.searchCallsDailyLimit}
+                indicatorClassName="bg-primary"
+              />
             </div>
 
             <div>
-              <div className="flex justify-between text-xs text-slate-300 mb-1">
+              <div className="flex justify-between text-xs text-text-secondary mb-1.5">
                 <span>General Quota Units</span>
-                <span className="font-mono">
+                <span className="font-mono text-text-main font-medium">
                   {stats.quota.generalQuotaUsedToday} / {stats.quota.generalQuotaDailyLimit}
                 </span>
               </div>
-              <div className="w-full bg-black/40 rounded-full h-2 overflow-hidden">
-                <div
-                  className="bg-emerald-500 h-full rounded-full"
-                  style={{
-                    width: `${Math.min(100, (stats.quota.generalQuotaUsedToday / stats.quota.generalQuotaDailyLimit) * 100)}%`,
-                  }}
-                ></div>
-              </div>
+              <Progress
+                value={stats.quota.generalQuotaUsedToday}
+                max={stats.quota.generalQuotaDailyLimit}
+                indicatorClassName="bg-primary"
+              />
             </div>
           </div>
-        </div>
+        </Card>
 
         {/* Global Kill Switch State */}
-        <div className="p-5 rounded-lg bg-white/[0.02] border border-white/10 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center space-x-2 text-xs font-semibold text-white mb-2">
-              <ShieldAlert className="w-4 h-4 text-rose-400" />
-              <span>Global Outreach Safety & Kill Switch</span>
+        <Card className="p-4 sm:p-5 flex flex-col justify-between space-y-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center space-x-2 text-xs font-semibold text-text-main">
+              <ShieldAlert className={`w-4 h-4 ${stats.isKillSwitchActive ? 'text-danger' : 'text-primary'}`} />
+              <span>Outreach Safety & Kill-Switch</span>
             </div>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              When activated, all outbound Gmail sending is instantly aborted before every individual dispatch.
+            <p className="text-xs text-text-secondary leading-relaxed">
+              Real-time hardware kill switch. When engaged, all outbound email dispatching stops instantly across all workers.
             </p>
           </div>
 
-          <div className="mt-4 flex items-center justify-between pt-3 border-t border-white/10">
+          <div className="flex items-center justify-between pt-3 border-t border-border">
             <div className="flex items-center space-x-2">
               <span
-                className={`w-2.5 h-2.5 rounded-full ${stats.isKillSwitchActive ? 'bg-rose-500 animate-ping' : 'bg-emerald-500'}`}
-              ></span>
-              <span className="text-xs font-medium text-slate-200">
-                {stats.isKillSwitchActive ? 'KILL SWITCH ACTIVE (SENDING PAUSED)' : 'Outreach Ready (Kill Switch Disarmed)'}
+                className={`w-2.5 h-2.5 rounded-full ${
+                  stats.isKillSwitchActive ? 'bg-danger animate-ping' : 'bg-primary'
+                }`}
+              />
+              <span className="text-xs font-medium text-text-main">
+                {stats.isKillSwitchActive
+                  ? 'KILL SWITCH ENGAGED (DISPATCH BLOCKED)'
+                  : 'Outreach Armed (Safe Mode)'}
               </span>
             </div>
             <Link
               href="/settings"
-              className="text-xs text-indigo-400 hover:text-indigo-300 font-medium flex items-center space-x-1"
+              className="text-xs text-primary hover:text-brand-hover font-medium flex items-center space-x-1"
             >
               <span>Manage</span>
               <ArrowUpRight className="w-3.5 h-3.5" />
             </Link>
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   );

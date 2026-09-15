@@ -2,7 +2,18 @@ import React from 'react';
 import { db } from '../../db/client';
 import { keywords } from '../../db/schema';
 import { desc, sql } from 'drizzle-orm';
-import { Layers, Play, RefreshCw, Filter } from 'lucide-react';
+import { Layers, Play } from 'lucide-react';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from '@/components/ui/table';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,112 +46,146 @@ async function getKeywordsData() {
 export default async function KeywordsPage() {
   const { list, counts } = await getKeywordsData();
 
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'COMPLETED':
+        return <Badge variant="success">COMPLETED</Badge>;
+      case 'PROCESSING':
+        return <Badge variant="default" className="animate-pulse">PROCESSING</Badge>;
+      case 'FAILED':
+        return <Badge variant="destructive">FAILED</Badge>;
+      case 'RETRY':
+        return <Badge variant="warning">RETRY</Badge>;
+      default:
+        return <Badge variant="secondary">PENDING</Badge>;
+    }
+  };
+
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-5 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-lg bg-white/[0.02] border border-white/10">
+      <Card className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-border">
         <div>
           <div className="flex items-center space-x-2">
-            <Layers className="w-5 h-5 text-indigo-400" />
-            <h1 className="text-lg font-semibold text-white tracking-tight">Keyword Taxonomy Queue</h1>
+            <Layers className="w-5 h-5 text-primary" />
+            <h1 className="text-base sm:text-lg font-semibold text-text-main tracking-tight">
+              Keyword Taxonomy
+            </h1>
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-text-secondary mt-0.5">
             23 categories, 2,786 entities, and 302 modifiers generating 25,391 unique normalized search terms.
           </p>
         </div>
 
-        <div className="flex items-center space-x-3">
-          <form action="/api/workers/discovery" method="POST">
-            <button
-              type="submit"
-              className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors"
-            >
-              <Play className="w-3.5 h-3.5" />
-              <span>Run Next Batch (10)</span>
-            </button>
-          </form>
-        </div>
-      </div>
+        <form action="/api/workers/discovery" method="POST">
+          <Button size="sm" variant="default" className="gap-1.5 w-full sm:w-auto">
+            <Play className="w-3.5 h-3.5 fill-current" />
+            <span>Run Next Batch (10)</span>
+          </Button>
+        </form>
+      </Card>
 
       {/* Counters */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="p-3 rounded bg-white/[0.02] border border-white/10">
-          <span className="text-[11px] text-slate-400 block">Total Corpus</span>
-          <span className="text-lg font-bold text-white font-mono">{counts.total.toLocaleString()}</span>
-        </div>
-        <div className="p-3 rounded bg-white/[0.02] border border-white/10">
-          <span className="text-[11px] text-amber-400 block">Pending Queue</span>
-          <span className="text-lg font-bold text-amber-300 font-mono">{counts.pending.toLocaleString()}</span>
-        </div>
-        <div className="p-3 rounded bg-white/[0.02] border border-white/10">
-          <span className="text-[11px] text-emerald-400 block">Completed</span>
-          <span className="text-lg font-bold text-emerald-300 font-mono">{counts.completed.toLocaleString()}</span>
-        </div>
-        <div className="p-3 rounded bg-white/[0.02] border border-white/10">
-          <span className="text-[11px] text-rose-400 block">Failed / Retry</span>
-          <span className="text-lg font-bold text-rose-300 font-mono">{counts.failed.toLocaleString()}</span>
-        </div>
+        <Card className="p-3.5">
+          <span className="text-[11px] text-text-muted block">Total Corpus</span>
+          <span className="text-lg font-bold text-text-main font-mono">
+            {counts.total.toLocaleString()}
+          </span>
+        </Card>
+        <Card className="p-3.5">
+          <span className="text-[11px] text-warning block">Pending Queue</span>
+          <span className="text-lg font-bold text-warning font-mono">
+            {counts.pending.toLocaleString()}
+          </span>
+        </Card>
+        <Card className="p-3.5">
+          <span className="text-[11px] text-primary block">Completed</span>
+          <span className="text-lg font-bold text-primary font-mono">
+            {counts.completed.toLocaleString()}
+          </span>
+        </Card>
+        <Card className="p-3.5">
+          <span className="text-[11px] text-danger block">Failed / Retry</span>
+          <span className="text-lg font-bold text-danger font-mono">
+            {counts.failed.toLocaleString()}
+          </span>
+        </Card>
       </div>
 
-      {/* Keywords Table */}
-      <div className="rounded-lg bg-white/[0.02] border border-white/10 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-white/[0.03] border-b border-white/10 text-slate-400 font-medium uppercase tracking-wider text-[10px]">
-              <tr>
-                <th className="px-4 py-3">Keyword</th>
-                <th className="px-4 py-3">Category</th>
-                <th className="px-4 py-3">Entity</th>
-                <th className="px-4 py-3">Modifier</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3 text-right">Channels</th>
-                <th className="px-4 py-3 text-right">Attempts</th>
-                <th className="px-4 py-3">Last Execution</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5 font-mono">
-              {list.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-slate-500 font-sans">
-                    No keywords in database yet. Run <code className="text-indigo-400">npm run db:seed</code> to ingest taxonomy.
-                  </td>
-                </tr>
-              ) : (
-                list.map((k) => (
-                  <tr key={k.id} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="px-4 py-2.5 font-sans font-medium text-white">{k.keyword}</td>
-                    <td className="px-4 py-2.5 font-sans text-slate-400">{k.category}</td>
-                    <td className="px-4 py-2.5 font-sans text-slate-300">{k.entity}</td>
-                    <td className="px-4 py-2.5 font-sans text-slate-400">{k.modifier}</td>
-                    <td className="px-4 py-2.5">
-                      <span
-                        className={`inline-flex px-2 py-0.5 rounded text-[10px] font-sans font-medium ${
-                          k.status === 'COMPLETED'
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                            : k.status === 'PROCESSING'
-                            ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 animate-pulse'
-                            : k.status === 'FAILED'
-                            ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                            : k.status === 'RETRY'
-                            ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                            : 'bg-slate-500/10 text-slate-400 border border-slate-500/20'
-                        }`}
-                      >
-                        {k.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-slate-300">{k.channelsFound}</td>
-                    <td className="px-4 py-2.5 text-right text-slate-400">{k.attemptCount}</td>
-                    <td className="px-4 py-2.5 text-slate-500 text-[11px] font-sans">
-                      {k.lastAttemptAt ? new Date(k.lastAttemptAt).toLocaleString() : 'Never'}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+      {/* Mobile Card List (< md) */}
+      <div className="md:hidden space-y-2.5">
+        {list.length === 0 ? (
+          <Card className="p-6 text-center text-xs text-text-muted">
+            No keywords found in database. Run seed script to populate.
+          </Card>
+        ) : (
+          list.map((k) => (
+            <Card key={k.id} className="p-3.5 space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <span className="font-semibold text-xs text-text-main">{k.keyword}</span>
+                {getStatusBadge(k.status)}
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[11px] text-text-secondary pt-1 border-t border-border/50">
+                <div>
+                  <span className="text-text-muted block text-[10px]">Category</span>
+                  <span>{k.category || 'General'}</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-text-muted block text-[10px]">Channels</span>
+                  <span className="font-mono text-text-main">{k.channelsFound}</span>
+                </div>
+              </div>
+            </Card>
+          ))
+        )}
       </div>
+
+      {/* Desktop Keywords Table (md+) */}
+      <Card className="hidden md:block overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Keyword</TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead>Entity</TableHead>
+              <TableHead>Modifier</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Channels</TableHead>
+              <TableHead className="text-right">Attempts</TableHead>
+              <TableHead>Last Execution</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {list.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={8} className="h-24 text-center text-text-muted">
+                  No keywords in database yet.
+                </TableCell>
+              </TableRow>
+            ) : (
+              list.map((k) => (
+                <TableRow key={k.id}>
+                  <TableCell className="font-medium text-text-main">{k.keyword}</TableCell>
+                  <TableCell className="text-text-secondary">{k.category}</TableCell>
+                  <TableCell className="text-text-secondary">{k.entity}</TableCell>
+                  <TableCell className="text-text-muted">{k.modifier}</TableCell>
+                  <TableCell>{getStatusBadge(k.status)}</TableCell>
+                  <TableCell className="text-right font-mono text-text-secondary">
+                    {k.channelsFound}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-text-muted">
+                    {k.attemptCount}
+                  </TableCell>
+                  <TableCell className="text-text-muted text-[11px]">
+                    {k.lastAttemptAt ? new Date(k.lastAttemptAt).toLocaleString() : 'Never'}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </Card>
     </div>
   );
 }

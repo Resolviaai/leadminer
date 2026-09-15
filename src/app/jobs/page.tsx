@@ -2,7 +2,17 @@ import React from 'react';
 import { db } from '../../db/client';
 import { jobs } from '../../db/schema';
 import { desc } from 'drizzle-orm';
-import { Activity, Clock } from 'lucide-react';
+import { Activity } from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from '@/components/ui/table';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,74 +27,115 @@ async function getJobsData() {
 export default async function JobsPage() {
   const list = await getJobsData();
 
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'COMPLETED':
+        return <Badge variant="success">COMPLETED</Badge>;
+      case 'RUNNING':
+        return <Badge variant="default" className="animate-pulse">RUNNING</Badge>;
+      case 'STOPPED_QUOTA':
+        return <Badge variant="warning">STOPPED_QUOTA</Badge>;
+      default:
+        return <Badge variant="destructive">{status}</Badge>;
+    }
+  };
+
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      <div className="p-4 rounded-lg bg-white/[0.02] border border-white/10">
+    <div className="space-y-5 max-w-7xl mx-auto">
+      <Card className="p-4 sm:p-5 border-border">
         <div className="flex items-center space-x-2">
-          <Activity className="w-5 h-5 text-indigo-400" />
-          <h1 className="text-lg font-semibold text-white tracking-tight">Background Worker Jobs</h1>
+          <Activity className="w-5 h-5 text-primary" />
+          <h1 className="text-base sm:text-lg font-semibold text-text-main tracking-tight">
+            Background Worker Jobs
+          </h1>
         </div>
-        <p className="text-xs text-slate-400 mt-0.5">
+        <p className="text-xs text-text-secondary mt-0.5">
           Execution telemetry, progress checkpoints, and heartbeat tracking across discovery, verification, and outreach workers.
         </p>
+      </Card>
+
+      {/* Mobile Jobs List (< md) */}
+      <div className="md:hidden space-y-2.5">
+        {list.length === 0 ? (
+          <Card className="p-8 text-center text-xs text-text-muted">
+            No worker jobs logged yet.
+          </Card>
+        ) : (
+          list.map((j) => (
+            <Card key={j.id} className="p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <span className="font-mono text-xs text-text-muted">#{j.id}</span>
+                  <span className="font-semibold text-xs text-text-main">{j.jobType}</span>
+                </div>
+                {getStatusBadge(j.status)}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs p-2 rounded-lg bg-surface-200 border border-border/50">
+                <div>
+                  <span className="text-text-muted block text-[10px]">Processed</span>
+                  <span className="font-mono text-primary font-medium">{j.itemsProcessed}</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-text-muted block text-[10px]">Failed</span>
+                  <span className="font-mono text-danger">{j.itemsFailed}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-text-muted pt-1">
+                <span>Started: {j.startedAt ? new Date(j.startedAt).toLocaleTimeString() : '—'}</span>
+                <span>{j.completedAt ? new Date(j.completedAt).toLocaleTimeString() : 'Running'}</span>
+              </div>
+            </Card>
+          ))
+        )}
       </div>
 
-      <div className="rounded-lg bg-white/[0.02] border border-white/10 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-white/[0.03] border-b border-white/10 text-slate-400 font-medium uppercase tracking-wider text-[10px]">
-              <tr>
-                <th className="px-4 py-3">Job ID</th>
-                <th className="px-4 py-3">Type</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3 text-right">Items Processed</th>
-                <th className="px-4 py-3 text-right">Items Failed</th>
-                <th className="px-4 py-3">Started At</th>
-                <th className="px-4 py-3">Completed At</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5 font-mono">
-              {list.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-slate-500 font-sans">
-                    No worker jobs logged yet. Jobs are automatically recorded when workers run.
-                  </td>
-                </tr>
-              ) : (
-                list.map((j) => (
-                  <tr key={j.id} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="px-4 py-3 text-slate-400">#{j.id}</td>
-                    <td className="px-4 py-3 font-sans font-medium text-white">{j.jobType}</td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex px-2 py-0.5 rounded text-[10px] font-sans font-medium ${
-                          j.status === 'COMPLETED'
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                            : j.status === 'RUNNING'
-                            ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 animate-pulse'
-                            : j.status === 'STOPPED_QUOTA'
-                            ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                            : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                        }`}
-                      >
-                        {j.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right text-slate-300">{j.itemsProcessed}</td>
-                    <td className="px-4 py-3 text-right text-slate-400">{j.itemsFailed}</td>
-                    <td className="px-4 py-3 text-slate-400 text-[11px] font-sans">
-                      {j.startedAt ? new Date(j.startedAt).toLocaleTimeString() : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-slate-400 text-[11px] font-sans">
-                      {j.completedAt ? new Date(j.completedAt).toLocaleTimeString() : 'In-flight'}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* Desktop Table (md+) */}
+      <Card className="hidden md:block overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Job ID</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Items Processed</TableHead>
+              <TableHead className="text-right">Items Failed</TableHead>
+              <TableHead>Started At</TableHead>
+              <TableHead>Completed At</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {list.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="h-24 text-center text-text-muted">
+                  No worker jobs logged yet.
+                </TableCell>
+              </TableRow>
+            ) : (
+              list.map((j) => (
+                <TableRow key={j.id}>
+                  <TableCell className="font-mono text-text-muted">#{j.id}</TableCell>
+                  <TableCell className="font-medium text-text-main">{j.jobType}</TableCell>
+                  <TableCell>{getStatusBadge(j.status)}</TableCell>
+                  <TableCell className="text-right font-mono text-text-main">
+                    {j.itemsProcessed}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-danger">
+                    {j.itemsFailed}
+                  </TableCell>
+                  <TableCell className="text-text-secondary text-[11px]">
+                    {j.startedAt ? new Date(j.startedAt).toLocaleTimeString() : '—'}
+                  </TableCell>
+                  <TableCell className="text-text-secondary text-[11px]">
+                    {j.completedAt ? new Date(j.completedAt).toLocaleTimeString() : 'In-flight'}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </Card>
     </div>
   );
 }

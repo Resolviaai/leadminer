@@ -3,6 +3,16 @@ import { db } from '../../db/client';
 import { logs } from '../../db/schema';
 import { desc } from 'drizzle-orm';
 import { Terminal } from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from '@/components/ui/table';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,68 +27,90 @@ async function getLogsData() {
 export default async function LogsPage() {
   const list = await getLogsData();
 
+  const getLogLevelBadge = (level: string) => {
+    switch (level) {
+      case 'INFO':
+        return <Badge variant="secondary" className="text-[10px]">{level}</Badge>;
+      case 'WARN':
+        return <Badge variant="warning" className="text-[10px]">{level}</Badge>;
+      case 'ERROR':
+        return <Badge variant="destructive" className="text-[10px]">{level}</Badge>;
+      default:
+        return <Badge variant="outline" className="text-[10px]">{level}</Badge>;
+    }
+  };
+
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      <div className="p-4 rounded-lg bg-white/[0.02] border border-white/10">
+    <div className="space-y-5 max-w-7xl mx-auto">
+      <Card className="p-4 sm:p-5 border-border">
         <div className="flex items-center space-x-2">
-          <Terminal className="w-5 h-5 text-indigo-400" />
-          <h1 className="text-lg font-semibold text-white tracking-tight">System Telemetry & Audit Logs</h1>
+          <Terminal className="w-5 h-5 text-primary" />
+          <h1 className="text-base sm:text-lg font-semibold text-text-main tracking-tight">
+            System Telemetry & Audit Logs
+          </h1>
         </div>
-        <p className="text-xs text-slate-400 mt-0.5">
+        <p className="text-xs text-text-secondary mt-0.5">
           Real-time event stream of discoveries, verifications, message dispatches, quota alerts, and worker lifecycles.
         </p>
+      </Card>
+
+      {/* Mobile Logs Cards (< md) */}
+      <div className="md:hidden space-y-2">
+        {list.length === 0 ? (
+          <Card className="p-8 text-center text-xs text-text-muted">
+            No logs recorded yet.
+          </Card>
+        ) : (
+          list.map((log) => (
+            <Card key={log.id} className="p-3 space-y-1.5 font-mono text-xs">
+              <div className="flex items-center justify-between font-sans">
+                <span className="font-semibold text-primary text-[11px]">{log.eventType}</span>
+                {getLogLevelBadge(log.level)}
+              </div>
+              <p className="font-sans text-xs text-text-main leading-relaxed">{log.message}</p>
+              <div className="text-[10px] text-text-muted">
+                {log.createdAt ? new Date(log.createdAt).toLocaleTimeString() : '—'}
+              </div>
+            </Card>
+          ))
+        )}
       </div>
 
-      <div className="rounded-lg bg-white/[0.02] border border-white/10 overflow-hidden font-mono">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-white/[0.03] border-b border-white/10 text-slate-400 font-medium uppercase tracking-wider text-[10px] font-sans">
-              <tr>
-                <th className="px-4 py-3">Timestamp</th>
-                <th className="px-4 py-3">Event Type</th>
-                <th className="px-4 py-3">Level</th>
-                <th className="px-4 py-3">Message</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5 text-[11px]">
-              {list.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-slate-500 font-sans">
-                    No logs recorded yet. System activities will appear here automatically.
-                  </td>
-                </tr>
-              ) : (
-                list.map((log) => (
-                  <tr key={log.id} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="px-4 py-2 text-slate-500 whitespace-nowrap">
-                      {log.createdAt ? new Date(log.createdAt).toLocaleTimeString() : '—'}
-                    </td>
-                    <td className="px-4 py-2 font-semibold text-indigo-300 whitespace-nowrap">
-                      {log.eventType}
-                    </td>
-                    <td className="px-4 py-2">
-                      <span
-                        className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-sans font-medium ${
-                          log.level === 'INFO'
-                            ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                            : log.level === 'WARN'
-                            ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                            : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                        }`}
-                      >
-                        {log.level}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 text-slate-300 font-sans text-xs">
-                      {log.message}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* Desktop Table (md+) */}
+      <Card className="hidden md:block overflow-hidden font-mono">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="font-sans">Timestamp</TableHead>
+              <TableHead className="font-sans">Event Type</TableHead>
+              <TableHead className="font-sans">Level</TableHead>
+              <TableHead className="font-sans">Message</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody className="text-[11px]">
+            {list.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="h-24 text-center text-text-muted font-sans">
+                  No logs recorded yet.
+                </TableCell>
+              </TableRow>
+            ) : (
+              list.map((log) => (
+                <TableRow key={log.id}>
+                  <TableCell className="text-text-muted whitespace-nowrap">
+                    {log.createdAt ? new Date(log.createdAt).toLocaleTimeString() : '—'}
+                  </TableCell>
+                  <TableCell className="font-semibold text-primary whitespace-nowrap">
+                    {log.eventType}
+                  </TableCell>
+                  <TableCell>{getLogLevelBadge(log.level)}</TableCell>
+                  <TableCell className="font-sans text-text-main text-xs">{log.message}</TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </Card>
     </div>
   );
 }
