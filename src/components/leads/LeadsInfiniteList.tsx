@@ -22,7 +22,7 @@ type Lead = {
   subscriberCount: number | null;
   qualificationStatus: string;
   outreachStatus: string;
-  discoveredAt: string | null;
+  discoveredAt: Date | string | null;
   email: string | null;
   emailStatus: string | null;
   sourceKeyword: string | null;

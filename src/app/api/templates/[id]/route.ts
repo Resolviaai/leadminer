@@ -1,7 +1,7 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 import { db } from "../../../../db/client";
-import { templates } from "../../../../db/schema";
-import { eq } from "drizzle-orm";
+import { templates, campaigns } from "../../../../db/schema";
+import { eq, count } from "drizzle-orm";
 
 export async function PATCH(
   req: NextRequest,
@@ -48,6 +48,45 @@ export async function PATCH(
     return NextResponse.json({ template: updated[0] });
   } catch (e) {
     console.error("[templates PATCH]", e);
+    return NextResponse.json({ error: "Database error" }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const id = parseInt(params.id, 10);
+  if (isNaN(id)) {
+    return NextResponse.json({ error: "Invalid template id" }, { status: 400 });
+  }
+
+  try {
+    // Check if any campaigns are using this template (onDelete: restrict in schema)
+    const [{ usedBy }] = await db
+      .select({ usedBy: count() })
+      .from(campaigns)
+      .where(eq(campaigns.templateId, id));
+
+    if (usedBy > 0) {
+      return NextResponse.json(
+        { error: `Cannot delete — ${usedBy} campaign(s) are using this template. Remove them first.` },
+        { status: 409 }
+      );
+    }
+
+    const deleted = await db
+      .delete(templates)
+      .where(eq(templates.id, id))
+      .returning();
+
+    if (!deleted.length) {
+      return NextResponse.json({ error: "Template not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error("[templates DELETE]", e);
     return NextResponse.json({ error: "Database error" }, { status: 500 });
   }
 }

@@ -14,42 +14,37 @@ import {
   TableCell,
 } from "@/components/ui/table";
 
-type Keyword = {
+type Log = {
   id: number;
-  keyword: string;
-  category: string;
-  entity: string;
-  modifier: string;
-  status: string;
-  channelsFound: number;
-  attemptCount: number;
-  lastAttemptAt: Date | string | null;
+  jobId: number | null;
+  eventType: string;
+  level: string;
+  message: string;
+  createdAt: Date | string | null;
 };
 
 interface Props {
-  initialData: Keyword[];
+  initialData: Log[];
   total: number;
 }
 
-function getStatusBadge(status: string) {
-  switch (status) {
-    case "COMPLETED":
-      return <Badge variant="success">COMPLETED</Badge>;
-    case "PROCESSING":
-      return <Badge variant="default" className="animate-pulse">PROCESSING</Badge>;
-    case "FAILED":
-      return <Badge variant="destructive">FAILED</Badge>;
-    case "RETRY":
-      return <Badge variant="warning">RETRY</Badge>;
+function getLogLevelBadge(level: string) {
+  switch (level) {
+    case "INFO":
+      return <Badge variant="secondary" className="text-[10px]">{level}</Badge>;
+    case "WARN":
+      return <Badge variant="warning" className="text-[10px]">{level}</Badge>;
+    case "ERROR":
+      return <Badge variant="destructive" className="text-[10px]">{level}</Badge>;
     default:
-      return <Badge variant="secondary">PENDING</Badge>;
+      return <Badge variant="outline" className="text-[10px]">{level}</Badge>;
   }
 }
 
 function SkeletonRow() {
   return (
     <TableRow>
-      {Array.from({ length: 8 }).map((_, i) => (
+      {Array.from({ length: 4 }).map((_, i) => (
         <TableCell key={i}>
           <div className="animate-pulse h-4 bg-surface-200 rounded-md" />
         </TableCell>
@@ -60,21 +55,19 @@ function SkeletonRow() {
 
 function SkeletonCard() {
   return (
-    <div className="bg-surface-100 border border-border rounded-lg p-3.5 space-y-2 animate-pulse">
-      <div className="flex items-start justify-between gap-2">
-        <div className="h-4 bg-surface-200 rounded w-32" />
-        <div className="h-5 bg-surface-200 rounded w-16" />
+    <div className="bg-surface-100 border border-border rounded-lg p-3 space-y-1.5 animate-pulse">
+      <div className="flex justify-between">
+        <div className="h-3 bg-surface-200 rounded w-24" />
+        <div className="h-4 bg-surface-200 rounded w-12" />
       </div>
-      <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border/50">
-        <div className="h-3 bg-surface-200 rounded w-20" />
-        <div className="h-3 bg-surface-200 rounded w-10 ml-auto" />
-      </div>
+      <div className="h-4 bg-surface-200 rounded w-full" />
+      <div className="h-3 bg-surface-200 rounded w-16" />
     </div>
   );
 }
 
-export function KeywordsInfiniteList({ initialData, total }: Props) {
-  const [items, setItems] = useState<Keyword[]>(initialData);
+export function LogsInfiniteList({ initialData, total }: Props) {
+  const [items, setItems] = useState<Log[]>(initialData);
   const [hasMore, setHasMore] = useState(initialData.length < total);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,11 +86,11 @@ export function KeywordsInfiniteList({ initialData, total }: Props) {
     const lastId = items.length > 0 ? items[items.length - 1].id : 0;
     abortControllerRef.current = new AbortController();
     try {
-      const res = await fetch(`/api/keywords?lastId=${lastId}&limit=50`, {
+      const res = await fetch(`/api/logs?lastId=${lastId}&limit=50`, {
         signal: abortControllerRef.current.signal,
       });
       if (!res.ok) throw new Error("fetch failed");
-      const data: Keyword[] = await res.json();
+      const data: Log[] = await res.json();
       if (data.length === 0) {
         setHasMore(false);
       } else {
@@ -117,77 +110,64 @@ export function KeywordsInfiniteList({ initialData, total }: Props) {
   }, [items, hasMore]);
 
   const sentinelRef = useInfiniteScroll(loadMore, hasMore && !loading && !error);
-
   const showSkeletons = items.length === 0 && loading;
 
   return (
     <div className="space-y-3">
       {/* Mobile cards */}
-      <div className="md:hidden space-y-2.5">
+      <div className="md:hidden space-y-2">
         {showSkeletons ? (
           Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)
         ) : items.length === 0 ? (
-          <Card className="p-6 text-center text-xs text-text-muted">No keywords in database yet.</Card>
+          <Card className="p-8 text-center text-xs text-text-muted">No logs recorded yet.</Card>
         ) : (
-          items.map((k) => (
-            <div key={k.id} className="bg-surface-100 border border-border rounded-lg p-3.5 space-y-2">
-              <div className="flex items-start justify-between gap-2">
-                <span className="font-semibold text-xs text-text-main">{k.keyword}</span>
-                {getStatusBadge(k.status)}
+          items.map((log) => (
+            <Card key={log.id} className="p-3 space-y-1.5 font-mono text-xs">
+              <div className="flex items-center justify-between font-sans">
+                <span className="font-semibold text-primary text-[11px]">{log.eventType}</span>
+                {getLogLevelBadge(log.level)}
               </div>
-              <div className="grid grid-cols-2 gap-2 text-[11px] text-text-secondary pt-1 border-t border-border/50">
-                <div>
-                  <span className="text-text-muted block text-[10px]">Category</span>
-                  <span>{k.category || "General"}</span>
-                </div>
-                <div className="text-right">
-                  <span className="text-text-muted block text-[10px]">Channels</span>
-                  <span className="font-mono text-text-main">{k.channelsFound}</span>
-                </div>
+              <p className="font-sans text-xs text-text-main leading-relaxed">{log.message}</p>
+              <div className="text-[10px] text-text-muted">
+                {log.createdAt ? new Date(log.createdAt).toLocaleTimeString() : "—"}
               </div>
-            </div>
+            </Card>
           ))
         )}
       </div>
 
       {/* Desktop table */}
-      <Card className="hidden md:block overflow-hidden">
+      <Card className="hidden md:block overflow-hidden font-mono">
         <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
           <Table>
             <TableHeader className="sticky top-0 z-10 bg-surface-200">
               <TableRow>
-                <TableHead>Keyword</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Entity</TableHead>
-                <TableHead>Modifier</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Channels</TableHead>
-                <TableHead className="text-right">Attempts</TableHead>
-                <TableHead>Last Execution</TableHead>
+                <TableHead className="font-sans">Timestamp</TableHead>
+                <TableHead className="font-sans">Event Type</TableHead>
+                <TableHead className="font-sans">Level</TableHead>
+                <TableHead className="font-sans">Message</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
+            <TableBody className="text-[11px]">
               {showSkeletons ? (
                 Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} />)
               ) : items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-24 text-center text-text-muted">
-                    No keywords in database yet.
+                  <TableCell colSpan={4} className="h-24 text-center text-text-muted font-sans">
+                    No logs recorded yet.
                   </TableCell>
                 </TableRow>
               ) : (
-                items.map((k) => (
-                  <TableRow key={k.id}>
-                    <TableCell className="font-medium text-text-main">{k.keyword}</TableCell>
-                    <TableCell className="text-text-secondary">{k.category}</TableCell>
-                    <TableCell className="text-text-secondary">{k.entity}</TableCell>
-                    <TableCell className="text-text-muted">{k.modifier}</TableCell>
-                    <TableCell>{getStatusBadge(k.status)}</TableCell>
-                    <TableCell className="text-right font-mono text-text-secondary">{k.channelsFound}</TableCell>
-                    <TableCell className="text-right font-mono text-text-muted">{k.attemptCount}</TableCell>
-                    <TableCell className="text-text-muted text-[11px]">
-                      {k.lastAttemptAt ? new Date(k.lastAttemptAt).toLocaleString() : "Never"}
+                items.map((log) => (
+                  <TableRow key={log.id}>
+                    <TableCell className="text-text-muted whitespace-nowrap">
+                      {log.createdAt ? new Date(log.createdAt).toLocaleTimeString() : "—"}
                     </TableCell>
+                    <TableCell className="font-semibold text-primary whitespace-nowrap">
+                      {log.eventType}
+                    </TableCell>
+                    <TableCell>{getLogLevelBadge(log.level)}</TableCell>
+                    <TableCell className="font-sans text-text-main text-xs">{log.message}</TableCell>
                   </TableRow>
                 ))
               )}
@@ -196,7 +176,6 @@ export function KeywordsInfiniteList({ initialData, total }: Props) {
         </div>
       </Card>
 
-      {/* Sentinel + status */}
       <div ref={sentinelRef} className="h-px" />
       {loading && !showSkeletons && (
         <div className="flex items-center justify-center gap-2 py-4 text-xs text-text-muted">

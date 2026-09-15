@@ -17,7 +17,10 @@ import {
   ChevronUp,
   Keyboard,
   AlertCircle,
+  Trash2,
+  Power,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface Template {
@@ -86,9 +89,14 @@ export function TemplateEditor({ template }: { template: Template }) {
   const [name, setName] = useState(template.name);
   const [subject, setSubject] = useState(template.subject);
   const [body, setBody] = useState(template.body);
+  const [isActive, setIsActive] = useState(template.isActive);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
+
+  // Delete state
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Deferred preview — doesn't block typing
   const deferredSubject = useDeferredValue(subject);
@@ -105,10 +113,11 @@ export function TemplateEditor({ template }: { template: Template }) {
       const dirty =
         name !== template.name ||
         subject !== template.subject ||
-        body !== template.body;
+        body !== template.body ||
+        isActive !== template.isActive;
       setIsDirty(dirty);
     }
-  }, [name, subject, body, editing, template]);
+  }, [name, subject, body, isActive, editing, template]);
 
   // ── Unsaved changes warning on tab/window close ──
   useEffect(() => {
@@ -133,7 +142,7 @@ export function TemplateEditor({ template }: { template: Template }) {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editing, name, subject, body]);
+  }, [editing, name, subject, body, isActive]);
 
   // ── Cancel in-flight request on unmount ──
   useEffect(() => {
@@ -171,7 +180,12 @@ export function TemplateEditor({ template }: { template: Template }) {
       const res = await fetch(`/api/templates/${template.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), subject: subject.trim(), body: body.trim() }),
+        body: JSON.stringify({
+          name: name.trim(),
+          subject: subject.trim(),
+          body: body.trim(),
+          isActive,
+        }),
         signal: abortRef.current.signal,
       });
 
@@ -184,14 +198,52 @@ export function TemplateEditor({ template }: { template: Template }) {
       setIsDirty(false);
       setEditing(false);
       router.refresh();
-      // Reset to idle after 3s
       setTimeout(() => setSaveState("idle"), 3000);
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") return;
       setSaveState("error");
       setErrorMsg(err instanceof Error ? err.message : "Save failed");
     }
-  }, [saveState, name, subject, body, template.id, router]);
+  }, [saveState, name, subject, body, isActive, template.id, router]);
+
+  // ── Toggle Active Status ──
+  const handleToggleActive = async () => {
+    const nextState = !isActive;
+    setIsActive(nextState);
+    try {
+      const res = await fetch(`/api/templates/${template.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: nextState }),
+      });
+      if (!res.ok) throw new Error();
+      router.refresh();
+    } catch {
+      setIsActive(!nextState); // rollback
+    }
+  };
+
+  // ── Delete ──
+  const handleDelete = async () => {
+    setDeleting(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch(`/api/templates/${template.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error ?? "Failed to delete template");
+      }
+      setConfirmDelete(false);
+      router.refresh();
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : "Failed to delete template");
+      setConfirmDelete(false);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   // ── Cancel ──
   const handleCancel = useCallback(() => {
@@ -199,6 +251,7 @@ export function TemplateEditor({ template }: { template: Template }) {
     setName(template.name);
     setSubject(template.subject);
     setBody(template.body);
+    setIsActive(template.isActive);
     setEditing(false);
     setIsDirty(false);
     setErrorMsg(null);
@@ -213,9 +266,16 @@ export function TemplateEditor({ template }: { template: Template }) {
 
   return (
     <div className="space-y-4">
-      {/* ── Header row ── */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      {/* ── Top Bar with ID, Status badge, and Controls ── */}
+      <div className="flex items-center justify-between gap-3 flex-wrap border-b border-border/50 pb-3">
         <div className="flex items-center gap-2 min-w-0">
+          <Badge variant={isActive ? "success" : "secondary"} className="font-mono text-[10px]">
+            {isActive ? "Active" : "Inactive"}
+          </Badge>
+          <Badge variant="secondary" className="font-mono text-[10px]">
+            ID #{template.id}
+          </Badge>
+
           {editing ? (
             <input
               value={name}
@@ -225,7 +285,7 @@ export function TemplateEditor({ template }: { template: Template }) {
               maxLength={100}
             />
           ) : (
-            <h2 className="text-sm font-semibold text-text-main truncate">{template.name}</h2>
+            <h2 className="text-sm font-semibold text-text-main truncate ml-1">{template.name}</h2>
           )}
 
           {/* Save state indicator */}
@@ -242,6 +302,20 @@ export function TemplateEditor({ template }: { template: Template }) {
         <div className="flex items-center gap-2 shrink-0">
           {!editing ? (
             <>
+              {/* Toggle active state */}
+              <button
+                onClick={handleToggleActive}
+                title={isActive ? "Deactivate template" : "Activate template"}
+                className={`p-1.5 rounded-md border text-xs transition-colors min-h-[34px] min-w-[34px] flex items-center justify-center ${
+                  isActive
+                    ? "bg-surface-200 border-border text-text-secondary hover:text-warning"
+                    : "bg-surface-200 border-border text-text-muted hover:text-emerald-400"
+                }`}
+              >
+                <Power className="w-3.5 h-3.5" />
+              </button>
+
+              {/* Edit button */}
               <button
                 onClick={() => { setEditing(true); setExpanded(true); }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary/10 border border-primary/25 text-primary text-xs font-medium hover:bg-primary/20 active:scale-95 transition-all min-h-[34px]"
@@ -249,6 +323,35 @@ export function TemplateEditor({ template }: { template: Template }) {
                 <Pencil className="w-3.5 h-3.5" />
                 Edit
               </button>
+
+              {/* Delete button */}
+              {!confirmDelete ? (
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  title="Delete template"
+                  className="p-1.5 rounded-md bg-surface-200 border border-border text-text-muted hover:text-danger hover:bg-destructive/10 hover:border-destructive/30 transition-colors min-h-[34px] min-w-[34px] flex items-center justify-center"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              ) : (
+                <div className="flex items-center gap-1 bg-destructive/10 border border-destructive/30 rounded-md p-0.5">
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="px-2 py-1 text-[11px] font-semibold text-danger hover:bg-destructive/20 rounded transition-colors"
+                  >
+                    {deleting ? "Deleting…" : "Confirm Delete"}
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete(false)}
+                    className="p-1 text-text-muted hover:text-text-main rounded"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+
+              {/* Expand / Collapse */}
               <button
                 onClick={() => setExpanded((v) => !v)}
                 className="p-1.5 rounded-md bg-surface-200 border border-border text-text-muted hover:text-text-main transition-colors min-h-[34px] min-w-[34px] flex items-center justify-center"
@@ -259,11 +362,23 @@ export function TemplateEditor({ template }: { template: Template }) {
             </>
           ) : (
             <>
+              {/* Active Toggle in edit mode */}
+              <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer mr-2 select-none">
+                <input
+                  type="checkbox"
+                  checked={isActive}
+                  onChange={(e) => setIsActive(e.target.checked)}
+                  className="rounded border-border bg-surface-300 text-primary focus:ring-primary h-3.5 w-3.5"
+                />
+                <span>Active</span>
+              </label>
+
               {/* Keyboard shortcut hint */}
               <span className="hidden sm:flex items-center gap-1 text-[10px] text-text-muted">
                 <Keyboard className="w-3 h-3" />
                 <kbd className="font-mono">Ctrl+S</kbd>
               </span>
+
               <button
                 onClick={handleCancel}
                 disabled={saveState === "saving"}
@@ -272,6 +387,7 @@ export function TemplateEditor({ template }: { template: Template }) {
                 <X className="w-3.5 h-3.5" />
                 Cancel
               </button>
+
               <button
                 onClick={handleSave}
                 disabled={saveState === "saving" || !isDirty}
@@ -290,15 +406,15 @@ export function TemplateEditor({ template }: { template: Template }) {
       </div>
 
       {/* ── Error banner ── */}
-      {saveState === "error" && errorMsg && (
+      {errorMsg && (
         <div className="flex items-center gap-2 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2.5">
           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
           <span>{errorMsg}</span>
           <button
-            onClick={handleSave}
-            className="ml-auto text-rose-300 underline underline-offset-2 hover:text-rose-200"
+            onClick={() => setErrorMsg(null)}
+            className="ml-auto text-rose-300 hover:text-rose-200"
           >
-            Retry
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
