@@ -15,6 +15,31 @@ const DISPOSABLE_DOMAINS = new Set([
   'dispostable.com',
 ]);
 
+const MAJOR_PROVIDERS = new Set([
+  'gmail.com',
+  'googlemail.com',
+  'yahoo.com',
+  'outlook.com',
+  'hotmail.com',
+  'icloud.com',
+  'proton.me',
+  'protonmail.com',
+  'aol.com',
+  'zoho.com',
+]);
+
+const ROLE_BASED_PREFIXES = new Set([
+  'info',
+  'support',
+  'admin',
+  'sales',
+  'billing',
+  'help',
+  'contact',
+  'jobs',
+  'careers',
+]);
+
 export class LocalVerifier implements IEmailVerifier {
   public readonly providerName = 'local_dns_mx';
 
@@ -34,7 +59,7 @@ export class LocalVerifier implements IEmailVerifier {
       };
     }
 
-    const [, domain] = cleanEmail.split('@');
+    const [localPart, domain] = cleanEmail.split('@');
 
     // 2. Disposable domain check
     if (DISPOSABLE_DOMAINS.has(domain)) {
@@ -42,6 +67,17 @@ export class LocalVerifier implements IEmailVerifier {
         email: cleanEmail,
         status: 'DISPOSABLE',
         reason: 'Known disposable/temporary email service',
+        provider: this.providerName,
+        timestamp,
+      };
+    }
+
+    // 3. Fast-path: Trusted major provider (0ms DNS latency, 100% deliverable host)
+    if (MAJOR_PROVIDERS.has(domain)) {
+      return {
+        email: cleanEmail,
+        status: 'VALID',
+        reason: 'Trusted major mail provider',
         provider: this.providerName,
         timestamp,
       };
