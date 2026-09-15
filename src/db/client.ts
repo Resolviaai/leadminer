@@ -3,23 +3,25 @@ import { Pool } from 'pg';
 import * as schema from './schema';
 import { env } from '../config/env';
 
-let pool: Pool | null = null;
+declare global {
+  var _dbPool: Pool | undefined;
+}
 
 export function getDbPool(): Pool {
-  if (!pool) {
-    pool = new Pool({
+  if (!globalThis._dbPool) {
+    globalThis._dbPool = new Pool({
       connectionString: env.DATABASE_URL,
       ssl: env.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false },
-      max: 10,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000,
+      max: process.env.NODE_ENV === 'production' ? 3 : 5,
+      idleTimeoutMillis: 10000,
+      connectionTimeoutMillis: 5000,
     });
 
-    pool.on('error', (err) => {
+    globalThis._dbPool.on('error', (err) => {
       console.error('Unexpected database pool error:', err);
     });
   }
-  return pool;
+  return globalThis._dbPool;
 }
 
 export const db = drizzle(getDbPool(), { schema });

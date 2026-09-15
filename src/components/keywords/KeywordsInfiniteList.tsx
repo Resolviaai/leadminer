@@ -1,7 +1,6 @@
-﻿"use client";
+"use client";
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { Loader2 } from "lucide-react";
-import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -116,7 +115,27 @@ export function KeywordsInfiniteList({ initialData, total }: Props) {
     }
   }, [items, hasMore]);
 
-  const sentinelRef = useInfiniteScroll(loadMore, hasMore && !loading && !error);
+  const handleContainerScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (!hasMore || loading || isLoadingRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 200) {
+      loadMore();
+    }
+  };
+
+  useEffect(() => {
+    if (!hasMore || loading) return;
+    const handleWindowScroll = () => {
+      if (!hasMore || loading || isLoadingRef.current) return;
+      if (window.innerWidth < 768) {
+        if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 300) {
+          loadMore();
+        }
+      }
+    };
+    window.addEventListener("scroll", handleWindowScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleWindowScroll);
+  }, [hasMore, loading, loadMore]);
 
   const showSkeletons = items.length === 0 && loading;
 
@@ -152,7 +171,7 @@ export function KeywordsInfiniteList({ initialData, total }: Props) {
 
       {/* Desktop table */}
       <Card className="hidden md:block overflow-hidden">
-        <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+        <div onScroll={handleContainerScroll} className="overflow-x-auto max-h-[70vh] overflow-y-auto">
           <Table>
             <TableHeader className="sticky top-0 z-10 bg-surface-200">
               <TableRow>
@@ -196,31 +215,45 @@ export function KeywordsInfiniteList({ initialData, total }: Props) {
         </div>
       </Card>
 
-      {/* Sentinel + status */}
-      <div ref={sentinelRef} className="h-px" />
-      {loading && !showSkeletons && (
-        <div className="flex items-center justify-center gap-2 py-4 text-xs text-text-muted">
-          <Loader2 className="w-4 h-4 animate-spin text-primary" />
-          <span>Loading more...</span>
-        </div>
-      )}
-      {error && (
-        <div className="flex items-center justify-center py-4">
+      {/* Footer controls & counters */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-1 py-1 text-[11px] text-text-muted">
+        <span>
+          Showing <span className="font-mono text-text-main">{items.length.toLocaleString()}</span> of{" "}
+          <span className="font-mono text-text-main">{total.toLocaleString()}</span> keywords
+        </span>
+
+        {loading && !showSkeletons && (
+          <div className="flex items-center gap-2 text-primary">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <span>Loading next 50...</span>
+          </div>
+        )}
+
+        {error && (
           <Button
             variant="outline"
             size="sm"
             onClick={() => { setError(null); loadMore(); }}
-            className="text-xs text-danger border-danger/30 hover:bg-danger/5"
+            className="text-xs text-danger border-danger/30 hover:bg-danger/5 h-7 px-2.5"
           >
             {error}
           </Button>
-        </div>
-      )}
-      {!hasMore && items.length > 0 && !loading && (
-        <p className="text-center text-[11px] text-text-muted py-3">
-          All {total.toLocaleString()} records loaded
-        </p>
-      )}
+        )}
+
+        {!hasMore && items.length > 0 && !loading && (
+          <span className="text-text-muted">All records loaded</span>
+        )}
+
+        {hasMore && !loading && !error && (
+          <button
+            type="button"
+            onClick={() => loadMore()}
+            className="text-primary hover:underline font-medium cursor-pointer"
+          >
+            Load 50 more ↓
+          </button>
+        )}
+      </div>
     </div>
   );
 }

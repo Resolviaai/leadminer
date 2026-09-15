@@ -12,11 +12,17 @@ import { gmailSendingService } from '../../services/outreach/gmail.service';
 export const dynamic = 'force-dynamic';
 
 async function getGmailAccounts() {
-  try {
-    return await db.select().from(gmailAccounts).orderBy(desc(gmailAccounts.id));
-  } catch (e) {
-    return [];
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      return await db.select().from(gmailAccounts).orderBy(desc(gmailAccounts.id));
+    } catch (e) {
+      console.error(`[getGmailAccounts attempt ${attempt} error]:`, e);
+      if (attempt === 1) {
+        await new Promise((r) => setTimeout(r, 200));
+      }
+    }
   }
+  return [];
 }
 
 export default async function GmailAccountsPage() {

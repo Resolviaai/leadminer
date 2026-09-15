@@ -529,31 +529,7 @@ export function TemplateEditor({
               <span className="text-[10px] text-text-muted">sample data</span>
             </div>
 
-            {/* Mock Gmail inbox row */}
-            <div className="rounded-lg border border-border overflow-hidden">
-              <div className="bg-surface-300 px-3 py-1.5 border-b border-border">
-                <p className="text-[10px] text-text-muted uppercase tracking-wider font-semibold">
-                  Inbox Preview
-                </p>
-              </div>
-              <div className="px-3 py-2.5 flex items-start gap-3 bg-surface-300/50">
-                <div className="w-7 h-7 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-primary text-[10px] font-bold shrink-0 mt-0.5">
-                  Y
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-semibold text-text-main truncate">You</span>
-                    <span className="text-[10px] text-text-muted shrink-0">Just now</span>
-                  </div>
-                  <p className="text-xs text-text-main font-medium truncate mt-0.5">
-                    {previewSubject || <span className="text-text-muted italic">No subject</span>}
-                  </p>
-                  <p className="text-[11px] text-text-muted truncate mt-0.5">
-                    {previewBody.slice(0, 80)}…
-                  </p>
-                </div>
-              </div>
-            </div>
+
 
             {/* Full body preview */}
             <div className="space-y-2 pt-1">

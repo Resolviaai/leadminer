@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -604,33 +604,6 @@ export function TemplatesManager({
                     </span>
                   </div>
 
-                  <div className="rounded-lg border border-border overflow-hidden">
-                    <div className="bg-surface-300 px-3 py-1.5 border-b border-border">
-                      <p className="text-[10px] text-text-muted uppercase tracking-wider font-semibold">
-                        Inbox Preview
-                      </p>
-                    </div>
-                    <div className="px-3 py-2.5 flex items-start gap-3 bg-surface-300/50">
-                      <div className="w-7 h-7 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-primary text-[10px] font-bold shrink-0 mt-0.5">
-                        Y
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium text-text-main truncate">
-                          {renderPreview(subject) || (
-                            <span className="text-text-muted italic">
-                              No subject yet…
-                            </span>
-                          )}
-                        </p>
-                        <p className="text-[11px] text-text-muted truncate mt-0.5">
-                          {renderPreview(body).slice(0, 80) || (
-                            <span className="italic">No body yet…</span>
-                          )}
-                          {body.length > 80 ? "…" : ""}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
 
                   <div className="space-y-2 pt-1">
                     <div className="pb-2 border-b border-border/50">
