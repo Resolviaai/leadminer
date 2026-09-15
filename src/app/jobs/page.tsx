@@ -31,11 +31,11 @@ export default async function JobsPage() {
         <div className="flex items-center space-x-2">
           <Activity className="w-5 h-5 text-primary" />
           <h1 className="text-base sm:text-lg font-semibold text-text-main tracking-tight">
-            Background Worker Jobs
+            Background Tasks
           </h1>
         </div>
         <p className="text-xs text-text-secondary mt-0.5">
-          {total.toLocaleString()} job runs — execution telemetry, progress checkpoints, and heartbeat tracking across discovery, verification, and outreach workers.
+          {total.toLocaleString()} automated tasks that ran in the background (finding creators, email verification, and sending).
         </p>
       </Card>
 

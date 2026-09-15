@@ -54,36 +54,36 @@ export default async function KeywordsPage() {
           <div className="flex items-center space-x-2">
             <Layers className="w-5 h-5 text-primary" />
             <h1 className="text-base sm:text-lg font-semibold text-text-main tracking-tight">
-              Keyword Taxonomy
+              Search Keywords
             </h1>
           </div>
           <p className="text-xs text-text-secondary mt-0.5">
-            {counts.total.toLocaleString()} unique normalized search terms
+            {counts.total.toLocaleString()} keywords used to find creators on YouTube
           </p>
         </div>
         <form action="/api/workers/discovery" method="POST">
           <Button size="sm" variant="default" className="gap-1.5 w-full sm:w-auto">
             <Play className="w-3.5 h-3.5 fill-current" />
-            <span>Run Next Batch (10)</span>
+            <span>Find Creators Now</span>
           </Button>
         </form>
       </Card>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card className="p-3.5">
-          <span className="text-[11px] text-text-muted block">Total Corpus</span>
+          <span className="text-[11px] text-text-muted block">Total Keywords</span>
           <span className="text-lg font-bold text-text-main font-mono">{counts.total.toLocaleString()}</span>
         </Card>
         <Card className="p-3.5">
-          <span className="text-[11px] text-warning block">Pending Queue</span>
+          <span className="text-[11px] text-warning block">Waiting to Search</span>
           <span className="text-lg font-bold text-warning font-mono">{counts.pending.toLocaleString()}</span>
         </Card>
         <Card className="p-3.5">
-          <span className="text-[11px] text-primary block">Completed</span>
+          <span className="text-[11px] text-primary block">Searched</span>
           <span className="text-lg font-bold text-primary font-mono">{counts.completed.toLocaleString()}</span>
         </Card>
         <Card className="p-3.5">
-          <span className="text-[11px] text-danger block">Failed / Retry</span>
+          <span className="text-[11px] text-danger block">Needs Retry</span>
           <span className="text-lg font-bold text-danger font-mono">{counts.failed.toLocaleString()}</span>
         </Card>
       </div>

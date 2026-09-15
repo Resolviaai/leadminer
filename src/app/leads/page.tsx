@@ -54,18 +54,18 @@ export default async function LeadsPage() {
           <div className="flex items-center space-x-2">
             <Users className="w-5 h-5 text-primary" />
             <h1 className="text-base sm:text-lg font-semibold text-text-main tracking-tight">
-              Discovered Leads
+              Discovered Creators
             </h1>
           </div>
           <p className="text-xs text-text-secondary mt-0.5">
-            {total.toLocaleString()} leads — deduplicated YouTube channels, extracted emails, verification status, and outreach qualification.
+            {total.toLocaleString()} YouTube creators found with their channel info and verified email status.
           </p>
         </div>
 
         <form action="/api/workers/verification" method="POST">
           <Button size="sm" variant="default" className="gap-1.5 w-full sm:w-auto">
             <Play className="w-3.5 h-3.5 fill-current" />
-            <span>Verify & Qualify Batch</span>
+            <span>Verify Emails Now</span>
           </Button>
         </form>
       </Card>

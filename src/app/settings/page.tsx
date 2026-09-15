@@ -52,11 +52,11 @@ export default async function SettingsPage() {
         <div className="flex items-center space-x-2">
           <Settings className="w-5 h-5 text-primary" />
           <h1 className="text-base sm:text-lg font-semibold text-text-main tracking-tight">
-            System Settings & Diagnostics
+            Settings & System Status
           </h1>
         </div>
         <p className="text-xs text-text-secondary mt-0.5">
-          Emergency outreach safety controls, quota allocations, and live infrastructure diagnostics.
+          Safety controls, sending limits, and connection health for all services.
         </p>
       </Card>
 
@@ -65,11 +65,11 @@ export default async function SettingsPage() {
         <div className="space-y-1">
           <div className="flex items-center space-x-2 text-danger font-semibold text-sm">
             <ShieldAlert className="w-5 h-5 shrink-0" />
-            <span>EMERGENCY OUTREACH KILL SWITCH</span>
+            <span>EMERGENCY PAUSE (STOP ALL EMAILS)</span>
           </div>
           <p className="text-xs text-text-secondary max-w-2xl leading-relaxed">
-            When engaged, all outbound Gmail sending is aborted instantly before every individual email dispatch across all campaigns.
-            Discovery and lead extraction workers continue safely.
+            When paused, all outbound emails are stopped immediately.
+            Finding channels and verifying emails will continue safely in the background.
           </p>
         </div>
 
@@ -80,7 +80,7 @@ export default async function SettingsPage() {
             variant={isKillSwitchActive ? 'default' : 'destructive'}
             className="w-full sm:w-auto h-10 px-5 text-xs font-semibold"
           >
-            {isKillSwitchActive ? 'DISARM KILL SWITCH (RESUME)' : 'STOP ALL OUTREACH'}
+            {isKillSwitchActive ? 'RESUME SENDING EMAILS' : 'STOP ALL OUTREACH'}
           </Button>
         </form>
       </Card>
@@ -88,7 +88,7 @@ export default async function SettingsPage() {
       {/* System Health Diagnostics */}
       <Card className="p-4 sm:p-5 space-y-4">
         <CardTitle className="text-sm font-semibold text-text-main">
-          Infrastructure Diagnostics
+          Connected Services Health
         </CardTitle>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">

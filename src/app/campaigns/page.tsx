@@ -43,18 +43,18 @@ export default async function CampaignsPage() {
           <div className="flex items-center space-x-2">
             <Target className="w-5 h-5 text-primary" />
             <h1 className="text-base sm:text-lg font-semibold text-text-main tracking-tight">
-              Outreach Campaigns
+              Email Campaigns
             </h1>
           </div>
           <p className="text-xs text-text-secondary mt-0.5">
-            Configure lead criteria, template assignments, daily rate limits, and Gemini hooks.
+            Manage your email campaigns, templates, and daily sending limits.
           </p>
         </div>
 
         <form action="/api/workers/outreach" method="POST">
           <Button size="sm" variant="default" className="gap-1.5 w-full sm:w-auto">
             <Send className="w-3.5 h-3.5 fill-current" />
-            <span>Dispatch Outreach Batch</span>
+            <span>Send Emails Now</span>
           </Button>
         </form>
       </Card>

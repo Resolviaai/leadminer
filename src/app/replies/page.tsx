@@ -49,11 +49,11 @@ export default async function RepliesPage() {
         <div className="flex items-center space-x-2">
           <Inbox className="w-5 h-5 text-primary" />
           <h1 className="text-base sm:text-lg font-semibold text-text-main tracking-tight">
-            Creator Replies Inbox
+            Creator Replies
           </h1>
         </div>
         <p className="text-xs text-text-secondary mt-0.5">
-          {total.toLocaleString()} incoming responses — sentiment analysis, automated categorization, and notification alerts.
+          {total.toLocaleString()} responses received from creators you emailed.
         </p>
       </Card>
 

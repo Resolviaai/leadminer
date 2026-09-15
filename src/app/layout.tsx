@@ -49,7 +49,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <span>System Online</span>
               </div>
               <span className="text-border">|</span>
-              <span className="text-xs text-text-muted">Incremental Autonomous Pipeline</span>
+              <span className="text-xs text-text-muted">Autopilot Active</span>
             </div>
 
             <div className="flex items-center space-x-4 text-xs">
