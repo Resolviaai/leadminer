@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { google } from "googleapis";
 import { db } from "../../../../../db/client";
 import { gmailAccounts } from "../../../../../db/schema";
@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
       await db.insert(gmailAccounts).values({
         email,
         status: "ACTIVE",
-        dailyLimit: 40,
+        dailyLimit: 25,
         sentToday: 0,
         credentialReference: `oauth2:${email}`,
         accessToken: tokens.access_token || null,

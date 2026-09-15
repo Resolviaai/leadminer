@@ -224,7 +224,7 @@ export const gmailAccounts = pgTable(
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     email: varchar('email', { length: 255 }).notNull(),
     status: accountStatusEnum('status').notNull().default('ACTIVE'),
-    dailyLimit: integer('daily_limit').notNull().default(40),
+    dailyLimit: integer('daily_limit').notNull().default(25),
     sentToday: integer('sent_today').notNull().default(0),
     lastSendAt: timestamp('last_send_at', { withTimezone: true }),
     credentialReference: varchar('credential_reference', { length: 500 }).notNull(),
