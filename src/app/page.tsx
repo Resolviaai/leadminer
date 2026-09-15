@@ -25,54 +25,50 @@ export const dynamic = 'force-dynamic';
 
 async function getDashboardStats() {
   try {
-    const [kwStats] = await db
-      .select({
+    // All DB queries in parallel — eliminates sequential waterfall
+    const [
+      [kwStats],
+      [leadStats],
+      [contactStats],
+      [messageStats],
+      [replyStats],
+      [campaignStats],
+      quota,
+      killSwitchRecord,
+    ] = await Promise.all([
+      db.select({
         total: sql<number>`count(*)::int`,
         pending: sql<number>`count(*) filter (where status = 'PENDING')::int`,
         completed: sql<number>`count(*) filter (where status = 'COMPLETED')::int`,
         failed: sql<number>`count(*) filter (where status = 'FAILED')::int`,
-      })
-      .from(keywords);
+      }).from(keywords),
 
-    const [leadStats] = await db
-      .select({
+      db.select({
         total: sql<number>`count(*)::int`,
         qualified: sql<number>`count(*) filter (where qualification_status = 'QUALIFIED')::int`,
-      })
-      .from(leads);
+      }).from(leads),
 
-    const [contactStats] = await db
-      .select({
+      db.select({
         verified: sql<number>`count(*) filter (where email_status = 'VALID')::int`,
-      })
-      .from(contacts);
+      }).from(contacts),
 
-    const [messageStats] = await db
-      .select({
+      db.select({
         sentTotal: sql<number>`count(*) filter (where send_status = 'SENT')::int`,
         sentToday: sql<number>`count(*) filter (where send_status = 'SENT' and sent_at >= current_date)::int`,
-      })
-      .from(messages);
+      }).from(messages),
 
-    const [replyStats] = await db
-      .select({
+      db.select({
         totalReplies: sql<number>`count(*)::int`,
-      })
-      .from(replies);
+      }).from(replies),
 
-    const [campaignStats] = await db
-      .select({
+      db.select({
         active: sql<number>`count(*) filter (where status = 'ACTIVE')::int`,
-      })
-      .from(campaigns);
+      }).from(campaigns),
 
-    const quota = await quotaManager.syncQuotaState();
+      quotaManager.syncQuotaState(),
 
-    const killSwitchRecord = await db
-      .select()
-      .from(systemSettings)
-      .where(eq(systemSettings.key, 'kill_switch'))
-      .limit(1);
+      db.select().from(systemSettings).where(eq(systemSettings.key, 'kill_switch')).limit(1),
+    ]);
 
     const isKillSwitchActive = Boolean((killSwitchRecord[0]?.value as any)?.enabled);
 
@@ -88,7 +84,7 @@ async function getDashboardStats() {
     };
   } catch (e) {
     return {
-      keywords: { total: 25391, pending: 25391, completed: 0, failed: 0 },
+      keywords: { total: 0, pending: 0, completed: 0, failed: 0 },
       leads: { total: 0, qualified: 0 },
       contacts: { verified: 0 },
       outreach: { sentTotal: 0, sentToday: 0 },
