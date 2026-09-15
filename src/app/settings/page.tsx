@@ -182,15 +182,17 @@ export default async function SettingsPage() {
           <div className="p-3.5 rounded-lg bg-surface-200 border border-border space-y-1.5">
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-text-main flex items-center space-x-2">
-                <ShieldCheck className="w-3.5 h-3.5 text-warning" />
-                <span>Pipeline Dry-Run</span>
+                <ShieldCheck className={`w-3.5 h-3.5 ${health.components.mode.dryRun ? 'text-warning' : 'text-primary'}`} />
+                <span>{health.components.mode.dryRun ? 'Pipeline Dry-Run' : 'Live Sending Mode'}</span>
               </span>
-              <Badge variant="warning" className="text-[10px] font-mono">
-                ACTIVE
+              <Badge variant={health.components.mode.dryRun ? 'warning' : 'success'} className="text-[10px] font-mono">
+                {health.components.mode.dryRun ? 'SIMULATION' : 'LIVE'}
               </Badge>
             </div>
             <p className="text-[11px] text-text-secondary leading-normal">
-              Emails simulated safely in logs without real dispatch.
+              {health.components.mode.dryRun
+                ? 'Emails simulated safely in logs without real dispatch.'
+                : 'Real email dispatch enabled. Outbound emails are sent live to creators.'}
             </p>
           </div>
         </div>
