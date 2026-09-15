@@ -24,9 +24,13 @@ export async function runMigrations() {
       console.log(`Running migration: ${file}...`);
       const filePath = path.join(migrationsDir, file);
       const sql = fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/, '');
-      await client.query('BEGIN');
-      await client.query(sql);
-      await client.query('COMMIT');
+      if (sql.includes('ADD VALUE')) {
+        await client.query(sql);
+      } else {
+        await client.query('BEGIN');
+        await client.query(sql);
+        await client.query('COMMIT');
+      }
       console.log(`✅ ${file} applied successfully.`);
     }
     console.log('✅ All database migrations executed successfully.');
