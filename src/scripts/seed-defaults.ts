@@ -68,8 +68,8 @@ export async function seedDefaults() {
       status: 'DRAFT',
       templateId,
       dailyLimit: 30,
-      minSubscribers: 5000,
-      maxSubscribers: 500000,
+      minSubscribers: 10,
+      maxSubscribers: null,
       targetCategories: ['Top Podcasters', 'Top YouTubers', 'Top Business Coaches'],
       enableGeminiPersonalization: true,
     });

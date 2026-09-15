@@ -90,7 +90,9 @@ export default async function CampaignsPage() {
                   <div className="flex justify-between">
                     <span className="text-text-muted">Audience Filter</span>
                     <span className="font-mono text-text-main">
-                      {camp.minSubscribers?.toLocaleString()} - {camp.maxSubscribers?.toLocaleString()} subs
+                      {camp.maxSubscribers
+                        ? `${camp.minSubscribers?.toLocaleString()} - ${camp.maxSubscribers?.toLocaleString()} subs`
+                        : `Min ${(camp.minSubscribers || 10).toLocaleString()} subs`}
                     </span>
                   </div>
                   <div className="flex justify-between items-center pt-1 border-t border-border/40">
