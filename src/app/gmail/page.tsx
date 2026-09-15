@@ -7,6 +7,7 @@ import { env } from '../../config/env';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { gmailSendingService } from '../../services/outreach/gmail.service';
 
 export const dynamic = 'force-dynamic';
 
@@ -69,20 +70,28 @@ export default async function GmailAccountsPage() {
               </div>
 
               <div className="p-3 rounded-lg bg-surface-200 border border-border space-y-2 text-xs text-text-secondary">
-                <div className="flex justify-between">
-                  <span className="text-text-muted">Daily Sending Limit</span>
-                  <span className="font-mono text-text-main">{acc.dailyLimit} emails/day</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-text-muted">Sent Today</span>
-                  <span className="font-mono text-text-main">{acc.sentToday}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-text-muted">Remaining Today</span>
-                  <span className="font-mono text-primary font-medium">
-                    {Math.max(0, acc.dailyLimit - acc.sentToday)}
-                  </span>
-                </div>
+                {(() => {
+                  const todayTarget = gmailSendingService.getTodayEffectiveLimit(acc.id, acc.dailyLimit);
+                  const remaining = Math.max(0, todayTarget - acc.sentToday);
+                  return (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-text-muted">Today's Target (Randomized)</span>
+                        <span className="font-mono text-text-main">
+                          {todayTarget} emails <span className="text-text-muted text-[10px]">(max: {acc.dailyLimit})</span>
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-text-muted">Sent Today</span>
+                        <span className="font-mono text-text-main">{acc.sentToday}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-text-muted">Remaining Today</span>
+                        <span className="font-mono text-primary font-medium">{remaining}</span>
+                      </div>
+                    </>
+                  );
+                })()}
                 <div className="flex justify-between pt-1 border-t border-border/50">
                   <span className="text-text-muted">Last Dispatch</span>
                   <span className="text-text-main">

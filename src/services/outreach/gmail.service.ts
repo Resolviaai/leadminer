@@ -47,6 +47,26 @@ export class GmailSendingService {
     }
   }
 
+  /**
+   * Calculates a daily randomized sending limit (volume jitter)
+   * For baseLimit 25, generates a natural target between 18 and 25.
+   * Uses date string (YYYY-MM-DD) + accountId as seed so the target remains stable throughout each calendar day.
+   */
+  public getTodayEffectiveLimit(accountId: number, baseLimit = 25): number {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    let hash = 0;
+    const str = `${todayStr}_acc_${accountId}`;
+    for (let i = 0; i < str.length; i++) {
+      hash = (hash << 5) - hash + str.charCodeAt(i);
+      hash |= 0;
+    }
+    const min = Math.max(18, baseLimit - 7); // 18 minimum
+    const max = baseLimit; // 25 maximum
+    const range = max - min + 1;
+    const jitter = Math.abs(hash) % range;
+    return min + jitter;
+  }
+
   private async getAvailableAccount(): Promise<typeof gmailAccounts.$inferSelect | null> {
     try {
       const accounts = await db
@@ -55,8 +75,11 @@ export class GmailSendingService {
         .where(and(eq(gmailAccounts.status, 'ACTIVE')))
         .limit(10);
 
-      // Pick first account with remaining daily quota
-      const eligible = accounts.find((a) => a.sentToday < a.dailyLimit);
+      // Pick first account that has not reached its randomized daily limit for today
+      const eligible = accounts.find((a) => {
+        const todayLimit = this.getTodayEffectiveLimit(a.id, a.dailyLimit);
+        return a.sentToday < todayLimit;
+      });
       return eligible || null;
     } catch (e) {
       return null;
