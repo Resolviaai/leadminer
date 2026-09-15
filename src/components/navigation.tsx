@@ -41,11 +41,17 @@ const allNavItems = [...mainNavItems, ...secondaryNavItems];
 
 export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
   const pathname = usePathname();
+  const [pendingPath, setPendingPath] = useState<string | null>(null);
   const [isMobileMoreOpen, setIsMobileMoreOpen] = useState(false);
 
+  React.useEffect(() => {
+    setPendingPath(null);
+  }, [pathname]);
+
   const isActive = (href: string) => {
-    if (href === '/') return pathname === '/';
-    return pathname.startsWith(href);
+    const current = pendingPath ?? pathname;
+    if (href === '/') return current === '/';
+    return current.startsWith(href);
   };
 
   return (
@@ -84,7 +90,11 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
               <Link
                 key={item.name}
                 href={item.href}
-                className={`flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-all ${
+                prefetch={true}
+                onClick={() => {
+                  if (item.href !== pathname) setPendingPath(item.href);
+                }}
+                className={`flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-all active:scale-[0.98] ${
                   active
                     ? 'bg-surface-200 text-text-main font-semibold border-l-2 border-primary shadow-sm'
                     : 'text-text-secondary hover:text-text-main hover:bg-surface-200/50'
@@ -137,6 +147,10 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
             <Link
               key={item.name}
               href={item.href}
+              prefetch={true}
+              onClick={() => {
+                if (item.href !== pathname) setPendingPath(item.href);
+              }}
               className={`flex-1 flex flex-col items-center justify-center min-h-[44px] min-w-[44px] py-1 transition-all active:scale-95 ${
                 active ? 'text-primary' : 'text-text-muted hover:text-text-secondary'
               }`}
@@ -200,7 +214,11 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
                   <Link
                     key={item.name}
                     href={item.href}
-                    onClick={() => setIsMobileMoreOpen(false)}
+                    prefetch={true}
+                    onClick={() => {
+                      setIsMobileMoreOpen(false);
+                      if (item.href !== pathname) setPendingPath(item.href);
+                    }}
                     className={`flex items-center space-x-3 p-3 rounded-xl border min-h-[48px] transition-all active:scale-95 ${
                       active
                         ? 'bg-primary/15 border-primary/30 text-text-main font-semibold'

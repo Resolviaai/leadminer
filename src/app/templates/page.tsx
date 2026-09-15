@@ -1,10 +1,10 @@
-﻿import React from "react";
+import React from "react";
 import { db } from "../../db/client";
 import { templates } from "../../db/schema";
 import { desc } from "drizzle-orm";
 import { TemplatesManager } from "@/components/templates/TemplatesManager";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 5;
 
 async function getTemplates() {
   try {

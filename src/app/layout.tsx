@@ -1,9 +1,10 @@
-﻿import './globals.css';
+import './globals.css';
 import React from 'react';
 import Link from 'next/link';
 import { Navigation } from '../components/navigation';
 import { NotificationCenter } from '../components/notifications/NotificationCenter';
 import { PwaRegister } from '../components/pwa/PwaRegister';
+import { TopProgressBar } from '../components/TopProgressBar';
 import { Radio } from 'lucide-react';
 import { env } from '../config/env';
 
@@ -22,6 +23,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="dark">
       <body className="bg-studio text-text-main min-h-screen flex flex-col md:flex-row antialiased selection:bg-primary/20 selection:text-primary">
+        {/* Top Navigation Progress Indicator */}
+        <TopProgressBar />
+
         {/* Silent PWA Service Worker Registration */}
         <PwaRegister />
 

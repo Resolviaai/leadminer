@@ -17,7 +17,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 5;
 
 async function getDashboardStats() {
   try {

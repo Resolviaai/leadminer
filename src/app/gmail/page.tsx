@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { gmailSendingService } from '../../services/outreach/gmail.service';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 5;
 
 async function getGmailAccounts() {
   for (let attempt = 1; attempt <= 2; attempt++) {

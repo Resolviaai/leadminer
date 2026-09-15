@@ -20,7 +20,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 5;
 
 async function getSettingsAndHealth() {
   const health = await runHealthCheck();

@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import { db } from "../../db/client";
 import { keywords } from "../../db/schema";
 import { desc, sql } from "drizzle-orm";
@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { KeywordsInfiniteList } from "@/components/keywords/KeywordsInfiniteList";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 5;
 
 async function getData() {
   try {

@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import { db } from "../../db/client";
 import { replies, leads, campaigns } from "../../db/schema";
 import { eq, desc, sql } from "drizzle-orm";
@@ -6,7 +6,7 @@ import { Inbox } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { RepliesInfiniteList } from "@/components/replies/RepliesInfiniteList";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 5;
 
 async function getData() {
   try {

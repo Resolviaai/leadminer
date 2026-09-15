@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import { db } from "../../db/client";
 import { logs } from "../../db/schema";
 import { desc, sql } from "drizzle-orm";
@@ -6,7 +6,7 @@ import { Terminal } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { LogsInfiniteList } from "@/components/logs/LogsInfiniteList";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 5;
 
 async function getData() {
   try {

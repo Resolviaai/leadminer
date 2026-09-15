@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/componen
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 5;
 
 async function getCampaignsData() {
   try {
