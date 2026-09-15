@@ -13,8 +13,8 @@
     --popover: 0 0% 11%; /* #1C1C1C */
     --popover-foreground: 0 0% 93%;
 
-    --primary: 153 60% 53%; /* #3ECF8E Supabase Brand Green */
-    --primary-foreground: 0 0% 8.6%; /* #161616 */
+    --primary: 22 56% 49%;    /* #C46A3A Brand Orange */
+    --primary-foreground: 0 0% 98%;  /* white text on orange */
 
     --secondary: 0 0% 13.7%; /* #232323 Supabase Dark 3 / Surface 200 */
     --secondary-foreground: 0 0% 93%;
@@ -22,15 +22,15 @@
     --muted: 0 0% 15.7%; /* #282828 Supabase Dark 4 / Surface 300 */
     --muted-foreground: 0 0% 63%; /* #A0A0A0 Supabase Dark 11 */
 
-    --accent: 0 0% 15.7%; /* #282828 */
-    --accent-foreground: 0 0% 93%;
+    --accent: 19 46% 11%;    /* #241713 Brand Soft (bg for subtle states) */
+    --accent-foreground: 22 59% 69%; /* #E3A37D Text Accent */
 
     --destructive: 0 84% 60%; /* #EF4444 */
     --destructive-foreground: 0 0% 98%;
 
     --border: 0 0% 18%; /* #2E2E2E Supabase Dark 5 */
     --input: 0 0% 18%;
-    --ring: 153 60% 53%; /* #3ECF8E */
+    --ring: 22 56% 49%;  /* #C46A3A */
 
     --radius: 0.5rem;
   }
@@ -42,19 +42,19 @@
     --card-foreground: 0 0% 93%;
     --popover: 0 0% 11%;
     --popover-foreground: 0 0% 93%;
-    --primary: 153 60% 53%;
-    --primary-foreground: 0 0% 8.6%;
+    --primary: 22 56% 49%;
+    --primary-foreground: 0 0% 98%;
     --secondary: 0 0% 13.7%;
     --secondary-foreground: 0 0% 93%;
     --muted: 0 0% 15.7%;
     --muted-foreground: 0 0% 63%;
-    --accent: 0 0% 15.7%;
-    --accent-foreground: 0 0% 93%;
+    --accent: 19 46% 11%;
+    --accent-foreground: 22 59% 69%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
     --border: 0 0% 18%;
     --input: 0 0% 18%;
-    --ring: 153 60% 53%;
+    --ring: 22 56% 49%;
   }
 
   * {

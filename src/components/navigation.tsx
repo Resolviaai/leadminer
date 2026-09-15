@@ -53,8 +53,8 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
       {/* 1. DESKTOP SIDEBAR (hidden on mobile, visible on md+) */}
       {/* ==================================================== */}
       <aside className="hidden md:flex w-64 bg-surface-100 border-r border-border flex-col shrink-0 h-screen sticky top-0">
-        {/* Brand Header */}
-        <div className="p-4 border-b border-border flex items-center justify-between">
+        {/* Brand Header with exact h-14 to align with topbar */}
+        <div className="h-14 px-4 border-b border-border flex items-center justify-between shrink-0">
           <div className="flex items-center space-x-2.5">
             <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs tracking-wider">
               LM
@@ -98,27 +98,6 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
             );
           })}
         </nav>
-
-        {/* Kill Switch Card */}
-        <div className="p-3 border-t border-border">
-          <div className="p-3 rounded-lg bg-surface-200 border border-border/80">
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center space-x-1.5 text-danger text-xs font-semibold">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Outreach Safe</span>
-              </div>
-              <Link
-                href="/settings"
-                className="text-[10px] text-text-muted hover:text-text-main underline"
-              >
-                Configure
-              </Link>
-            </div>
-            <p className="text-[11px] text-text-muted leading-tight">
-              Instant kill-switch active in settings to prevent unauthorized delivery.
-            </p>
-          </div>
-        </div>
       </aside>
 
       {/* ==================================================== */}

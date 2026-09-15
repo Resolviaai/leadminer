@@ -147,9 +147,9 @@ export default async function SettingsPage() {
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-text-main flex items-center space-x-2">
                 <Mail className="w-3.5 h-3.5 text-primary" />
-                <span>Gmail OAuth Sender</span>
+                <span>Gmail Inboxes</span>
               </span>
-              {health.components.gmail.status === 'OK' ? (
+              {health.components.gmail.connectedInboxes > 0 ? (
                 <CheckCircle2 className="w-4 h-4 text-primary" />
               ) : (
                 <AlertTriangle className="w-4 h-4 text-warning" />
@@ -167,7 +167,11 @@ export default async function SettingsPage() {
                 <Bell className="w-3.5 h-3.5 text-primary" />
                 <span>Telegram Bot Alert</span>
               </span>
-              <CheckCircle2 className="w-4 h-4 text-primary" />
+              {health.components.telegram.configured ? (
+                <CheckCircle2 className="w-4 h-4 text-primary" />
+              ) : (
+                <AlertTriangle className="w-4 h-4 text-warning" />
+              )}
             </div>
             <p className="text-[11px] text-text-secondary leading-normal">
               {health.components.telegram.message}

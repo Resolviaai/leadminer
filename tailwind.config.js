@@ -60,9 +60,10 @@ module.exports = {
           strong: '#343434',
         },
         brand: {
-          DEFAULT: '#3ECF8E',
-          hover: '#34B97D',
-          subtle: 'rgba(62, 207, 142, 0.1)',
+          DEFAULT: '#C46A3A',
+          hover: '#D17A45',
+          soft: '#241713',
+          accent: '#E3A37D',
         },
         'text-main': '#EDEDED',
         'text-secondary': '#A0A0A0',
