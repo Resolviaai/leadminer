@@ -24,8 +24,8 @@ const envSchema = z.object({
   YOUTUBE_MAX_RESULTS_PER_SEARCH: z.coerce.number().default(15),
 
   // Gemini API
-  GEMINI_API_KEY: z.string().optional().default('AIzaSyDas-UU7agAjyQeHDag1yOMU6qyXuxIWBE'),
-  GEMINI_MODEL: z.string().default('gemini-1.5-flash'),
+  GEMINI_API_KEY: z.string().optional().default(''),
+  GEMINI_MODEL: z.string().default('gemini-3.5-flash-lite'),
 
   // Telegram
   TELEGRAM_BOT_TOKEN: z.string().optional().default(''),

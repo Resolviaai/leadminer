@@ -40,7 +40,8 @@ export class GeminiPersonalizerService {
     }
 
     try {
-      const model = this.genAI.getGenerativeModel({ model: env.GEMINI_MODEL || 'gemini-2.0-flash' });
+      const modelName = process.env.GEMINI_MODEL || env.GEMINI_MODEL;
+      const model = this.genAI.getGenerativeModel({ model: modelName });
 
       const prompt = `
 You are an expert outreach copywriter for a video editing agency.
