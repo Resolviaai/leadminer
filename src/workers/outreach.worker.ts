@@ -7,9 +7,37 @@ import { geminiService } from '../services/ai/gemini.service';
 import { gmailSendingService } from '../services/outreach/gmail.service';
 import { jobRunner } from '../services/jobs/job.runner';
 
-export async function runOutreachBatch(batchLimit = 10): Promise<{ sent: number; skipped: number; errors: number }> {
+export async function runOutreachBatch(batchLimit?: number): Promise<{ sent: number; skipped: number; errors: number }> {
+  // Dynamically calculate capacity based on active connected accounts if batchLimit not explicitly provided
+  let effectiveBatchLimit = batchLimit;
+  if (!effectiveBatchLimit) {
+    try {
+      const activeAccounts = await db
+        .select({
+          id: gmailAccounts.id,
+          dailyLimit: gmailAccounts.dailyLimit,
+          sentToday: gmailAccounts.sentToday,
+        })
+        .from(gmailAccounts)
+        .where(eq(gmailAccounts.status, 'ACTIVE'));
+
+      if (activeAccounts.length > 0) {
+        const totalRemaining = activeAccounts.reduce((sum, acc) => {
+          const limit = acc.dailyLimit || 25;
+          const sent = acc.sentToday || 0;
+          return sum + Math.max(0, limit - sent);
+        }, 0);
+        effectiveBatchLimit = Math.max(totalRemaining, 25);
+      } else {
+        effectiveBatchLimit = 25;
+      }
+    } catch {
+      effectiveBatchLimit = 25;
+    }
+  }
+
   console.log(`\n======================================================`);
-  console.log(`✉️ Starting Cold Outreach Sending Worker (limit=${batchLimit})`);
+  console.log(`✉️ Starting Cold Outreach Sending Worker (limit=${effectiveBatchLimit})`);
   console.log(`======================================================\n`);
 
   // 1. Mandatory Kill Switch Check
@@ -23,7 +51,7 @@ export async function runOutreachBatch(batchLimit = 10): Promise<{ sent: number;
   await jobRunner.recoverStaleJobsAndKeywords(env.WORKER_STALE_TIMEOUT_MINUTES);
   await jobRunner.recoverStaleOutreachLeads(env.WORKER_STALE_TIMEOUT_MINUTES);
 
-  const jobId = await jobRunner.createJob('CAMPAIGN_SEND', { batchLimit });
+  const jobId = await jobRunner.createJob('CAMPAIGN_SEND', { batchLimit: effectiveBatchLimit });
 
   try {
     // 2. Fetch Active Campaigns (or fall back to first campaign in draft for testing if none active)
@@ -79,7 +107,7 @@ export async function runOutreachBatch(batchLimit = 10): Promise<{ sent: number;
           isNotNull(contacts.email)
         )
       )
-      .limit(batchLimit);
+      .limit(effectiveBatchLimit);
 
     if (candidateLeads.length === 0) {
       console.log('ℹ️ No qualified leads ready for outreach at this time.');

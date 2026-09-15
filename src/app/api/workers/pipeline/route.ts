@@ -20,10 +20,10 @@ async function executePipeline() {
     results.replies = { error: err.message };
   }
 
-  // 2. Discover new YouTube channels using keyword queue (quota safe)
+  // 2. Discover new YouTube channels using keyword queue (quota safe: 15 searches / 100 daily limit, ~5 general units / 10,000)
   try {
-    console.log('[Pipeline] Step 2/4: Running channel discovery batch...');
-    results.discovery = await runDiscoveryBatch(10);
+    console.log('[Pipeline] Step 2/4: Running channel discovery batch (15 keywords)...');
+    results.discovery = await runDiscoveryBatch(15);
   } catch (err: any) {
     console.error('[Pipeline] Error in discovery step:', err);
     results.discovery = { error: err.message };
@@ -31,17 +31,17 @@ async function executePipeline() {
 
   // 3. Verify extracted contact emails
   try {
-    console.log('[Pipeline] Step 3/4: Running email verification batch...');
-    results.verification = await runVerificationBatch(25);
+    console.log('[Pipeline] Step 3/4: Running email verification batch (up to 50 contacts)...');
+    results.verification = await runVerificationBatch(50);
   } catch (err: any) {
     console.error('[Pipeline] Error in verification step:', err);
     results.verification = { error: err.message };
   }
 
-  // 4. Dispatch outreach to verified and qualified leads
+  // 4. Dispatch outreach to verified and qualified leads (dynamically scaled across all active accounts)
   try {
-    console.log('[Pipeline] Step 4/4: Running personalized outreach batch...');
-    results.outreach = await runOutreachBatch(10);
+    console.log('[Pipeline] Step 4/4: Running personalized outreach batch (dynamic account capacity)...');
+    results.outreach = await runOutreachBatch();
   } catch (err: any) {
     console.error('[Pipeline] Error in outreach step:', err);
     results.outreach = { error: err.message };
