@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/workers/discovery",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/workers/verification",
+      "schedule": "15 8 * * *"
+    },
+    {
+      "path": "/api/workers/outreach",
+      "schedule": "30 8 * * *"
+    }
+  ]
+}
