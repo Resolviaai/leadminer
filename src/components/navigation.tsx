@@ -63,9 +63,7 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
         {/* Brand Header with exact h-14 to align with topbar */}
         <div className="h-14 px-4 border-b border-border flex items-center justify-between shrink-0">
           <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs tracking-wider">
-              LM
-            </div>
+            <img src="/favicon.svg" alt="LeadMiner Logo" className="w-8 h-8 rounded-lg shrink-0 shadow-sm" />
             <div>
               <span className="font-semibold text-sm tracking-tight text-text-main block">LeadMiner</span>
               <span className="text-[11px] text-text-muted block -mt-0.5">YouTube Outreach</span>
@@ -116,9 +114,7 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
       {/* ==================================================== */}
       <header className="md:hidden sticky top-0 z-40 h-14 bg-surface-100/90 backdrop-blur-md border-b border-border px-4 flex items-center justify-between">
         <Link href="/" className="flex items-center space-x-2.5">
-          <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs">
-            LM
-          </div>
+          <img src="/favicon.svg" alt="LeadMiner Logo" className="w-7 h-7 rounded-lg shrink-0" />
           <span className="font-semibold text-sm text-text-main tracking-tight">LeadMiner</span>
         </Link>
 

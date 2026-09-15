@@ -12,6 +12,13 @@ export const metadata = {
   title: 'LeadMiner | YouTube Outreach Platform',
   description: 'Autonomous, incremental YouTube lead-generation & cold outreach engine',
   manifest: '/manifest.json',
+  icons: {
+    icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+    ],
+    apple: '/icon-192.png',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',

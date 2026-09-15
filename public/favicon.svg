@@ -1,0 +1,29 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="lm-grad-main" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFA463" />
+      <stop offset="100%" stop-color="#BD521E" />
+    </linearGradient>
+    <linearGradient id="lm-grad-accent" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FFBD8A" />
+      <stop offset="100%" stop-color="#E26628" />
+    </linearGradient>
+    <linearGradient id="lm-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#16181E" />
+      <stop offset="100%" stop-color="#0A0B0E" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Outer container with refined border -->
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#lm-bg)" stroke="#4A2A1A" stroke-width="2"/>
+  
+  <!-- Iconic Mining Crystal / Lead Discovery Hex-Prism -->
+  <!-- Top facet -->
+  <path d="M32 11 L49 24 L32 33 L15 24 Z" fill="url(#lm-grad-accent)" />
+  <!-- Left facet -->
+  <path d="M15 24 L32 33 L32 53 L15 39 Z" fill="url(#lm-grad-main)" opacity="0.8" />
+  <!-- Right facet -->
+  <path d="M49 24 L32 33 L32 53 L49 39 Z" fill="url(#lm-grad-accent)" />
+  <!-- Center beacon core -->
+  <path d="M32 21 L39 28 L32 37 L25 28 Z" fill="#FFF4EC" opacity="0.95" />
+</svg>
