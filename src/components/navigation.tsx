@@ -19,6 +19,7 @@ import {
   Menu,
   X,
   Zap,
+  Send,
 } from 'lucide-react';
 
 const mainNavItems = [
@@ -31,6 +32,7 @@ const mainNavItems = [
 const secondaryNavItems = [
   { name: 'Templates', href: '/templates', icon: FileText },
   { name: 'Gmail Accounts', href: '/gmail', icon: Mail },
+  { name: 'Sent', href: '/sent', icon: Send },
   { name: 'Replies', href: '/replies', icon: Inbox },
   { name: 'Jobs', href: '/jobs', icon: Activity },
   { name: 'Logs', href: '/logs', icon: Terminal },
