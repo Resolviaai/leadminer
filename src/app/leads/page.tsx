@@ -6,6 +6,7 @@ import { Users, Play } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LeadsInfiniteList } from "@/components/leads/LeadsInfiniteList";
+import { RunVerificationButton } from "@/components/leads/RunVerificationButton";
 
 export const revalidate = 5;
 
@@ -39,11 +40,19 @@ async function getData() {
           total: sql<number>`count(*)::int`,
           qualified: sql<number>`count(*) filter (where qualification_status = 'QUALIFIED')::int`,
           contacted: sql<number>`count(*) filter (where outreach_status = 'CONTACTED')::int`,
+          unreviewed: sql<number>`count(*) filter (where qualification_status = 'UNQUALIFIED')::int`,
+          suppressed: sql<number>`count(*) filter (where suppression_status = true or qualification_status = 'DISQUALIFIED')::int`,
         })
         .from(leads),
     ]);
 
-    const counts = countResult?.[0] || { total: 0, qualified: 0, contacted: 0 };
+    const counts = countResult?.[0] || {
+      total: 0,
+      qualified: 0,
+      contacted: 0,
+      unreviewed: 0,
+      suppressed: 0,
+    };
     const total = counts.total;
 
     if (leadRows.length === 0) {
@@ -108,7 +117,11 @@ async function getData() {
     return { list, total, counts };
   } catch (err) {
     console.error("[LeadsPage Error]", err);
-    return { list: [], total: 0, counts: { total: 0, qualified: 0, contacted: 0 } };
+    return {
+      list: [],
+      total: 0,
+      counts: { total: 0, qualified: 0, contacted: 0, unreviewed: 0, suppressed: 0 },
+    };
   }
 }
 
@@ -130,26 +143,29 @@ export default async function LeadsPage() {
           </p>
         </div>
 
-        <form action="/api/workers/verification" method="POST">
-          <Button size="sm" variant="default" className="gap-1.5 w-full sm:w-auto h-8 sm:h-8.5 text-xs">
-            <Play className="w-3 h-3 fill-current" />
-            <span>Verify Pending Emails</span>
-          </Button>
-        </form>
+        <RunVerificationButton />
       </Card>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 shrink-0">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 shrink-0">
         <Card className="p-2 sm:px-3 sm:py-2">
-          <span className="text-[10px] text-text-muted block font-medium">Total Discovered Leads</span>
+          <span className="text-[10px] text-text-muted block font-medium">Total</span>
           <span className="text-base font-bold text-text-main font-mono tabular-nums">{total.toLocaleString()}</span>
         </Card>
         <Card className="p-2 sm:px-3 sm:py-2">
-          <span className="text-[10px] text-primary block font-medium">Qualified for Outreach</span>
+          <span className="text-[10px] text-primary block font-medium">Qualified</span>
           <span className="text-base font-bold text-primary font-mono tabular-nums">{counts.qualified.toLocaleString()}</span>
         </Card>
-        <Card className="p-2 sm:px-3 sm:py-2 col-span-2 sm:col-span-1">
-          <span className="text-[10px] text-warning block font-medium">Already Contacted</span>
+        <Card className="p-2 sm:px-3 sm:py-2">
+          <span className="text-[10px] text-warning block font-medium">Contacted</span>
           <span className="text-base font-bold text-warning font-mono tabular-nums">{counts.contacted.toLocaleString()}</span>
+        </Card>
+        <Card className="p-2 sm:px-3 sm:py-2">
+          <span className="text-[10px] text-text-muted block font-medium">Pending Review</span>
+          <span className="text-base font-bold text-text-muted font-mono tabular-nums">{counts.unreviewed.toLocaleString()}</span>
+        </Card>
+        <Card className="p-2 sm:px-3 sm:py-2 col-span-2 sm:col-span-1">
+          <span className="text-[10px] text-danger block font-medium">Suppressed</span>
+          <span className="text-base font-bold text-danger font-mono tabular-nums">{counts.suppressed.toLocaleString()}</span>
         </Card>
       </div>
 

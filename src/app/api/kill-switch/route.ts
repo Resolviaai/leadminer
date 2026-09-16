@@ -4,6 +4,21 @@ import { systemSettings } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { verifyWorkerAuth } from '@/lib/worker-auth';
 
+export async function GET() {
+  try {
+    const record = await db
+      .select()
+      .from(systemSettings)
+      .where(eq(systemSettings.key, 'kill_switch'))
+      .limit(1);
+
+    const enabled = record.length > 0 && record[0].value ? Boolean((record[0].value as any).enabled) : false;
+    return NextResponse.json({ success: true, enabled });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, enabled: false, error: error.message }, { status: 500 });
+  }
+}
+
 export async function POST(req: NextRequest) {
   const auth = verifyWorkerAuth(req);
   if (!auth.authorized) {
@@ -15,7 +30,9 @@ export async function POST(req: NextRequest) {
 
     // Handle form data or json
     const contentType = req.headers.get('content-type') || '';
-    if (contentType.includes('application/x-www-form-urlencoded')) {
+    const isJson = contentType.includes('application/json');
+
+    if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
       const formData = await req.formData();
       enabled = formData.get('enabled') === 'true';
     } else {
@@ -39,6 +56,10 @@ export async function POST(req: NextRequest) {
       });
 
     console.log(`[Kill Switch] Outreach kill switch set to: ${enabled ? 'ARMED / ACTIVE' : 'DISARMED'}`);
+
+    if (isJson || req.headers.get('accept')?.includes('application/json')) {
+      return NextResponse.json({ success: true, enabled });
+    }
 
     return NextResponse.redirect(new URL('/settings', req.url), { status: 303 });
   } catch (error: any) {

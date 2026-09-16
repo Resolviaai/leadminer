@@ -6,6 +6,7 @@ import { Layers, Play } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { KeywordsInfiniteList } from "@/components/keywords/KeywordsInfiniteList";
+import { RunDiscoveryButton } from "@/components/keywords/RunDiscoveryButton";
 
 export const revalidate = 5;
 
@@ -63,12 +64,7 @@ export default async function KeywordsPage() {
             {counts.total.toLocaleString()} search queries configured for autonomous discovery
           </p>
         </div>
-        <form action="/api/workers/discovery" method="POST">
-          <Button size="sm" variant="default" className="gap-1.5 w-full sm:w-auto h-8 sm:h-8.5 text-xs">
-            <Play className="w-3 h-3 fill-current" />
-            <span>Find Creators Now</span>
-          </Button>
-        </form>
+        <RunDiscoveryButton />
       </Card>
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 shrink-0">

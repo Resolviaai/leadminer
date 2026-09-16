@@ -21,6 +21,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .set({ status: nextStatus, updatedAt: new Date() })
       .where(eq(campaigns.id, campaignId));
 
+    if (
+      req.headers.get('accept')?.includes('application/json') ||
+      req.headers.get('content-type')?.includes('application/json')
+    ) {
+      return NextResponse.json({ success: true, status: nextStatus });
+    }
+
     return NextResponse.redirect(new URL('/campaigns', req.url), { status: 303 });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

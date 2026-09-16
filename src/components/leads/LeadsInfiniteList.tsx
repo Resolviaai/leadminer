@@ -809,28 +809,24 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
 
                     {/* Channel Column */}
                     <TableCell>
-                      <div className="space-y-0.5 max-w-[200px]">
-                        <div className="flex items-center space-x-1.5">
-                          <span className="font-medium text-text-main truncate" title={lead.channelTitle}>
-                            {lead.channelTitle}
-                          </span>
-                          {lead.country && (
-                            <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 uppercase font-mono text-text-muted shrink-0">
-                              {lead.country}
-                            </Badge>
-                          )}
-                          <a
-                            href={lead.channelUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-text-muted hover:text-text-main shrink-0"
-                          >
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
-                        </div>
-                        <span className="text-[11px] text-text-muted block truncate">
-                          kw: {lead.sourceKeyword || "—"}
+                      <div className="flex items-center space-x-1.5 max-w-[220px]">
+                        <span className="font-medium text-text-main truncate" title={`${lead.channelTitle} (${lead.sourceKeyword ? `kw: ${lead.sourceKeyword}` : 'autonomous'})`}>
+                          {lead.channelTitle}
                         </span>
+                        {lead.country && (
+                          <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 uppercase font-mono text-text-muted shrink-0">
+                            {lead.country}
+                          </Badge>
+                        )}
+                        <a
+                          href={lead.channelUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-text-muted hover:text-text-main shrink-0"
+                          title={`Open ${lead.channelTitle} on YouTube`}
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
                       </div>
                     </TableCell>
 
@@ -841,54 +837,50 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
 
                     {/* Discovered Contacts Column */}
                     <TableCell>
-                      <div className="space-y-1 max-w-[260px]">
-                        {/* Email or Reprocess trigger */}
-                        <div className="flex items-center space-x-1.5">
-                          {lead.email ? (
-                            <span className="font-mono text-text-main text-[11px] truncate" title={lead.email}>
-                              {lead.email}
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleReprocess(lead.id)}
-                              disabled={actionLoadingId === lead.id}
-                              className="text-[11px] text-primary hover:underline font-medium inline-flex items-center gap-1 cursor-pointer bg-primary/10 px-2 py-0.5 rounded"
-                            >
-                              <RefreshCw className={`w-3 h-3 ${actionLoadingId === lead.id ? "animate-spin" : ""}`} />
-                              <span>No email found yet → Reprocess</span>
-                            </button>
-                          )}
-                        </div>
+                      <div className="flex items-center space-x-2 max-w-[260px]">
+                        {lead.email ? (
+                          <span className="font-mono text-text-main text-[11px] truncate" title={lead.email}>
+                            {lead.email}
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleReprocess(lead.id)}
+                            disabled={actionLoadingId === lead.id}
+                            className="text-[11px] text-primary hover:underline font-medium inline-flex items-center gap-1 cursor-pointer bg-primary/10 px-1.5 py-0.5 rounded shrink-0"
+                            title="No email found yet — tap to reprocess website & contact info"
+                          >
+                            <RefreshCw className={`w-2.5 h-2.5 ${actionLoadingId === lead.id ? "animate-spin" : ""}`} />
+                            <span>No email yet → Reprocess</span>
+                          </button>
+                        )}
 
-                        {/* Website & Phone badges */}
-                        <div className="flex items-center gap-2 flex-wrap text-[10px]">
-                          {(lead.website || lead.contactPageUrl) && (
-                            <a
-                              href={lead.contactPageUrl || lead.website || "#"}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 text-text-secondary hover:text-primary transition-colors truncate max-w-[120px]"
-                              title={lead.contactPageUrl || lead.website || ""}
-                            >
-                              <Globe className="w-3 h-3 shrink-0" />
-                              <span className="truncate">{lead.contactPageUrl ? "Contact Page" : "Website"}</span>
-                            </a>
-                          )}
+                        {(lead.website || lead.contactPageUrl) && (
+                          <a
+                            href={lead.contactPageUrl || lead.website || "#"}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-text-secondary hover:text-primary transition-colors shrink-0"
+                            title={lead.contactPageUrl ? `Contact Page: ${lead.contactPageUrl}` : `Website: ${lead.website}`}
+                          >
+                            <Globe className="w-3 h-3" />
+                          </a>
+                        )}
 
-                          {lead.phone && (
-                            <span className="inline-flex items-center gap-1 font-mono text-text-muted" title={lead.phone}>
-                              <Phone className="w-2.5 h-2.5 shrink-0" />
-                              <span>{lead.phone}</span>
-                            </span>
-                          )}
+                        {lead.phone && (
+                          <span className="text-text-muted shrink-0" title={`Phone: ${lead.phone}`}>
+                            <Phone className="w-2.5 h-2.5" />
+                          </span>
+                        )}
 
-                          {lead.socialLinks && lead.socialLinks.length > 0 && (
-                            <span className="text-[9px] px-1 py-0.2 rounded bg-surface-200 text-text-muted border border-border/50">
-                              {lead.socialLinks.length} social{lead.socialLinks.length > 1 ? "s" : ""}
-                            </span>
-                          )}
-                        </div>
+                        {lead.socialLinks && lead.socialLinks.length > 0 && (
+                          <span
+                            className="text-[9px] px-1 py-0.2 rounded bg-surface-200 text-text-muted border border-border/50 shrink-0 font-mono"
+                            title={lead.socialLinks.map((s) => `${s.type}: ${s.value}`).join(", ")}
+                          >
+                            {lead.socialLinks.length}s
+                          </span>
+                        )}
                       </div>
                     </TableCell>
 

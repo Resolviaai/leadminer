@@ -19,6 +19,7 @@ import { runHealthCheck } from '../../scripts/healthcheck';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { KillSwitchCard } from '@/components/settings/KillSwitchCard';
 
 export const revalidate = 5;
 
@@ -61,29 +62,7 @@ export default async function SettingsPage() {
       </Card>
 
       {/* Emergency Kill Switch Banner */}
-      <Card className="p-5 sm:p-6 bg-surface-100 border-danger/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center space-x-2 text-danger font-semibold text-sm">
-            <ShieldAlert className="w-5 h-5 shrink-0" />
-            <span>EMERGENCY PAUSE (STOP ALL EMAILS)</span>
-          </div>
-          <p className="text-xs text-text-secondary max-w-2xl leading-relaxed">
-            When paused, all outbound emails are stopped immediately.
-            Finding channels and verifying emails will continue safely in the background.
-          </p>
-        </div>
-
-        <form action="/api/kill-switch" method="POST">
-          <input type="hidden" name="enabled" value={isKillSwitchActive ? 'false' : 'true'} />
-          <Button
-            type="submit"
-            variant={isKillSwitchActive ? 'default' : 'destructive'}
-            className="w-full sm:w-auto h-12 px-6 text-xs font-semibold tracking-wide active:scale-[0.98] transition-all"
-          >
-            {isKillSwitchActive ? 'RESUME SENDING EMAILS' : 'STOP ALL OUTREACH'}
-          </Button>
-        </form>
-      </Card>
+      <KillSwitchCard initialActive={isKillSwitchActive} />
 
       {/* System Health Diagnostics */}
       <Card className="p-4 sm:p-5 space-y-4">

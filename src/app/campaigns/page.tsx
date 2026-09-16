@@ -6,6 +6,8 @@ import { Target, Sparkles, Play, Pause, Send } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { CampaignToggleButton } from '@/components/campaigns/CampaignToggleButton';
+import { RunOutreachButton } from '@/components/campaigns/RunOutreachButton';
 
 export const revalidate = 5;
 
@@ -51,12 +53,7 @@ export default async function CampaignsPage() {
           </p>
         </div>
 
-        <form action="/api/workers/outreach" method="POST">
-          <Button size="sm" variant="default" className="gap-1.5 w-full sm:w-auto">
-            <Send className="w-3.5 h-3.5 fill-current" />
-            <span>Send Emails Now</span>
-          </Button>
-        </form>
+        <RunOutreachButton />
       </Card>
 
       {/* Campaigns Grid */}
@@ -107,21 +104,7 @@ export default async function CampaignsPage() {
 
               <CardFooter className="pt-2 border-t border-border/60 flex items-center justify-between">
                 <span className="text-[11px] text-text-muted font-mono">ID: {camp.id}</span>
-                <form action={`/api/campaigns/${camp.id}/toggle`} method="POST">
-                  <Button size="sm" variant="outline" className="gap-1.5 h-8">
-                    {camp.status === 'ACTIVE' ? (
-                      <>
-                        <Pause className="w-3 h-3 text-warning" />
-                        <span>Pause</span>
-                      </>
-                    ) : (
-                      <>
-                        <Play className="w-3 h-3 text-primary" />
-                        <span>Activate</span>
-                      </>
-                    )}
-                  </Button>
-                </form>
+                <CampaignToggleButton campaignId={camp.id} initialStatus={camp.status} />
               </CardFooter>
             </Card>
           ))
