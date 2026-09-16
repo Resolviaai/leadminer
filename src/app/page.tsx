@@ -111,51 +111,51 @@ export default async function OverviewPage() {
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto">
-      {/* Grid: 4 Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+      {/* Grid: 4 Metric Cards (2x2 on mobile, 4-col on desktop) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
         {/* Keywords */}
         <Card className="flex flex-col justify-between hover:border-primary/40 transition-colors">
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-xs font-medium text-text-secondary uppercase tracking-wider">
+          <CardHeader className="p-3 pb-1.5 sm:p-4 sm:pb-2 flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-[10px] sm:text-xs font-medium text-text-secondary uppercase tracking-wider truncate">
               Keyword Queue
             </CardTitle>
-            <Layers className="w-4 h-4 text-primary" />
+            <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary shrink-0 ml-1" />
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold text-text-main tracking-tight font-mono">
+          <CardContent className="p-3 pt-0 sm:p-4 sm:pt-0 space-y-2 sm:space-y-3">
+            <div className="flex items-baseline justify-between gap-1 flex-wrap">
+              <span className="text-lg sm:text-2xl font-bold text-text-main tracking-tight font-mono tabular-nums">
                 {stats.keywords.total.toLocaleString()}
               </span>
-              <span className="text-xs text-text-secondary font-mono">
+              <span className="text-[10px] sm:text-xs text-text-secondary font-mono tabular-nums">
                 {stats.keywords.completed.toLocaleString()} done
               </span>
             </div>
-            <Progress value={stats.keywords.completed} max={stats.keywords.total || 1} />
-            <div className="flex items-center justify-between text-[11px] text-text-muted pt-1">
+            <Progress value={stats.keywords.completed} max={stats.keywords.total || 1} className="h-1.5 sm:h-2" />
+            <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-text-muted pt-0.5">
               <span>Pending</span>
-              <span className="font-mono text-text-secondary">{stats.keywords.pending.toLocaleString()}</span>
+              <span className="font-mono tabular-nums text-text-secondary">{stats.keywords.pending.toLocaleString()}</span>
             </div>
           </CardContent>
         </Card>
 
         {/* Leads */}
         <Card className="flex flex-col justify-between hover:border-primary/40 transition-colors">
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-xs font-medium text-text-secondary uppercase tracking-wider">
+          <CardHeader className="p-3 pb-1.5 sm:p-4 sm:pb-2 flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-[10px] sm:text-xs font-medium text-text-secondary uppercase tracking-wider truncate">
               Discovered Leads
             </CardTitle>
-            <Users className="w-4 h-4 text-primary" />
+            <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary shrink-0 ml-1" />
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold text-text-main tracking-tight font-mono">
+          <CardContent className="p-3 pt-0 sm:p-4 sm:pt-0 space-y-2 sm:space-y-3">
+            <div className="flex items-baseline justify-between gap-1 flex-wrap">
+              <span className="text-lg sm:text-2xl font-bold text-text-main tracking-tight font-mono tabular-nums">
                 {stats.leads.total.toLocaleString()}
               </span>
-              <Badge variant="success" className="text-[10px]">
+              <Badge variant="success" className="text-[9px] sm:text-[10px] px-1 py-0 h-4">
                 {stats.leads.qualified} qualified
               </Badge>
             </div>
-            <div className="h-2 w-full rounded-full bg-surface-200 border border-border/40 overflow-hidden">
+            <div className="h-1.5 sm:h-2 w-full rounded-full bg-surface-200 border border-border/40 overflow-hidden">
               <div
                 className="h-full bg-primary rounded-full"
                 style={{
@@ -163,67 +163,67 @@ export default async function OverviewPage() {
                 }}
               />
             </div>
-            <div className="flex items-center justify-between text-[11px] text-text-muted pt-1">
+            <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-text-muted pt-0.5">
               <span>Verified emails</span>
-              <span className="font-mono text-text-main font-semibold">{stats.contacts.verified}</span>
+              <span className="font-mono tabular-nums text-text-main font-semibold">{stats.contacts.verified}</span>
             </div>
           </CardContent>
         </Card>
 
         {/* Outreach */}
         <Card className="flex flex-col justify-between hover:border-primary/40 transition-colors">
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-xs font-medium text-text-secondary uppercase tracking-wider">
+          <CardHeader className="p-3 pb-1.5 sm:p-4 sm:pb-2 flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-[10px] sm:text-xs font-medium text-text-secondary uppercase tracking-wider truncate">
               Outreach Sent
             </CardTitle>
-            <Send className="w-4 h-4 text-primary" />
+            <Send className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary shrink-0 ml-1" />
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold text-text-main tracking-tight font-mono">
+          <CardContent className="p-3 pt-0 sm:p-4 sm:pt-0 space-y-2 sm:space-y-3">
+            <div className="flex items-baseline justify-between gap-1 flex-wrap">
+              <span className="text-lg sm:text-2xl font-bold text-text-main tracking-tight font-mono tabular-nums">
                 {stats.outreach.sentTotal.toLocaleString()}
               </span>
-              <span className="text-xs text-primary font-mono font-medium">
+              <span className="text-[10px] sm:text-xs text-primary font-mono font-medium tabular-nums">
                 {stats.outreach.sentToday} today
               </span>
             </div>
-            <div className="h-2 w-full rounded-full bg-surface-200 border border-border/40 overflow-hidden">
+            <div className="h-1.5 sm:h-2 w-full rounded-full bg-surface-200 border border-border/40 overflow-hidden">
               <div
                 className="h-full bg-primary rounded-full"
                 style={{ width: `${Math.min(100, stats.outreach.sentTotal > 0 ? 100 : 0)}%` }}
               />
             </div>
-            <div className="flex items-center justify-between text-[11px] text-text-muted pt-1">
-              <span>Active campaigns</span>
-              <span className="font-mono text-text-secondary">{stats.campaigns.active}</span>
+            <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-text-muted pt-0.5">
+              <span>Active</span>
+              <span className="font-mono tabular-nums text-text-secondary">{stats.campaigns.active}</span>
             </div>
           </CardContent>
         </Card>
 
         {/* Replies */}
         <Card className="flex flex-col justify-between hover:border-primary/40 transition-colors">
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-xs font-medium text-text-secondary uppercase tracking-wider">
+          <CardHeader className="p-3 pb-1.5 sm:p-4 sm:pb-2 flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-[10px] sm:text-xs font-medium text-text-secondary uppercase tracking-wider truncate">
               Creator Replies
             </CardTitle>
-            <MessageSquare className="w-4 h-4 text-primary" />
+            <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary shrink-0 ml-1" />
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold text-text-main tracking-tight font-mono">
+          <CardContent className="p-3 pt-0 sm:p-4 sm:pt-0 space-y-2 sm:space-y-3">
+            <div className="flex items-baseline justify-between gap-1 flex-wrap">
+              <span className="text-lg sm:text-2xl font-bold text-text-main tracking-tight font-mono tabular-nums">
                 {stats.replies.totalReplies.toLocaleString()}
               </span>
-              <span className="text-xs text-warning font-mono font-medium">
+              <span className="text-[10px] sm:text-xs text-warning font-mono font-medium tabular-nums">
                 {replyRate}% rate
               </span>
             </div>
-            <div className="h-2 w-full rounded-full bg-surface-200 border border-border/40 overflow-hidden">
+            <div className="h-1.5 sm:h-2 w-full rounded-full bg-surface-200 border border-border/40 overflow-hidden">
               <div
                 className="h-full bg-warning rounded-full"
                 style={{ width: `${Math.min(100, parseFloat(replyRate) * 5)}%` }}
               />
             </div>
-            <div className="flex items-center justify-between text-[11px] text-text-muted pt-1">
+            <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-text-muted pt-0.5">
               <span>Status</span>
               <span className="font-mono text-primary font-medium">Monitoring</span>
             </div>
@@ -301,7 +301,7 @@ export default async function OverviewPage() {
             </div>
             <Link
               href="/settings"
-              className="text-xs text-primary hover:text-brand-hover font-medium flex items-center space-x-1"
+              className="text-xs text-primary hover:text-brand-hover font-semibold flex items-center space-x-1 min-h-[44px] min-w-[44px] px-2 -mr-2 justify-end active:scale-95 transition-transform"
             >
               <span>Manage</span>
               <ArrowUpRight className="w-3.5 h-3.5" />

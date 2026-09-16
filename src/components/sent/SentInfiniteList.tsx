@@ -206,23 +206,23 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
     return (
       <div className="space-y-4 max-w-5xl mx-auto">
         {/* Top Action Bar */}
-        <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-surface-100 border border-border">
+        <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-surface-100 border border-border flex-wrap">
           <button
             type="button"
             onClick={() => setActiveEmail(null)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-200 border border-border text-text-secondary hover:text-text-main hover:bg-surface-300 text-xs font-medium transition-all"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-surface-200 border border-border text-text-secondary hover:text-text-main hover:bg-surface-300 text-xs font-medium transition-all min-h-[40px] active:scale-95"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Back to Sent</span>
           </button>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {getStatusBadge(activeEmail.sendStatus)}
 
             <button
               type="button"
               onClick={() => handleCopyBody(activeEmail.body)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-200 border border-border text-text-muted hover:text-text-main text-xs font-medium transition-all"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-surface-200 border border-border text-text-muted hover:text-text-main text-xs font-medium transition-all min-h-[40px] active:scale-95"
             >
               {copied ? (
                 <>
@@ -242,7 +242,7 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
                 href={`https://mail.google.com/mail/u/0/#inbox/${activeEmail.threadId}`}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/25 text-primary hover:bg-primary/20 text-xs font-semibold transition-all"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary/10 border border-primary/25 text-primary hover:bg-primary/20 text-xs font-semibold transition-all min-h-[40px] active:scale-95"
               >
                 <span>Open in Gmail</span>
                 <ExternalLink className="w-3.5 h-3.5" />
@@ -367,7 +367,7 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
               type="button"
               onClick={handleToggleSelectAll}
               disabled={items.length === 0}
-              className={`p-1.5 rounded-md hover:bg-surface-200 transition-colors flex items-center gap-0.5 ${
+              className={`p-2 rounded-lg hover:bg-surface-200 transition-all min-h-[38px] min-w-[38px] flex items-center justify-center active:scale-95 ${
                 items.length === 0 ? "opacity-40 cursor-default" : "cursor-pointer text-text-muted hover:text-text-main"
               }`}
               title={isAllSelected ? "Deselect all" : "Select all on page"}
@@ -395,7 +395,7 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
               onClick={() => fetchPage(page, selectedAccountId, searchQuery)}
               title="Refresh outbox"
               disabled={loading}
-              className="p-1.5 rounded-md hover:bg-surface-200 text-text-muted hover:text-text-main transition-colors"
+              className="p-2 rounded-lg hover:bg-surface-200 text-text-muted hover:text-text-main transition-all min-h-[38px] min-w-[38px] flex items-center justify-center active:scale-95"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-primary" : ""}`} />
             </button>
@@ -407,7 +407,7 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
               <button
                 type="button"
                 onClick={() => setAccountDropdownOpen(!accountDropdownOpen)}
-                className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-surface-200/90 border border-border/80 hover:border-border text-xs text-text-main font-medium transition-all min-w-[210px]"
+                className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-surface-200/90 border border-border/80 hover:border-border text-xs text-text-main font-medium transition-all min-w-[210px] min-h-[38px] active:scale-[0.99]"
                 aria-haspopup="listbox"
                 aria-expanded={accountDropdownOpen}
               >
@@ -486,16 +486,16 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search recipient, channel, or subject..."
-                className="w-full bg-surface-200/80 border border-border/80 rounded-lg pl-8 pr-7 py-1.5 text-xs text-text-main focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-text-muted"
+                className="w-full bg-surface-200/80 border border-border/80 rounded-lg pl-8 pr-7 py-2 text-xs min-h-[38px] text-text-main focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-text-muted"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={handleClearSearch}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main p-1 rounded min-w-[28px] min-h-[28px] flex items-center justify-center"
                   title="Clear search"
                 >
-                  <X className="w-3 h-3" />
+                  <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </form>
@@ -506,14 +506,14 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
             <span className="px-1 text-[11px] sm:text-xs text-text-secondary">
               {rangeLabel}
             </span>
-            <div className="flex items-center gap-0.5">
+            <div className="flex items-center gap-1">
               <button
                 type="button"
                 onClick={() => fetchPage(page - 1)}
                 disabled={page <= 1 || loading}
-                className={`p-1.5 rounded-md transition-colors ${
+                className={`p-2 rounded-lg min-h-[38px] min-w-[38px] flex items-center justify-center transition-all ${
                   page > 1 && !loading
-                    ? "text-text-secondary hover:text-text-main hover:bg-surface-200 cursor-pointer"
+                    ? "text-text-secondary hover:text-text-main hover:bg-surface-200 cursor-pointer active:scale-95"
                     : "text-text-muted/30 cursor-default"
                 }`}
                 aria-label="Previous page"
@@ -525,9 +525,9 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
                 type="button"
                 onClick={() => fetchPage(page + 1)}
                 disabled={page >= totalPages || loading}
-                className={`p-1.5 rounded-md transition-colors ${
+                className={`p-2 rounded-lg min-h-[38px] min-w-[38px] flex items-center justify-center transition-all ${
                   page < totalPages && !loading
-                    ? "text-text-secondary hover:text-text-main hover:bg-surface-200 cursor-pointer"
+                    ? "text-text-secondary hover:text-text-main hover:bg-surface-200 cursor-pointer active:scale-95"
                     : "text-text-muted/30 cursor-default"
                 }`}
                 aria-label="Next page"
@@ -560,66 +560,109 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
               <div
                 key={m.id}
                 onClick={() => setActiveEmail(m)}
-                className={`group flex items-center gap-3 px-3.5 py-2.5 sm:py-3 cursor-pointer transition-colors text-xs select-none min-h-[44px] ${
+                className={`group cursor-pointer transition-colors text-xs select-none ${
                   isSelected ? "bg-primary/[0.08] hover:bg-primary/[0.12]" : "hover:bg-surface-200/70"
                 }`}
               >
-                {/* Checkbox button (Star completely removed as requested) */}
-                <div className="flex items-center shrink-0">
-                  <button
-                    type="button"
-                    onClick={(e) => handleToggleRow(m.id, e)}
-                    aria-label={isSelected ? "Deselect row" : "Select row"}
-                    className="p-1 -m-1 rounded hover:bg-surface-300/50 transition-colors"
-                  >
-                    {isSelected ? (
-                      <CheckSquare className="w-4 h-4 text-primary" />
-                    ) : (
-                      <Square className="w-4 h-4 text-text-muted/60 group-hover:text-text-secondary hover:text-text-main transition-colors" />
-                    )}
-                  </button>
-                </div>
+                {/* ── MOBILE 3-LINE VIEW (< md) ── */}
+                <div className="md:hidden p-3 space-y-1.5 min-h-[64px]">
+                  {/* Line 1: Checkbox + Recipient + Badge + Date */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <button
+                        type="button"
+                        onClick={(e) => handleToggleRow(m.id, e)}
+                        aria-label={isSelected ? "Deselect row" : "Select row"}
+                        className="p-1 -m-1 rounded hover:bg-surface-300/50 transition-colors shrink-0"
+                      >
+                        {isSelected ? (
+                          <CheckSquare className="w-4 h-4 text-primary" />
+                        ) : (
+                          <Square className="w-4 h-4 text-text-muted/60 hover:text-text-main transition-colors" />
+                        )}
+                      </button>
+                      <span className="font-semibold text-xs text-text-main truncate">
+                        {m.channelTitle || m.recipientEmail}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {getStatusBadge(m.sendStatus)}
+                      <span className="font-mono text-[10px] text-text-muted">
+                        {dateStr}
+                      </span>
+                    </div>
+                  </div>
 
-                {/* Recipient — clean single line, identical to Gmail */}
-                <div className="w-36 sm:w-44 md:w-52 shrink-0 truncate">
-                  <span className="font-medium text-text-main truncate block">
-                    To: {m.channelTitle || m.recipientEmail.split("@")[0]}
-                  </span>
-                </div>
-
-                {/* Subject & Preview snippet (Contiguous single line with truncation, identical to Gmail) */}
-                <div className="flex-1 min-w-0 flex items-center truncate">
-                  <span className="font-semibold text-text-main shrink-0">
+                  {/* Line 2: Subject */}
+                  <div className="pl-6 text-xs font-medium text-text-main truncate">
                     {m.subject}
-                  </span>
-                  <span className="text-text-muted mx-1.5 shrink-0">—</span>
-                  <span className="text-text-muted font-normal text-[11px] truncate">
+                  </div>
+
+                  {/* Line 3: Body snippet */}
+                  <div className="pl-6 text-[11px] text-text-muted line-clamp-1">
                     {bodySnippet}
-                  </span>
+                  </div>
                 </div>
 
-                {/* Status Badge */}
-                <div className="hidden sm:block shrink-0">
-                  {getStatusBadge(m.sendStatus)}
-                </div>
-
-                {/* Date & Hover actions */}
-                <div className="shrink-0 text-right min-w-[70px]">
-                  <span className="font-mono text-[11px] text-text-muted group-hover:hidden">
-                    {dateStr}
-                  </span>
-                  <div className="hidden group-hover:flex items-center justify-end gap-1">
+                {/* ── DESKTOP SINGLE-LINE GMAIL VIEW (md+) ── */}
+                <div className="hidden md:flex items-center gap-3 px-3.5 py-2.5 sm:py-3 min-h-[44px]">
+                  {/* Checkbox button */}
+                  <div className="flex items-center shrink-0">
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveEmail(m);
-                      }}
-                      title="View details"
-                      className="p-1 rounded bg-surface-300 hover:bg-surface-400 text-text-main transition-colors"
+                      onClick={(e) => handleToggleRow(m.id, e)}
+                      aria-label={isSelected ? "Deselect row" : "Select row"}
+                      className="p-1 -m-1 rounded hover:bg-surface-300/50 transition-colors"
                     >
-                      <ExternalLink className="w-3.5 h-3.5" />
+                      {isSelected ? (
+                        <CheckSquare className="w-4 h-4 text-primary" />
+                      ) : (
+                        <Square className="w-4 h-4 text-text-muted/60 group-hover:text-text-secondary hover:text-text-main transition-colors" />
+                      )}
                     </button>
+                  </div>
+
+                  {/* Recipient */}
+                  <div className="w-36 sm:w-44 md:w-52 shrink-0 truncate">
+                    <span className="font-medium text-text-main truncate block">
+                      To: {m.channelTitle || m.recipientEmail.split("@")[0]}
+                    </span>
+                  </div>
+
+                  {/* Subject & Preview snippet */}
+                  <div className="flex-1 min-w-0 flex items-center truncate">
+                    <span className="font-semibold text-text-main shrink-0">
+                      {m.subject}
+                    </span>
+                    <span className="text-text-muted mx-1.5 shrink-0">—</span>
+                    <span className="text-text-muted font-normal text-[11px] truncate">
+                      {bodySnippet}
+                    </span>
+                  </div>
+
+                  {/* Status Badge */}
+                  <div className="shrink-0">
+                    {getStatusBadge(m.sendStatus)}
+                  </div>
+
+                  {/* Date & Hover actions */}
+                  <div className="shrink-0 text-right min-w-[70px]">
+                    <span className="font-mono text-[11px] text-text-muted group-hover:hidden">
+                      {dateStr}
+                    </span>
+                    <div className="hidden group-hover:flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveEmail(m);
+                        }}
+                        title="View details"
+                        className="p-1 rounded bg-surface-300 hover:bg-surface-400 text-text-main transition-colors"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -112,10 +112,11 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
       </aside>
 
       {/* ==================================================== */}
+      {/* ==================================================== */}
       {/* 2. MOBILE TOP APP BAR (< md)                         */}
       {/* ==================================================== */}
-      <header className="md:hidden sticky top-0 z-40 h-14 bg-surface-100/90 backdrop-blur-md border-b border-border px-4 flex items-center justify-between">
-        <Link href="/" className="flex items-center space-x-2.5">
+      <header className="md:hidden sticky top-0 z-40 h-[calc(3.5rem+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)] bg-surface-100/90 backdrop-blur-md border-b border-border px-4 flex items-center justify-between">
+        <Link href="/" className="flex items-center space-x-2.5 min-h-[44px]">
           <img src="/favicon.svg" alt="LeadMiner Logo" className="w-7 h-7 rounded-lg shrink-0" />
           <span className="font-semibold text-sm text-text-main tracking-tight">LeadMiner</span>
         </Link>
@@ -137,7 +138,7 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
       {/* ==================================================== */}
       {/* 3. MOBILE BOTTOM NAVIGATION BAR (< md)               */}
       {/* ==================================================== */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 h-16 bg-surface-100/95 backdrop-blur-lg border-t border-border flex items-stretch justify-around px-1 pb-[env(safe-area-inset-bottom)]">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 h-[calc(4rem+env(safe-area-inset-bottom,0px))] bg-surface-100/95 backdrop-blur-lg border-t border-border flex items-center justify-around px-2 pb-[env(safe-area-inset-bottom,0px)] shadow-[0_-4px_20px_rgba(0,0,0,0.3)]">
         {mainNavItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
@@ -149,14 +150,20 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
               onClick={() => {
                 if (item.href !== pathname) setPendingPath(item.href);
               }}
-              className={`flex-1 flex flex-col items-center justify-center min-h-[44px] min-w-[44px] py-1 transition-all active:scale-95 ${
-                active ? 'text-primary' : 'text-text-muted hover:text-text-secondary'
-              }`}
+              className="flex-1 flex flex-col items-center justify-center min-h-[48px] min-w-[48px] py-1 transition-transform active:scale-95"
             >
-              <Icon className="w-5 h-5 mb-0.5" strokeWidth={active ? 2.2 : 1.75} />
-              <span className={`text-[10px] tracking-tight ${active ? 'font-semibold text-text-main' : 'font-normal'}`}>
-                {item.name}
-              </span>
+              <div
+                className={`flex flex-col items-center justify-center px-3 py-1 rounded-xl transition-all ${
+                  active
+                    ? 'bg-primary/15 text-primary'
+                    : 'text-text-muted hover:text-text-secondary'
+                }`}
+              >
+                <Icon className="w-5 h-5 mb-0.5" strokeWidth={active ? 2.2 : 1.75} />
+                <span className={`text-[10px] tracking-tight ${active ? 'font-semibold text-text-main' : 'font-normal'}`}>
+                  {item.name}
+                </span>
+              </div>
             </Link>
           );
         })}
@@ -165,15 +172,19 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
         <button
           type="button"
           onClick={() => setIsMobileMoreOpen(true)}
-          className={`flex-1 flex flex-col items-center justify-center min-h-[44px] min-w-[44px] py-1 transition-all active:scale-95 ${
-            isMobileMoreOpen || secondaryNavItems.some((s) => isActive(s.href))
-              ? 'text-primary'
-              : 'text-text-muted hover:text-text-secondary'
-          }`}
+          className="flex-1 flex flex-col items-center justify-center min-h-[48px] min-w-[48px] py-1 transition-transform active:scale-95"
           aria-label="More navigation options"
         >
-          <Menu className="w-5 h-5 mb-0.5" strokeWidth={1.75} />
-          <span className="text-[10px] tracking-tight font-normal">More</span>
+          <div
+            className={`flex flex-col items-center justify-center px-3 py-1 rounded-xl transition-all ${
+              isMobileMoreOpen || secondaryNavItems.some((s) => isActive(s.href))
+                ? 'bg-primary/15 text-primary'
+                : 'text-text-muted hover:text-text-secondary'
+            }`}
+          >
+            <Menu className="w-5 h-5 mb-0.5" strokeWidth={1.75} />
+            <span className="text-[10px] tracking-tight font-normal">More</span>
+          </div>
         </button>
       </nav>
 
@@ -189,7 +200,7 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
           />
 
           {/* Sheet Container */}
-          <div className="relative bg-surface-100 border-t border-border rounded-t-2xl p-5 shadow-2xl max-h-[80vh] overflow-y-auto">
+          <div className="relative bg-surface-100 border-t border-border rounded-t-2xl p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] shadow-2xl max-h-[85vh] overflow-y-auto">
             {/* Grab handle */}
             <div className="w-12 h-1 bg-border rounded-full mx-auto mb-4" />
 
@@ -198,7 +209,7 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
               <button
                 type="button"
                 onClick={() => setIsMobileMoreOpen(false)}
-                className="p-1.5 rounded-lg text-text-muted hover:text-text-main bg-surface-200 min-w-[36px] min-h-[36px] flex items-center justify-center"
+                className="p-1.5 rounded-lg text-text-muted hover:text-text-main bg-surface-200 min-w-[40px] min-h-[40px] flex items-center justify-center active:scale-95"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -239,7 +250,7 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
               <Link
                 href="/settings"
                 onClick={() => setIsMobileMoreOpen(false)}
-                className="px-3 py-1.5 rounded-md bg-destructive/15 border border-destructive/30 text-danger text-xs font-semibold hover:bg-destructive/25 transition-colors"
+                className="px-3.5 py-2 rounded-lg bg-destructive/15 border border-destructive/30 text-danger text-xs font-semibold hover:bg-destructive/25 min-h-[38px] flex items-center transition-colors active:scale-95"
               >
                 Manage
               </Link>

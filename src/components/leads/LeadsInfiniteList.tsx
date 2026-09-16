@@ -179,8 +179,14 @@ export function LeadsInfiniteList({ initialData, total }: Props) {
                         {lead.country}
                       </Badge>
                     )}
-                    <a href={lead.channelUrl} target="_blank" rel="noreferrer" className="text-text-muted hover:text-text-main">
-                      <ExternalLink className="w-3 h-3" />
+                    <a
+                      href={lead.channelUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-text-muted hover:text-text-main p-1.5 -m-1 inline-flex items-center justify-center min-w-[32px] min-h-[32px] rounded hover:bg-surface-200 active:scale-95 transition-all"
+                      aria-label={`Open ${lead.channelTitle} on YouTube`}
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                   </div>
                   <span className="text-[11px] text-text-muted font-mono">
@@ -298,7 +304,7 @@ export function LeadsInfiniteList({ initialData, total }: Props) {
           <button
             type="button"
             onClick={() => loadMore()}
-            className="text-primary hover:underline font-medium cursor-pointer"
+            className="text-primary hover:underline font-medium cursor-pointer min-h-[44px] px-3 flex items-center active:scale-95 transition-transform"
           >
             Load 50 more ↓
           </button>

@@ -64,15 +64,19 @@ export function NotificationCenter() {
 
   // Close on outside click
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false);
       }
     };
     if (open) {
       document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("touchstart", handleClickOutside);
     }
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
   }, [open]);
 
   const unreadCount = notifications.filter(
@@ -146,12 +150,12 @@ export function NotificationCenter() {
           setOpen((v) => !v);
           if (!open) fetchNotifications();
         }}
-        className="relative p-2 rounded-lg text-text-secondary hover:text-text-main hover:bg-surface-200 transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
+        className="relative p-2.5 rounded-lg text-text-secondary hover:text-text-main hover:bg-surface-200 transition-all min-h-[44px] min-w-[44px] flex items-center justify-center active:scale-95"
         aria-label="System Notifications"
       >
         <Bell className="w-4 h-4" />
         {unreadCount > 0 && (
-          <span className="absolute top-1 right-1 flex h-2 w-2">
+          <span className="absolute top-1.5 right-1.5 flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
           </span>
@@ -160,7 +164,7 @@ export function NotificationCenter() {
 
       {/* ── Popover Panel ── */}
       {open && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-surface-100 border border-border rounded-xl shadow-2xl z-[100] overflow-hidden animate-in fade-in slide-in-from-top-2">
+        <div className="fixed inset-x-3 top-[calc(3.75rem+env(safe-area-inset-top,0px))] sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-96 bg-surface-100 border border-border rounded-2xl sm:rounded-xl shadow-2xl z-[100] overflow-hidden animate-in fade-in slide-in-from-top-2 max-h-[calc(100vh-6rem)] sm:max-h-[550px] flex flex-col">
           {/* Header */}
           <div className="p-3.5 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-2">

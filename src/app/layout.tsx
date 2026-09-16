@@ -7,7 +7,18 @@ import { TopProgressBar } from '../components/TopProgressBar';
 import { Radio } from 'lucide-react';
 import { env } from '../config/env';
 
-export const metadata = {
+import type { Metadata, Viewport } from 'next';
+
+export const viewport: Viewport = {
+  themeColor: '#161616',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover',
+};
+
+export const metadata: Metadata = {
   title: 'LeadMiner | YouTube Outreach Platform',
   description: 'Autonomous, incremental YouTube lead-generation & cold outreach engine',
   manifest: '/manifest.json',
@@ -66,7 +77,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </header>
 
           {/* Page Content with safe mobile padding */}
-          <main className="flex-1 p-3 sm:p-4 md:p-6 pb-24 md:pb-6 overflow-y-auto overflow-x-hidden">
+          <main className="flex-1 px-3.5 py-3 sm:p-4 md:p-6 pb-[calc(5.25rem+env(safe-area-inset-bottom,0px))] md:pb-6 overflow-y-auto overflow-x-hidden">
             {children}
           </main>
         </div>

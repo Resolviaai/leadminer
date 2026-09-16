@@ -473,13 +473,13 @@ export function TemplatesManager({
         </div>
       )}
 
-      {/* ── Sticky Bulk Action Bar (Visible when templates selected) ── */}
+      {/* ── Bulk Action Bar (Floating pill above bottom nav on mobile, top sticky on desktop) ── */}
       {multiSelectMode && (
-        <div className="sticky top-16 z-30 p-3 rounded-xl bg-surface-100/95 backdrop-blur border border-primary/30 shadow-xl flex items-center justify-between gap-3 flex-wrap animate-in fade-in slide-in-from-top-2">
-          <div className="flex items-center gap-3">
+        <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] inset-x-3 sm:static sm:inset-auto sm:top-16 z-30 p-3 rounded-2xl sm:rounded-xl bg-surface-100/95 backdrop-blur-md border border-primary/40 shadow-2xl flex items-center justify-between gap-2.5 flex-wrap animate-in fade-in slide-in-from-bottom-3 sm:slide-in-from-top-2">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={selectAll}
-              className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-text-main font-medium"
+              className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-text-main font-medium min-h-[38px] px-2 rounded-lg hover:bg-surface-200 active:scale-95 transition-all"
             >
               {selectedIds.size === initialTemplates.length ? (
                 <CheckSquare className="w-4 h-4 text-primary" />
@@ -500,11 +500,11 @@ export function TemplatesManager({
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <button
               onClick={() => handleBatchAction("activate")}
               disabled={selectedIds.size === 0 || batchLoading}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-surface-200 border border-border text-emerald-400 text-xs font-medium hover:bg-surface-300 disabled:opacity-40 transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-surface-200 border border-border text-emerald-400 text-xs font-medium hover:bg-surface-300 disabled:opacity-40 min-h-[38px] active:scale-95 transition-all"
             >
               <Power className="w-3.5 h-3.5" />
               <span>Activate</span>
@@ -513,7 +513,7 @@ export function TemplatesManager({
             <button
               onClick={() => handleBatchAction("deactivate")}
               disabled={selectedIds.size === 0 || batchLoading}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-surface-200 border border-border text-warning text-xs font-medium hover:bg-surface-300 disabled:opacity-40 transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-surface-200 border border-border text-warning text-xs font-medium hover:bg-surface-300 disabled:opacity-40 min-h-[38px] active:scale-95 transition-all"
             >
               <Power className="w-3.5 h-3.5" />
               <span>Deactivate</span>
@@ -522,7 +522,7 @@ export function TemplatesManager({
             <button
               onClick={() => handleBatchAction("delete")}
               disabled={selectedIds.size === 0 || batchLoading}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-destructive/15 border border-destructive/30 text-danger text-xs font-semibold hover:bg-destructive/25 disabled:opacity-40 transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-destructive/15 border border-destructive/30 text-danger text-xs font-semibold hover:bg-destructive/25 disabled:opacity-40 min-h-[38px] active:scale-95 transition-all"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Delete</span>

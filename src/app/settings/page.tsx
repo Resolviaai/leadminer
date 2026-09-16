@@ -78,7 +78,7 @@ export default async function SettingsPage() {
           <Button
             type="submit"
             variant={isKillSwitchActive ? 'default' : 'destructive'}
-            className="w-full sm:w-auto h-10 px-5 text-xs font-semibold"
+            className="w-full sm:w-auto h-12 px-6 text-xs font-semibold tracking-wide active:scale-[0.98] transition-all"
           >
             {isKillSwitchActive ? 'RESUME SENDING EMAILS' : 'STOP ALL OUTREACH'}
           </Button>

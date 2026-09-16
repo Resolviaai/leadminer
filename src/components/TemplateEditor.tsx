@@ -452,7 +452,7 @@ export function TemplateEditor({
           )}
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {!editing ? (
             <>
               {/* Toggle active state */}
@@ -462,7 +462,7 @@ export function TemplateEditor({
                   handleToggleActive();
                 }}
                 title={isActive ? "Deactivate template" : "Activate template"}
-                className={`p-1.5 rounded-md border text-xs transition-colors min-h-[34px] min-w-[34px] flex items-center justify-center ${
+                className={`p-2 rounded-lg border text-xs transition-all min-h-[38px] min-w-[38px] flex items-center justify-center active:scale-95 ${
                   isActive
                     ? "bg-surface-200 border-border text-text-secondary hover:text-warning"
                     : "bg-surface-200 border-border text-text-muted hover:text-emerald-400"
@@ -478,10 +478,10 @@ export function TemplateEditor({
                   setEditing(true);
                   setExpanded(true);
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary/10 border border-primary/25 text-primary text-xs font-medium hover:bg-primary/20 active:scale-95 transition-all min-h-[34px]"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/25 text-primary text-xs font-semibold hover:bg-primary/20 active:scale-95 transition-all min-h-[38px]"
               >
                 <Pencil className="w-3.5 h-3.5" />
-                Edit
+                <span>Edit</span>
               </button>
 
               {/* Delete button */}
@@ -492,13 +492,13 @@ export function TemplateEditor({
                     setConfirmDelete(true);
                   }}
                   title="Delete template"
-                  className="p-1.5 rounded-md bg-surface-200 border border-border text-text-muted hover:text-danger hover:bg-destructive/10 hover:border-destructive/30 transition-colors min-h-[34px] min-w-[34px] flex items-center justify-center"
+                  className="p-2 rounded-lg bg-surface-200 border border-border text-text-muted hover:text-danger hover:bg-destructive/10 hover:border-destructive/30 transition-all min-h-[38px] min-w-[38px] flex items-center justify-center active:scale-95"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               ) : (
                 <div
-                  className="flex items-center gap-1 bg-destructive/10 border border-destructive/30 rounded-md p-0.5"
+                  className="flex items-center gap-1 bg-destructive/10 border border-destructive/30 rounded-lg p-1"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
@@ -507,7 +507,7 @@ export function TemplateEditor({
                       handleDelete();
                     }}
                     disabled={deleting}
-                    className="px-2 py-1 text-[11px] font-semibold text-danger hover:bg-destructive/20 rounded transition-colors"
+                    className="px-2.5 py-1 text-xs font-semibold text-danger hover:bg-destructive/20 rounded min-h-[32px] transition-colors"
                   >
                     {deleting ? "Deleting…" : "Confirm Delete"}
                   </button>
@@ -516,9 +516,9 @@ export function TemplateEditor({
                       e.stopPropagation();
                       setConfirmDelete(false);
                     }}
-                    className="p-1 text-text-muted hover:text-text-main rounded"
+                    className="p-1 text-text-muted hover:text-text-main rounded min-h-[32px] min-w-[32px] flex items-center justify-center"
                   >
-                    <X className="w-3 h-3" />
+                    <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
               )}
@@ -529,10 +529,14 @@ export function TemplateEditor({
                   e.stopPropagation();
                   setExpanded((v) => !v);
                 }}
-                className="p-1.5 rounded-md bg-surface-200 border border-border text-text-muted hover:text-text-main transition-colors min-h-[34px] min-w-[34px] flex items-center justify-center"
-                aria-label={expanded ? "Collapse" : "Expand"}
+                className="p-2 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-200 transition-all min-h-[38px] min-w-[38px] flex items-center justify-center active:scale-95"
+                aria-label={expanded ? "Collapse template" : "Expand template"}
               >
-                {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                {expanded ? (
+                  <ChevronUp className="w-4 h-4" />
+                ) : (
+                  <ChevronDown className="w-4 h-4" />
+                )}
               </button>
             </>
           ) : (
