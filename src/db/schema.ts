@@ -97,6 +97,7 @@ export const accountStatusEnum = pgEnum('account_status', [
   'QUOTA_EXCEEDED',
   'AUTH_ERROR',
   'DISABLED',
+  'DISCONNECTED',
 ]);
 
 export const jobStatusEnum = pgEnum('job_status', [
