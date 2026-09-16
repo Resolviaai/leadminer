@@ -407,10 +407,10 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
   };
 
   return (
-    <div className="space-y-3.5 flex-1 min-h-0 flex flex-col">
+    <div className="space-y-2.5 flex-1 min-h-0 flex flex-col">
       {/* Top Filter Tabs & Search Bar (Pinned at top of list) */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 shrink-0">
-        {/* Filter Pills */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 shrink-0">
+        {/* Filter Tabs (Clean Rounded Corners) */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none no-scrollbar -mx-1 px-1">
           {[
             { key: "ALL", label: "All Leads" },
@@ -424,7 +424,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
               key={tab.key}
               type="button"
               onClick={() => handleTabChange(tab.key as FilterTab)}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap min-h-[38px] cursor-pointer active:scale-95 touch-manipulation ${
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap min-h-[34px] md:min-h-0 cursor-pointer active:scale-98 ${
                 activeTab === tab.key
                   ? "bg-primary text-primary-foreground font-semibold shadow-sm"
                   : "bg-surface-200 text-text-secondary hover:text-text-main hover:bg-surface-300"
@@ -437,19 +437,19 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
 
         {/* Search */}
         <div className="relative flex-1 md:w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted pointer-events-none" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
           <input
             type="text"
             placeholder="Search channels or emails..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-surface-100 border border-border rounded-lg pl-9 pr-8 py-2 text-xs sm:text-sm text-text-main placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary min-h-[42px]"
+            className="w-full bg-surface-100 border border-border rounded-md pl-8 pr-8 py-1.5 text-xs text-text-main placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary h-8.5"
           />
           {searchQuery && (
             <button
               type="button"
               onClick={() => setSearchQuery("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main p-1 cursor-pointer min-h-[32px] min-w-[32px] flex items-center justify-center"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main p-0.5 cursor-pointer flex items-center justify-center"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -748,7 +748,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
 
       {/* Desktop Table (Takes Remaining Screen Height and Scrolls Internally) */}
       <Card className="hidden md:flex flex-1 min-h-0 flex-col overflow-hidden border-border">
-        <div onScroll={handleContainerScroll} className="flex-1 min-h-0 overflow-y-auto overflow-x-auto relative pb-16">
+        <div onScroll={handleContainerScroll} className="flex-1 min-h-0 overflow-y-auto overflow-x-auto relative">
           <Table>
             <TableHeader className="sticky top-0 z-10 bg-surface-200 shadow-sm">
               <TableRow>

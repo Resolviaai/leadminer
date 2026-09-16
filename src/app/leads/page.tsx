@@ -116,40 +116,40 @@ export default async function LeadsPage() {
   const { list, total, counts } = await getData();
 
   return (
-    <div className="flex flex-col md:h-full flex-1 min-h-0 space-y-3.5 max-w-7xl mx-auto w-full md:overflow-hidden">
-      <Card className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-border shrink-0">
+    <div className="flex flex-col md:h-full flex-1 min-h-0 space-y-2.5 max-w-7xl mx-auto w-full md:overflow-hidden">
+      <Card className="p-3 sm:px-4 sm:py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-border shrink-0">
         <div>
           <div className="flex items-center space-x-2">
-            <Users className="w-5 h-5 text-primary" />
-            <h1 className="text-base sm:text-lg font-semibold text-text-main tracking-tight">
+            <Users className="w-4 h-4 text-primary" />
+            <h1 className="text-sm sm:text-base font-semibold text-text-main tracking-tight">
               Contact Discovery & Leads
             </h1>
           </div>
-          <p className="text-xs text-text-secondary mt-0.5">
+          <p className="text-[11px] text-text-secondary mt-0.5">
             {total.toLocaleString()} YouTube creators tracked across multi-channel discovery pipelines
           </p>
         </div>
 
         <form action="/api/workers/verification" method="POST">
-          <Button size="sm" variant="default" className="gap-1.5 w-full sm:w-auto min-h-[44px]">
-            <Play className="w-3.5 h-3.5 fill-current" />
+          <Button size="sm" variant="default" className="gap-1.5 w-full sm:w-auto h-8 sm:h-8.5 text-xs">
+            <Play className="w-3 h-3 fill-current" />
             <span>Verify Pending Emails</span>
           </Button>
         </form>
       </Card>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 shrink-0">
-        <Card className="p-3.5">
-          <span className="text-[11px] text-text-muted block font-medium">Total Discovered Leads</span>
-          <span className="text-lg font-bold text-text-main font-mono tabular-nums">{total.toLocaleString()}</span>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 shrink-0">
+        <Card className="p-2 sm:px-3 sm:py-2">
+          <span className="text-[10px] text-text-muted block font-medium">Total Discovered Leads</span>
+          <span className="text-base font-bold text-text-main font-mono tabular-nums">{total.toLocaleString()}</span>
         </Card>
-        <Card className="p-3.5">
-          <span className="text-[11px] text-primary block font-medium">Qualified for Outreach</span>
-          <span className="text-lg font-bold text-primary font-mono tabular-nums">{counts.qualified.toLocaleString()}</span>
+        <Card className="p-2 sm:px-3 sm:py-2">
+          <span className="text-[10px] text-primary block font-medium">Qualified for Outreach</span>
+          <span className="text-base font-bold text-primary font-mono tabular-nums">{counts.qualified.toLocaleString()}</span>
         </Card>
-        <Card className="p-3.5 col-span-2 sm:col-span-1">
-          <span className="text-[11px] text-warning block font-medium">Already Contacted</span>
-          <span className="text-lg font-bold text-warning font-mono tabular-nums">{counts.contacted.toLocaleString()}</span>
+        <Card className="p-2 sm:px-3 sm:py-2 col-span-2 sm:col-span-1">
+          <span className="text-[10px] text-warning block font-medium">Already Contacted</span>
+          <span className="text-base font-bold text-warning font-mono tabular-nums">{counts.contacted.toLocaleString()}</span>
         </Card>
       </div>
 
