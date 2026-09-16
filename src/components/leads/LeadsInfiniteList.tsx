@@ -424,7 +424,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
               key={tab.key}
               type="button"
               onClick={() => handleTabChange(tab.key as FilterTab)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap min-h-[34px] md:min-h-0 cursor-pointer active:scale-98 ${
+              className={`h-9 px-3 rounded-md text-xs font-medium transition-colors whitespace-nowrap inline-flex items-center justify-center cursor-pointer active:scale-[0.98] ${
                 activeTab === tab.key
                   ? "bg-primary text-primary-foreground font-semibold shadow-sm"
                   : "bg-surface-200 text-text-secondary hover:text-text-main hover:bg-surface-300"
@@ -443,7 +443,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
             placeholder="Search channels or emails..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-surface-100 border border-border rounded-md pl-8 pr-8 py-1.5 text-xs text-text-main placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary h-8.5"
+            className="w-full bg-surface-100 border border-border rounded-md pl-8 pr-8 text-xs text-text-main placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary h-9"
           />
           {searchQuery && (
             <button

@@ -352,7 +352,7 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
               key={tab}
               type="button"
               onClick={() => handleTabChange(tab)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap min-h-[34px] md:min-h-0 cursor-pointer active:scale-98 ${
+              className={`h-9 px-3 rounded-md text-xs font-medium transition-colors whitespace-nowrap inline-flex items-center justify-center cursor-pointer active:scale-[0.98] ${
                 activeTab === tab
                   ? "bg-primary text-primary-foreground font-semibold shadow-sm"
                   : "bg-surface-200 text-text-secondary hover:text-text-main hover:bg-surface-300"
@@ -372,7 +372,7 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
               placeholder="Filter keywords..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-surface-100 border border-border rounded-md pl-8 pr-8 py-1.5 text-xs text-text-main placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary h-8.5"
+              className="w-full bg-surface-100 border border-border rounded-md pl-8 pr-8 text-xs text-text-main placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary h-9"
             />
             {searchQuery && (
               <button
@@ -387,9 +387,8 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
 
           {/* Add Keyword Button */}
           <Button
-            size="sm"
             onClick={() => setShowAddModal(true)}
-            className="gap-1.5 h-8.5 px-3 text-xs shrink-0 active:scale-98"
+            className="gap-1.5 h-9 px-3.5 text-xs font-semibold shrink-0 active:scale-[0.98] shadow-sm cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add Keyword</span>

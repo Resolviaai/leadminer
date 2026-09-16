@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -44,11 +44,10 @@ export function RunVerificationButton() {
 
   return (
     <Button
-      size="sm"
       variant={status === 'error' ? 'destructive' : 'default'}
       onClick={handleClick}
       disabled={status === 'running'}
-      className="gap-1.5 w-full sm:w-auto h-8 sm:h-8.5 text-xs font-semibold active:scale-[0.98] transition-all cursor-pointer shadow-sm select-none"
+      className="gap-1.5 w-full sm:w-auto h-9 px-4 text-xs font-semibold active:scale-[0.98] transition-all cursor-pointer shadow-sm select-none"
     >
       {status === 'running' ? (
         <>
