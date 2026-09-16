@@ -5,6 +5,7 @@ import { env } from '../config/env';
 import { youtubeDiscoveryService } from '../services/youtube/discovery.service';
 import { emailExtractor } from '../services/extraction/email.extractor';
 import { socialExtractor } from '../services/extraction/social.extractor';
+import { websiteScraper } from '../services/extraction/website.scraper';
 import { jobRunner } from '../services/jobs/job.runner';
 
 export function calculatePriorityScore(newLeadsCount: number): number {
@@ -183,7 +184,30 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
             continue;
           }
 
-          // 10. Persist New Lead atomically with provenance and contacts inside a single transaction
+          // 10. Extract Contacts from description first
+          const extractedEmails = emailExtractor.extractEmails(ch.description || '');
+          const extractedSocials = socialExtractor.extractSocials(ch.description || '');
+
+          // If no email found in description, try lightweight internal website scraper
+          const targetScrapeUrl = ch.website || extractedSocials.website || extractedSocials.linktree || extractedSocials.beacons;
+          let scrapedResult: Awaited<ReturnType<typeof websiteScraper.scrapeUrl>> | null = null;
+          if (extractedEmails.length === 0 && targetScrapeUrl) {
+            try {
+              scrapedResult = await websiteScraper.scrapeUrl(targetScrapeUrl);
+              if (scrapedResult.emails.length > 0) {
+                for (const emailStr of scrapedResult.emails) {
+                  extractedEmails.push({ email: emailStr, source: 'links' });
+                }
+              }
+            } catch (scrapeErr: any) {
+              console.warn(`[Website Scraper] Error scraping ${targetScrapeUrl}:`, scrapeErr?.message);
+            }
+          }
+
+          const primaryPhone = scrapedResult?.phones[0] || extractedSocials.phone || null;
+          const contactPageUrl = scrapedResult?.contactPageUrl || null;
+
+          // 11. Persist New Lead atomically with provenance and contacts inside a single transaction
           await pool.transaction(async (tx) => {
             const [newLead] = await tx
               .insert(leads)
@@ -193,7 +217,7 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
                 channelTitle: ch.title,
                 customUrl: ch.customUrl,
                 description: ch.description,
-                website: ch.website,
+                website: ch.website || scrapedResult?.url || extractedSocials.website || null,
                 thumbnailUrl: ch.thumbnailUrl,
                 subscriberCount: ch.subscriberCount,
                 videoCount: ch.videoCount,
@@ -203,13 +227,15 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
                 qualificationStatus: 'UNQUALIFIED',
                 outreachStatus: 'UNPROCESSED',
                 country: ch.country || null,
+                phone: primaryPhone,
+                contactPageUrl: contactPageUrl,
                 rawPayload: ch.rawPayload,
               })
               .returning({ id: leads.id });
 
             const leadId = newLead.id;
 
-            // 11. Record Provenance in lead_keyword_sources
+            // 12. Record Provenance in lead_keyword_sources
             await tx
               .insert(leadKeywordSources)
               .values({
@@ -220,10 +246,7 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
               })
               .onConflictDoNothing();
 
-            // 12. Contact Extraction: Preserve ALL Discovered Emails and Links
-            const extractedEmails = emailExtractor.extractEmails(ch.description || '');
-            const extractedSocials = socialExtractor.extractSocials(ch.description || '');
-
+            // 13. Contact Extraction: Preserve ALL Discovered Emails and Links
             // Insert ALL discovered unique emails
             for (let i = 0; i < extractedEmails.length; i++) {
               const emailObj = extractedEmails[i];
@@ -246,9 +269,9 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
               kwEmailsFoundCount++;
             }
 
-            // Insert structured social/profile links (Linktree, Beacons, Instagram, Twitter, etc.)
+            // Insert structured social/profile links from description
             for (const item of extractedSocials.items) {
-              if (item.type === 'EMAIL') continue; // Handled above
+              if (item.type === 'EMAIL') continue;
 
               await tx
                 .insert(contacts)
@@ -266,6 +289,29 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
                   linkedin: item.type === 'LINKEDIN' ? item.value : undefined,
                 })
                 .onConflictDoNothing();
+            }
+
+            // Also insert any extra scraped items (e.g. phone, website subpages, extra socials)
+            if (scrapedResult?.rawItems) {
+              for (const item of scrapedResult.rawItems) {
+                if (item.type === 'EMAIL') continue;
+                await tx
+                  .insert(contacts)
+                  .values({
+                    leadId,
+                    contactType: item.type,
+                    value: item.value,
+                    normalizedValue: item.normalizedValue,
+                    source: item.source,
+                    isPrimary: false,
+                    instagram: item.type === 'INSTAGRAM' ? item.normalizedValue : undefined,
+                    twitter: item.type === 'TWITTER_X' ? item.normalizedValue : undefined,
+                    discord: item.type === 'DISCORD' ? item.value : undefined,
+                    tiktok: item.type === 'TIKTOK' ? item.normalizedValue : undefined,
+                    linkedin: item.type === 'LINKEDIN' ? item.value : undefined,
+                  })
+                  .onConflictDoNothing();
+              }
             }
           });
 

@@ -21,6 +21,10 @@ async function getData() {
           subscriberCount: leads.subscriberCount,
           qualificationStatus: leads.qualificationStatus,
           outreachStatus: leads.outreachStatus,
+          suppressionStatus: leads.suppressionStatus,
+          website: leads.website,
+          phone: leads.phone,
+          contactPageUrl: leads.contactPageUrl,
           country: leads.country,
           discoveredAt: leads.discoveredAt,
           sourceKeyword: keywords.keyword,
@@ -30,13 +34,20 @@ async function getData() {
         .leftJoin(keywords, eq(leads.sourceKeywordId, keywords.id))
         .orderBy(desc(leads.id))
         .limit(50),
-      db.select({ total: sql<number>`count(*)::int` }).from(leads),
+      db
+        .select({
+          total: sql<number>`count(*)::int`,
+          qualified: sql<number>`count(*) filter (where qualification_status = 'QUALIFIED')::int`,
+          contacted: sql<number>`count(*) filter (where outreach_status = 'CONTACTED')::int`,
+        })
+        .from(leads),
     ]);
 
-    const total = countResult?.[0]?.total ?? 0;
+    const counts = countResult?.[0] || { total: 0, qualified: 0, contacted: 0 };
+    const total = counts.total;
 
     if (leadRows.length === 0) {
-      return { list: [], total };
+      return { list: [], total, counts };
     }
 
     const leadIds = leadRows.map((l) => l.id);
@@ -46,6 +57,7 @@ async function getData() {
         leadId: contacts.leadId,
         contactType: contacts.contactType,
         value: contacts.value,
+        normalizedValue: contacts.normalizedValue,
         email: contacts.email,
         emailStatus: contacts.emailStatus,
         instagram: contacts.instagram,
@@ -66,39 +78,42 @@ async function getData() {
 
     const list = leadRows.map((l) => {
       const leadContacts = contactsByLead.get(l.id) || [];
-      const allEmailContacts = leadContacts.filter((c) => c.email);
+      const allEmailContacts = leadContacts.filter((c) => c.email || c.contactType === "EMAIL");
       const primaryEmailContact =
-        allEmailContacts.find((c) => c.contactType === "EMAIL") || allEmailContacts[0];
+        allEmailContacts.find((c) => c.contactType === "EMAIL" && c.email) || allEmailContacts[0];
       const additionalEmails = allEmailContacts
-        .filter((c) => c.email !== primaryEmailContact?.email)
+        .filter((c) => c.email && c.email !== primaryEmailContact?.email)
         .map((c) => c.email as string);
 
       const socialLinks = leadContacts
-        .filter((c) => c.contactType !== "EMAIL" || !c.email)
+        .filter((c) => c.contactType !== "EMAIL" && c.contactType !== "PHONE" && c.contactType !== "WHATSAPP")
         .map((c) => ({
           type: c.contactType,
           value: c.value || c.instagram || c.twitter || c.tiktok || c.discord || c.linkedin || "",
         }))
         .filter((s) => Boolean(s.value));
 
+      const phoneContact = leadContacts.find((c) => c.contactType === "PHONE" || c.contactType === "WHATSAPP");
+
       return {
         ...l,
         email: primaryEmailContact?.email || null,
         emailStatus: primaryEmailContact?.emailStatus || null,
+        phone: l.phone || phoneContact?.value || null,
         additionalEmails,
         socialLinks,
       };
     });
 
-    return { list, total };
+    return { list, total, counts };
   } catch (err) {
     console.error("[LeadsPage Error]", err);
-    return { list: [], total: 0 };
+    return { list: [], total: 0, counts: { total: 0, qualified: 0, contacted: 0 } };
   }
 }
 
 export default async function LeadsPage() {
-  const { list, total } = await getData();
+  const { list, total, counts } = await getData();
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto">
@@ -107,21 +122,36 @@ export default async function LeadsPage() {
           <div className="flex items-center space-x-2">
             <Users className="w-5 h-5 text-primary" />
             <h1 className="text-base sm:text-lg font-semibold text-text-main tracking-tight">
-              Discovered Creators
+              Contact Discovery & Leads
             </h1>
           </div>
           <p className="text-xs text-text-secondary mt-0.5">
-            {total.toLocaleString()} YouTube creators found with their channel info and verified email status.
+            {total.toLocaleString()} YouTube creators tracked across multi-channel discovery pipelines
           </p>
         </div>
 
         <form action="/api/workers/verification" method="POST">
-          <Button size="sm" variant="default" className="gap-1.5 w-full sm:w-auto">
+          <Button size="sm" variant="default" className="gap-1.5 w-full sm:w-auto min-h-[44px]">
             <Play className="w-3.5 h-3.5 fill-current" />
-            <span>Verify Emails Now</span>
+            <span>Verify Pending Emails</span>
           </Button>
         </form>
       </Card>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <Card className="p-3.5">
+          <span className="text-[11px] text-text-muted block font-medium">Total Discovered Leads</span>
+          <span className="text-lg font-bold text-text-main font-mono tabular-nums">{total.toLocaleString()}</span>
+        </Card>
+        <Card className="p-3.5">
+          <span className="text-[11px] text-primary block font-medium">Qualified for Outreach</span>
+          <span className="text-lg font-bold text-primary font-mono tabular-nums">{counts.qualified.toLocaleString()}</span>
+        </Card>
+        <Card className="p-3.5 col-span-2 sm:col-span-1">
+          <span className="text-[11px] text-warning block font-medium">Already Contacted</span>
+          <span className="text-lg font-bold text-warning font-mono tabular-nums">{counts.contacted.toLocaleString()}</span>
+        </Card>
+      </div>
 
       <LeadsInfiniteList initialData={list} total={total} />
     </div>

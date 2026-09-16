@@ -1,6 +1,23 @@
 "use client";
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { Loader2, ExternalLink, Mail } from "lucide-react";
+import {
+  Loader2,
+  ExternalLink,
+  Mail,
+  Globe,
+  Phone,
+  RefreshCw,
+  CheckCircle2,
+  MoreVertical,
+  Edit3,
+  Trash2,
+  Ban,
+  Search,
+  X,
+  CheckSquare,
+  Square,
+  ShieldAlert,
+} from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,7 +30,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 
-type Lead = {
+export type Lead = {
   id: number;
   channelId: string;
   channelTitle: string;
@@ -21,6 +38,10 @@ type Lead = {
   subscriberCount: number | null;
   qualificationStatus: string;
   outreachStatus: string;
+  suppressionStatus?: boolean;
+  website?: string | null;
+  phone?: string | null;
+  contactPageUrl?: string | null;
   country?: string | null;
   discoveredAt: Date | string | null;
   email: string | null;
@@ -36,19 +57,33 @@ interface Props {
   total: number;
 }
 
+type FilterTab = "ALL" | "EMAIL_FOUND" | "NO_EMAIL" | "VERIFIED" | "FAILED" | "CONTACTED";
+
 function getEmailBadge(status: string | null) {
   switch (status) {
     case "VALID":
-      return <Badge variant="success">VALID</Badge>;
+    case "DOMAIN_VALID":
+    case "MAILBOX_VERIFIED":
+      return <Badge variant="success">{status}</Badge>;
     case "INVALID":
     case "DISPOSABLE":
       return <Badge variant="destructive">{status}</Badge>;
+    case "RISKY":
+      return <Badge variant="warning">RISKY</Badge>;
     default:
       return <Badge variant="secondary">{status || "NONE"}</Badge>;
   }
 }
 
-function getQualBadge(status: string) {
+function getQualBadge(status: string, suppressed?: boolean) {
+  if (suppressed) {
+    return (
+      <Badge variant="destructive" className="gap-1 bg-danger/10 text-danger border-danger/30">
+        <Ban className="w-3 h-3" />
+        <span>SUPPRESSED</span>
+      </Badge>
+    );
+  }
   switch (status) {
     case "QUALIFIED":
       return <Badge variant="success">QUALIFIED</Badge>;
@@ -70,246 +105,825 @@ function getOutreachBadge(status: string) {
   }
 }
 
-function SkeletonRow() {
-  return (
-    <TableRow>
-      {Array.from({ length: 7 }).map((_, i) => (
-        <TableCell key={i}>
-          <div className="animate-pulse h-4 bg-surface-200 rounded-md" />
-        </TableCell>
-      ))}
-    </TableRow>
-  );
-}
-
-function SkeletonCard() {
-  return (
-    <div className="bg-surface-100 border border-border rounded-lg p-3.5 space-y-2 animate-pulse">
-      <div className="h-4 bg-surface-200 rounded w-40" />
-      <div className="h-8 bg-surface-200 rounded" />
-      <div className="h-3 bg-surface-200 rounded w-24" />
-    </div>
-  );
-}
-
-export function LeadsInfiniteList({ initialData, total }: Props) {
+export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
   const [items, setItems] = useState<Lead[]>(initialData);
-  const [hasMore, setHasMore] = useState(initialData.length < total);
+  const [totalCount, setTotalCount] = useState(initialTotal);
+  const [activeTab, setActiveTab] = useState<FilterTab>("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [hasMore, setHasMore] = useState(initialData.length < initialTotal);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
+  const [batchLoading, setBatchLoading] = useState(false);
+  const [menuOpenId, setMenuOpenId] = useState<number | null>(null);
+
+  // Edit Lead Modal
+  const [editLead, setEditLead] = useState<Lead | null>(null);
+  const [editEmail, setEditEmail] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editWebsite, setEditWebsite] = useState("");
+  const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
+
   const isLoadingRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    return () => { abortControllerRef.current?.abort(); };
-  }, []);
+  const fetchLeads = useCallback(
+    async (isReset = false) => {
+      if (isLoadingRef.current) return;
+      isLoadingRef.current = true;
+      setLoading(true);
+      setError(null);
 
-  const loadMore = useCallback(async () => {
-    if (isLoadingRef.current || !hasMore) return;
-    isLoadingRef.current = true;
-    setLoading(true);
-    setError(null);
-    const lastId = items.length > 0 ? items[items.length - 1].id : 0;
-    abortControllerRef.current = new AbortController();
-    try {
-      const res = await fetch(`/api/leads?lastId=${lastId}&limit=50`, {
-        signal: abortControllerRef.current.signal,
-      });
-      if (!res.ok) throw new Error("fetch failed");
-      const data: Lead[] = await res.json();
-      if (data.length === 0) {
-        setHasMore(false);
-      } else {
-        setItems((prev) => {
-          const existingIds = new Set(prev.map((i) => i.id));
-          return [...prev, ...data.filter((i) => !existingIds.has(i.id))];
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = new AbortController();
+
+      const lastId = isReset ? 0 : items.length > 0 ? items[items.length - 1].id : 0;
+      const params = new URLSearchParams();
+      if (lastId > 0) params.set("lastId", lastId.toString());
+      params.set("limit", "50");
+      if (activeTab !== "ALL") params.set("filter", activeTab);
+      if (searchQuery.trim()) params.set("search", searchQuery.trim());
+
+      try {
+        const res = await fetch(`/api/leads?${params.toString()}`, {
+          signal: abortControllerRef.current.signal,
         });
-        if (data.length < 50) setHasMore(false);
+        if (!res.ok) throw new Error("Fetch failed");
+        const data: Lead[] = await res.json();
+
+        if (isReset) {
+          setItems(data);
+          setHasMore(data.length >= 50);
+        } else {
+          if (data.length === 0) {
+            setHasMore(false);
+          } else {
+            setItems((prev) => {
+              const existing = new Set(prev.map((i) => i.id));
+              return [...prev, ...data.filter((i) => !existing.has(i.id))];
+            });
+            if (data.length < 50) setHasMore(false);
+          }
+        }
+      } catch (e: any) {
+        if (e.name === "AbortError") return;
+        setError("Failed to load records");
+      } finally {
+        isLoadingRef.current = false;
+        setLoading(false);
       }
-    } catch (e: unknown) {
-      if (e instanceof Error && e.name === "AbortError") return;
-      setError("Failed to load more — tap to retry");
-    } finally {
-      isLoadingRef.current = false;
-      setLoading(false);
-    }
-  }, [items, hasMore]);
+    },
+    [items, activeTab, searchQuery]
+  );
+
+  const handleTabChange = (tab: FilterTab) => {
+    setActiveTab(tab);
+    setSelectedIds(new Set());
+    setTimeout(() => fetchLeads(true), 0);
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchLeads(true);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, activeTab]);
 
   const handleContainerScroll = (e: React.UIEvent<HTMLDivElement>) => {
     if (!hasMore || loading || isLoadingRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
     if (scrollHeight - scrollTop - clientHeight < 200) {
-      loadMore();
+      fetchLeads(false);
     }
   };
 
-  useEffect(() => {
-    if (!hasMore || loading) return;
-    const handleWindowScroll = () => {
-      if (!hasMore || loading || isLoadingRef.current) return;
-      if (window.innerWidth < 768) {
-        if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 300) {
-          loadMore();
-        }
+  // Reprocess Single Lead
+  const handleReprocess = async (id: number) => {
+    setActionLoadingId(id);
+    try {
+      const res = await fetch(`/api/leads/${id}/reprocess`, { method: "POST" });
+      if (res.ok) {
+        const result = await res.json();
+        setItems((prev) =>
+          prev.map((l) => {
+            if (l.id === id) {
+              return {
+                ...l,
+                email: result.primaryEmail || l.email,
+                emailStatus: result.primaryEmailStatus || l.emailStatus,
+                phone: result.phone || l.phone,
+                contactPageUrl: result.contactPageUrl || l.contactPageUrl,
+                qualificationStatus: result.qualificationStatus || l.qualificationStatus,
+                website: result.lead?.website || l.website,
+              };
+            }
+            return l;
+          })
+        );
       }
-    };
-    window.addEventListener("scroll", handleWindowScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleWindowScroll);
-  }, [hasMore, loading, loadMore]);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
 
-  const showSkeletons = items.length === 0 && loading;
+  // Verify Single Lead
+  const handleVerify = async (id: number) => {
+    setActionLoadingId(id);
+    try {
+      const res = await fetch(`/api/leads/${id}/verify`, { method: "POST" });
+      if (res.ok) {
+        const result = await res.json();
+        setItems((prev) =>
+          prev.map((l) => {
+            if (l.id === id) {
+              return {
+                ...l,
+                emailStatus: result.status,
+                qualificationStatus: result.qualificationStatus,
+              };
+            }
+            return l;
+          })
+        );
+      }
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  // Suppress Single Lead
+  const handleSuppress = async (id: number) => {
+    setActionLoadingId(id);
+    setMenuOpenId(null);
+    try {
+      const res = await fetch(`/api/leads/${id}/suppress`, { method: "POST" });
+      if (res.ok) {
+        const updated = await res.json();
+        setItems((prev) =>
+          prev.map((l) =>
+            l.id === id
+              ? {
+                  ...l,
+                  suppressionStatus: updated.suppressionStatus,
+                  qualificationStatus: updated.qualificationStatus,
+                }
+              : l
+          )
+        );
+      }
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  // Delete Single Lead
+  const handleDelete = async (id: number) => {
+    if (!confirm("Remove this lead from LeadMiner?")) return;
+    setActionLoadingId(id);
+    setMenuOpenId(null);
+    try {
+      const res = await fetch(`/api/leads/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setItems((prev) => prev.filter((l) => l.id !== id));
+        setTotalCount((t) => Math.max(0, t - 1));
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  // Batch actions
+  const handleBatchAction = async (action: "reprocess" | "verify" | "suppress" | "delete") => {
+    if (selectedIds.size === 0) return;
+    if (action === "delete" && !confirm(`Delete ${selectedIds.size} selected lead(s)?`)) return;
+
+    setBatchLoading(true);
+    const ids = Array.from(selectedIds);
+    try {
+      const res = await fetch(`/api/leads/batch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ids }),
+      });
+      if (res.ok) {
+        if (action === "delete") {
+          setItems((prev) => prev.filter((l) => !selectedIds.has(l.id)));
+          setTotalCount((t) => Math.max(0, t - ids.length));
+        } else if (action === "suppress") {
+          setItems((prev) =>
+            prev.map((l) =>
+              selectedIds.has(l.id)
+                ? { ...l, suppressionStatus: true, qualificationStatus: "DISQUALIFIED" }
+                : l
+            )
+          );
+        } else {
+          // Reprocess or Verify: refetch current view
+          await fetchLeads(true);
+        }
+        setSelectedIds(new Set());
+      }
+    } finally {
+      setBatchLoading(false);
+    }
+  };
+
+  // Selection
+  const toggleSelectAll = () => {
+    if (selectedIds.size === items.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(items.map((l) => l.id)));
+    }
+  };
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // Edit Lead Submit
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editLead) return;
+    setIsSubmittingEdit(true);
+    try {
+      const res = await fetch(`/api/leads/${editLead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: editEmail.trim() || undefined,
+          phone: editPhone.trim() || undefined,
+          website: editWebsite.trim() || undefined,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setItems((prev) =>
+          prev.map((l) =>
+            l.id === editLead.id
+              ? {
+                  ...l,
+                  email: data.email || l.email,
+                  emailStatus: data.emailStatus || l.emailStatus,
+                  phone: editPhone.trim() || l.phone,
+                  website: editWebsite.trim() || l.website,
+                  qualificationStatus: data.lead?.qualificationStatus || l.qualificationStatus,
+                }
+              : l
+          )
+        );
+        setEditLead(null);
+      }
+    } finally {
+      setIsSubmittingEdit(false);
+    }
+  };
 
   return (
-    <div className="space-y-3">
-      {/* Mobile cards */}
+    <div className="space-y-4">
+      {/* Top Filter Tabs & Search Bar */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+        {/* Filter Tabs */}
+        <div className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+          {[
+            { key: "ALL", label: "All Leads" },
+            { key: "EMAIL_FOUND", label: "Email Found" },
+            { key: "NO_EMAIL", label: "No Email" },
+            { key: "VERIFIED", label: "Verified" },
+            { key: "FAILED", label: "Failed" },
+            { key: "CONTACTED", label: "Contacted" },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => handleTabChange(tab.key as FilterTab)}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap min-h-[36px] cursor-pointer ${
+                activeTab === tab.key
+                  ? "bg-primary text-primary-foreground font-semibold"
+                  : "bg-surface-200 text-text-secondary hover:text-text-main hover:bg-surface-300"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Search */}
+        <div className="relative md:w-72">
+          <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-text-muted" />
+          <input
+            type="text"
+            placeholder="Search channels or emails..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-surface-100 border border-border rounded-md pl-8 pr-3 py-1.5 text-xs text-text-main placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary min-h-[36px]"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-2 top-2.5 text-text-muted hover:text-text-main cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Floating Bulk Action Toolbar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center justify-between gap-3 bg-surface-200 border border-primary/30 p-2.5 rounded-lg text-xs animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2 font-medium text-text-main">
+            <span className="font-mono bg-primary/20 text-primary px-2 py-0.5 rounded">
+              {selectedIds.size}
+            </span>
+            <span>selected</span>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={batchLoading}
+              onClick={() => handleBatchAction("reprocess")}
+              className="gap-1 h-7 px-2 text-xs"
+            >
+              <RefreshCw className="w-3 h-3" />
+              <span>Reprocess</span>
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={batchLoading}
+              onClick={() => handleBatchAction("verify")}
+              className="gap-1 h-7 px-2 text-xs"
+            >
+              <CheckCircle2 className="w-3 h-3" />
+              <span>Verify</span>
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={batchLoading}
+              onClick={() => handleBatchAction("suppress")}
+              className="gap-1 h-7 px-2 text-xs"
+            >
+              <ShieldAlert className="w-3 h-3" />
+              <span>Suppress</span>
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={batchLoading}
+              onClick={() => handleBatchAction("delete")}
+              className="gap-1 h-7 px-2 text-xs"
+            >
+              <Trash2 className="w-3 h-3" />
+              <span>Delete</span>
+            </Button>
+            <button
+              type="button"
+              onClick={() => setSelectedIds(new Set())}
+              className="text-text-muted hover:text-text-main ml-1 p-1 cursor-pointer"
+              title="Clear selection"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Cards */}
       <div className="md:hidden space-y-2.5">
-        {showSkeletons ? (
-          Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)
+        {loading && items.length === 0 ? (
+          <div className="p-8 text-center text-xs text-text-muted">Loading leads...</div>
         ) : items.length === 0 ? (
           <Card className="p-6 text-center text-xs text-text-muted">
-            No leads discovered yet. Run the discovery worker from the Keywords page.
+            No leads found matching this filter.
           </Card>
         ) : (
           items.map((lead) => (
-            <Card key={lead.id} className="p-3.5 space-y-2.5">
+            <div
+              key={lead.id}
+              className={`bg-surface-100 border rounded-lg p-3.5 space-y-2.5 transition-colors ${
+                selectedIds.has(lead.id) ? "border-primary/50 bg-primary/[0.02]" : "border-border"
+              }`}
+            >
+              {/* Header */}
               <div className="flex items-start justify-between gap-2">
-                <div className="space-y-0.5">
-                  <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
-                    <span className="font-semibold text-xs text-text-main">{lead.channelTitle}</span>
-                    {lead.country && (
-                      <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 uppercase font-mono text-text-muted">
-                        {lead.country}
-                      </Badge>
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => toggleSelect(lead.id)}
+                    className="text-text-muted hover:text-primary p-0.5 cursor-pointer min-h-[30px] min-w-[30px] flex items-center justify-center"
+                  >
+                    {selectedIds.has(lead.id) ? (
+                      <CheckSquare className="w-4 h-4 text-primary" />
+                    ) : (
+                      <Square className="w-4 h-4" />
                     )}
-                    <a
-                      href={lead.channelUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-text-muted hover:text-text-main p-1.5 -m-1 inline-flex items-center justify-center min-w-[32px] min-h-[32px] rounded hover:bg-surface-200 active:scale-95 transition-all"
-                      aria-label={`Open ${lead.channelTitle} on YouTube`}
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-                  </div>
-                  <span className="text-[11px] text-text-muted font-mono">
-                    {lead.subscriberCount ? lead.subscriberCount.toLocaleString() : "0"} subscribers
-                  </span>
-                </div>
-                {getQualBadge(lead.qualificationStatus)}
-              </div>
-              <div className="p-2 rounded-lg bg-surface-200 text-xs flex items-center justify-between">
-                <div className="flex items-center space-x-1.5 truncate">
-                  <Mail className="w-3.5 h-3.5 text-text-muted shrink-0" />
-                  <span className="font-mono text-text-secondary text-[11px] truncate">
-                    {lead.email || "No email found"}
-                  </span>
-                  {lead.additionalEmails && lead.additionalEmails.length > 0 && (
-                    <span
-                      title={lead.additionalEmails.join(', ')}
-                      className="text-[9px] px-1 py-0.2 rounded bg-surface-300 text-text-muted font-sans shrink-0"
-                    >
-                      +{lead.additionalEmails.length}
+                  </button>
+                  <div className="truncate">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-semibold text-xs text-text-main">{lead.channelTitle}</span>
+                      {lead.country && (
+                        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 uppercase font-mono text-text-muted">
+                          {lead.country}
+                        </Badge>
+                      )}
+                      <a
+                        href={lead.channelUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-text-muted hover:text-text-main inline-flex items-center justify-center p-1 rounded"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                    <span className="text-[11px] text-text-muted font-mono block">
+                      {lead.subscriberCount ? lead.subscriberCount.toLocaleString() : "0"} subscribers
                     </span>
-                  )}
+                  </div>
                 </div>
-                {getEmailBadge(lead.emailStatus)}
+                {getQualBadge(lead.qualificationStatus, lead.suppressionStatus)}
               </div>
+
+              {/* Multi-Contact Stack */}
+              <div className="p-2.5 rounded-lg bg-surface-200 text-xs space-y-2">
+                {/* Email Item */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center space-x-1.5 truncate">
+                    <Mail className="w-3.5 h-3.5 text-text-muted shrink-0" />
+                    {lead.email ? (
+                      <span className="font-mono text-text-main text-[11px] truncate">
+                        {lead.email}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleReprocess(lead.id)}
+                        disabled={actionLoadingId === lead.id}
+                        className="text-[11px] text-primary hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${actionLoadingId === lead.id ? "animate-spin" : ""}`} />
+                        <span>No email found yet → Reprocess</span>
+                      </button>
+                    )}
+                  </div>
+                  {lead.email && getEmailBadge(lead.emailStatus)}
+                </div>
+
+                {/* Additional Contacts Row: Website, Phone */}
+                {(lead.website || lead.phone || lead.contactPageUrl) && (
+                  <div className="flex items-center gap-3 pt-1 border-t border-border/50 text-[11px]">
+                    {(lead.website || lead.contactPageUrl) && (
+                      <a
+                        href={lead.contactPageUrl || lead.website || "#"}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-primary hover:underline truncate max-w-[150px]"
+                      >
+                        <Globe className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{lead.contactPageUrl ? "Contact Page" : "Website"}</span>
+                      </a>
+                    )}
+
+                    {lead.phone && (
+                      <div className="inline-flex items-center gap-1 text-text-secondary font-mono text-[10px]">
+                        <Phone className="w-3 h-3 shrink-0 text-text-muted" />
+                        <span>{lead.phone}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Social links */}
               {lead.socialLinks && lead.socialLinks.length > 0 && (
-                <div className="flex flex-wrap gap-1 text-[10px] pt-0.5">
+                <div className="flex flex-wrap gap-1 text-[10px]">
                   {lead.socialLinks.map((s, idx) => (
                     <span
                       key={idx}
                       className="px-1.5 py-0.5 rounded bg-surface-200 border border-border/50 text-text-secondary text-[10px]"
                     >
-                      {s.type.replace('_X', '')}: <span className="font-mono text-text-main">{s.value}</span>
+                      {s.type.replace("_X", "")}: <span className="font-mono text-text-main">{s.value}</span>
                     </span>
                   ))}
                 </div>
               )}
-              <div className="flex items-center justify-between text-[11px] text-text-muted pt-1">
-                <span>Keyword: {lead.sourceKeyword || "—"}</span>
-                {getOutreachBadge(lead.outreachStatus)}
+
+              {/* Row Actions */}
+              <div className="flex items-center justify-between pt-2 border-t border-border/50">
+                <div className="text-[11px] text-text-muted">
+                  {getOutreachBadge(lead.outreachStatus)}
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={actionLoadingId === lead.id}
+                    onClick={() => handleReprocess(lead.id)}
+                    className="h-7 px-2 text-[11px] gap-1"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${actionLoadingId === lead.id ? "animate-spin" : ""}`} />
+                    <span>Reprocess</span>
+                  </Button>
+
+                  {lead.email && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={actionLoadingId === lead.id}
+                      onClick={() => handleVerify(lead.id)}
+                      className="h-7 px-2 text-[11px] gap-1"
+                    >
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>Verify</span>
+                    </Button>
+                  )}
+
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setEditLead(lead);
+                      setEditEmail(lead.email || "");
+                      setEditPhone(lead.phone || "");
+                      setEditWebsite(lead.website || "");
+                    }}
+                    className="h-7 w-7 p-0 text-text-muted hover:text-text-main"
+                  >
+                    <Edit3 className="w-3 h-3" />
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => handleSuppress(lead.id)}
+                    className={`h-7 w-7 p-0 ${lead.suppressionStatus ? "text-danger" : "text-text-muted"}`}
+                    title={lead.suppressionStatus ? "Unsuppress lead" : "Suppress lead"}
+                  >
+                    <Ban className="w-3 h-3" />
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => handleDelete(lead.id)}
+                    className="h-7 w-7 p-0 text-danger hover:bg-danger/10"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
               </div>
-            </Card>
+            </div>
           ))
         )}
       </div>
 
-      {/* Desktop table */}
+      {/* Desktop Table */}
       <Card className="hidden md:block overflow-hidden">
         <div onScroll={handleContainerScroll} className="overflow-x-auto max-h-[70vh] overflow-y-auto">
           <Table>
             <TableHeader className="sticky top-0 z-10 bg-surface-200">
               <TableRow>
+                <TableHead className="w-10">
+                  <button
+                    type="button"
+                    onClick={toggleSelectAll}
+                    className="text-text-muted hover:text-primary cursor-pointer p-1"
+                  >
+                    {items.length > 0 && selectedIds.size === items.length ? (
+                      <CheckSquare className="w-4 h-4 text-primary" />
+                    ) : (
+                      <Square className="w-4 h-4" />
+                    )}
+                  </button>
+                </TableHead>
                 <TableHead>Channel</TableHead>
                 <TableHead className="text-right">Subscribers</TableHead>
-                <TableHead>Email Address</TableHead>
-                <TableHead>Verification</TableHead>
+                <TableHead>Discovered Contacts</TableHead>
+                <TableHead>Deliverability</TableHead>
                 <TableHead>Qualification</TableHead>
-                <TableHead>Outreach Status</TableHead>
-                <TableHead>Source Keyword</TableHead>
+                <TableHead>Outreach</TableHead>
+                <TableHead className="text-right w-44">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {showSkeletons ? (
-                Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} />)
+              {loading && items.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="h-24 text-center text-text-muted">
+                    Loading leads...
+                  </TableCell>
+                </TableRow>
               ) : items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center text-text-muted">
-                    No leads discovered yet.
+                  <TableCell colSpan={8} className="h-24 text-center text-text-muted">
+                    No leads discovered matching this filter.
                   </TableCell>
                 </TableRow>
               ) : (
                 items.map((lead) => (
-                  <TableRow key={lead.id}>
+                  <TableRow
+                    key={lead.id}
+                    className={`transition-colors ${selectedIds.has(lead.id) ? "bg-primary/[0.03]" : ""}`}
+                  >
                     <TableCell>
-                      <div className="flex items-center space-x-1.5">
-                        <span className="font-medium text-text-main">{lead.channelTitle}</span>
-                        {lead.country && (
-                          <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 uppercase font-mono text-text-muted">
-                            {lead.country}
-                          </Badge>
+                      <button
+                        type="button"
+                        onClick={() => toggleSelect(lead.id)}
+                        className="text-text-muted hover:text-primary cursor-pointer p-1"
+                      >
+                        {selectedIds.has(lead.id) ? (
+                          <CheckSquare className="w-4 h-4 text-primary" />
+                        ) : (
+                          <Square className="w-4 h-4" />
                         )}
-                        <a href={lead.channelUrl} target="_blank" rel="noreferrer" className="text-text-muted hover:text-text-main">
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
+                      </button>
+                    </TableCell>
+
+                    {/* Channel Column */}
+                    <TableCell>
+                      <div className="space-y-0.5 max-w-[200px]">
+                        <div className="flex items-center space-x-1.5">
+                          <span className="font-medium text-text-main truncate" title={lead.channelTitle}>
+                            {lead.channelTitle}
+                          </span>
+                          {lead.country && (
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 uppercase font-mono text-text-muted shrink-0">
+                              {lead.country}
+                            </Badge>
+                          )}
+                          <a
+                            href={lead.channelUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-text-muted hover:text-text-main shrink-0"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </div>
+                        <span className="text-[11px] text-text-muted block truncate">
+                          kw: {lead.sourceKeyword || "—"}
+                        </span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-right font-mono text-text-secondary">
+
+                    {/* Subscribers */}
+                    <TableCell className="text-right font-mono text-text-secondary tabular-nums">
                       {lead.subscriberCount ? lead.subscriberCount.toLocaleString() : "0"}
                     </TableCell>
-                    <TableCell className="font-mono text-text-main">
-                      <div>
+
+                    {/* Discovered Contacts Column */}
+                    <TableCell>
+                      <div className="space-y-1 max-w-[260px]">
+                        {/* Email or Reprocess trigger */}
                         <div className="flex items-center space-x-1.5">
-                          <span className="truncate">{lead.email || <span className="text-text-muted font-sans text-[11px]">None found</span>}</span>
-                          {lead.additionalEmails && lead.additionalEmails.length > 0 && (
-                            <span
-                              title={lead.additionalEmails.join(', ')}
-                              className="text-[9px] px-1 py-0.2 rounded bg-surface-200 text-text-muted font-sans shrink-0 border border-border/50"
+                          {lead.email ? (
+                            <span className="font-mono text-text-main text-[11px] truncate" title={lead.email}>
+                              {lead.email}
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleReprocess(lead.id)}
+                              disabled={actionLoadingId === lead.id}
+                              className="text-[11px] text-primary hover:underline font-medium inline-flex items-center gap-1 cursor-pointer bg-primary/10 px-2 py-0.5 rounded"
                             >
-                              +{lead.additionalEmails.length}
+                              <RefreshCw className={`w-3 h-3 ${actionLoadingId === lead.id ? "animate-spin" : ""}`} />
+                              <span>No email found yet → Reprocess</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Website & Phone badges */}
+                        <div className="flex items-center gap-2 flex-wrap text-[10px]">
+                          {(lead.website || lead.contactPageUrl) && (
+                            <a
+                              href={lead.contactPageUrl || lead.website || "#"}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-text-secondary hover:text-primary transition-colors truncate max-w-[120px]"
+                              title={lead.contactPageUrl || lead.website || ""}
+                            >
+                              <Globe className="w-3 h-3 shrink-0" />
+                              <span className="truncate">{lead.contactPageUrl ? "Contact Page" : "Website"}</span>
+                            </a>
+                          )}
+
+                          {lead.phone && (
+                            <span className="inline-flex items-center gap-1 font-mono text-text-muted" title={lead.phone}>
+                              <Phone className="w-2.5 h-2.5 shrink-0" />
+                              <span>{lead.phone}</span>
+                            </span>
+                          )}
+
+                          {lead.socialLinks && lead.socialLinks.length > 0 && (
+                            <span className="text-[9px] px-1 py-0.2 rounded bg-surface-200 text-text-muted border border-border/50">
+                              {lead.socialLinks.length} social{lead.socialLinks.length > 1 ? "s" : ""}
                             </span>
                           )}
                         </div>
-                        {lead.socialLinks && lead.socialLinks.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1 font-sans">
-                            {lead.socialLinks.slice(0, 3).map((s, idx) => (
-                              <span
-                                key={idx}
-                                title={`${s.type}: ${s.value}`}
-                                className="inline-block text-[9px] px-1 py-0.5 bg-surface-200 text-text-secondary rounded border border-border/50 uppercase"
-                              >
-                                {s.type.replace('_X', '')}
-                              </span>
-                            ))}
-                          </div>
-                        )}
                       </div>
                     </TableCell>
+
+                    {/* Verification */}
                     <TableCell>{getEmailBadge(lead.emailStatus)}</TableCell>
-                    <TableCell>{getQualBadge(lead.qualificationStatus)}</TableCell>
+
+                    {/* Qualification */}
+                    <TableCell>{getQualBadge(lead.qualificationStatus, lead.suppressionStatus)}</TableCell>
+
+                    {/* Outreach Status */}
                     <TableCell>{getOutreachBadge(lead.outreachStatus)}</TableCell>
-                    <TableCell className="text-text-muted text-[11px]">{lead.sourceKeyword || "—"}</TableCell>
+
+                    {/* Actions */}
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title="Reprocess website & contacts"
+                          disabled={actionLoadingId === lead.id}
+                          onClick={() => handleReprocess(lead.id)}
+                          className="h-7 px-2 text-[11px] gap-1"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${actionLoadingId === lead.id ? "animate-spin" : ""}`} />
+                          <span>Reprocess</span>
+                        </Button>
+
+                        {lead.email && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            title="Verify email"
+                            disabled={actionLoadingId === lead.id}
+                            onClick={() => handleVerify(lead.id)}
+                            className="h-7 w-7 p-0"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+
+                        {/* More menu */}
+                        <div className="relative inline-block text-left">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setMenuOpenId(menuOpenId === lead.id ? null : lead.id)}
+                            className="h-7 w-7 p-0"
+                          >
+                            <MoreVertical className="w-3.5 h-3.5" />
+                          </Button>
+
+                          {menuOpenId === lead.id && (
+                            <div className="absolute right-0 mt-1 w-36 bg-surface-100 border border-border rounded-md shadow-lg py-1 z-20 text-xs">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMenuOpenId(null);
+                                  setEditLead(lead);
+                                  setEditEmail(lead.email || "");
+                                  setEditPhone(lead.phone || "");
+                                  setEditWebsite(lead.website || "");
+                                }}
+                                className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-surface-200 text-text-main cursor-pointer"
+                              >
+                                <Edit3 className="w-3 h-3" />
+                                <span>Edit Contacts</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSuppress(lead.id)}
+                                className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-surface-200 text-text-main cursor-pointer"
+                              >
+                                <Ban className="w-3 h-3" />
+                                <span>{lead.suppressionStatus ? "Unsuppress" : "Suppress"}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(lead.id)}
+                                className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-danger/10 text-danger cursor-pointer"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>Delete</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -322,13 +936,13 @@ export function LeadsInfiniteList({ initialData, total }: Props) {
       <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-1 py-1 text-[11px] text-text-muted">
         <span>
           Showing <span className="font-mono text-text-main">{items.length.toLocaleString()}</span> of{" "}
-          <span className="font-mono text-text-main">{total.toLocaleString()}</span> leads
+          <span className="font-mono text-text-main">{totalCount.toLocaleString()}</span> leads
         </span>
 
-        {loading && !showSkeletons && (
+        {loading && (
           <div className="flex items-center gap-2 text-primary">
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            <span>Loading next 50...</span>
+            <span>Loading...</span>
           </div>
         )}
 
@@ -336,7 +950,7 @@ export function LeadsInfiniteList({ initialData, total }: Props) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => { setError(null); loadMore(); }}
+            onClick={() => fetchLeads(false)}
             className="text-xs text-danger border-danger/30 hover:bg-danger/5 h-7 px-2.5"
           >
             {error}
@@ -350,13 +964,87 @@ export function LeadsInfiniteList({ initialData, total }: Props) {
         {hasMore && !loading && !error && (
           <button
             type="button"
-            onClick={() => loadMore()}
+            onClick={() => fetchLeads(false)}
             className="text-primary hover:underline font-medium cursor-pointer min-h-[44px] px-3 flex items-center active:scale-95 transition-transform"
           >
             Load 50 more ↓
           </button>
         )}
       </div>
+
+      {/* Modal: Edit Lead Contacts */}
+      {editLead && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-surface-100 border border-border rounded-xl max-w-md w-full p-5 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-text-main">Edit Contact Details</h2>
+                <p className="text-xs text-text-muted">{editLead.channelTitle}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditLead(null)}
+                className="text-text-muted hover:text-text-main cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSubmit} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-text-secondary font-medium mb-1">Email Address</label>
+                <input
+                  type="email"
+                  placeholder="creator@domain.com"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <span className="text-[10px] text-text-muted mt-0.5 block">
+                  Entering an email will automatically trigger deliverability verification.
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-text-secondary font-medium mb-1">Phone / WhatsApp</label>
+                <input
+                  type="text"
+                  placeholder="+1 (555) 123-4567"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-text-secondary font-medium mb-1">Website URL</label>
+                <input
+                  type="text"
+                  placeholder="https://creatorportfolio.com"
+                  value={editWebsite}
+                  onChange={(e) => setEditWebsite(e.target.value)}
+                  className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditLead(null)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" disabled={isSubmittingEdit} className="gap-1.5">
+                  {isSubmittingEdit && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Save Changes</span>
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

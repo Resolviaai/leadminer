@@ -8,6 +8,8 @@ export type ContactItemType =
   | 'LINKEDIN'
   | 'LINKTREE'
   | 'BEACONS'
+  | 'PHONE'
+  | 'WHATSAPP'
   | 'OTHER';
 
 export interface ExtractedContactItem {
@@ -26,6 +28,8 @@ export interface ExtractedSocials {
   linkedin?: string;
   linktree?: string;
   beacons?: string;
+  phone?: string;
+  whatsapp?: string;
   otherSocial?: Record<string, string>;
   items: ExtractedContactItem[];
 }
@@ -166,6 +170,46 @@ export class SocialExtractor {
         }
         // Capture ALL valid websites into items without early break
         addItem('WEBSITE', url, url);
+      }
+    }
+
+    // 9. WhatsApp (URL and text patterns)
+    const whatsappUrlMatches = text.matchAll(/(?:https?:\/\/)?(?:www\.)?(?:wa\.me|api\.whatsapp\.com\/send\?phone=)\/([0-9+]+)/gi);
+    const whatsappTextMatches = text.matchAll(/(?:whatsapp|wa):\s*([+0-9\s().-]{7,25})/gi);
+    for (const match of [...whatsappUrlMatches, ...whatsappTextMatches]) {
+      if (match && match[1]) {
+        const raw = match[1].trim();
+        const digits = raw.replace(/\D/g, '');
+        if (digits.length >= 7 && digits.length <= 15) {
+          const formatted = `+${digits}`;
+          if (!socials.whatsapp) socials.whatsapp = formatted;
+          addItem('WHATSAPP', `https://wa.me/${digits}`, formatted);
+        }
+      }
+    }
+
+    // 10. Phone numbers
+    // A. Labeled phone numbers: "phone: ...", "call us: ...", "tel: ..."
+    const phoneLabeledMatches = text.matchAll(/(?:phone|tel|call(?:\s+us)?|cell|mobile|contact)(?:\s*(?:is|at))?:\s*([+0-9\s().-]{7,25})/gi);
+    for (const match of phoneLabeledMatches) {
+      if (match && match[1]) {
+        const raw = match[1].trim();
+        const digits = raw.replace(/\D/g, '');
+        if (digits.length >= 7 && digits.length <= 15) {
+          if (!socials.phone) socials.phone = raw;
+          addItem('PHONE', raw, digits);
+        }
+      }
+    }
+
+    // B. Standard phone formats in text
+    const phoneStandardMatches = text.matchAll(/\b(?:\+?1[-.\s]?)?\(?[2-9][0-9]{2}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}\b/g);
+    for (const match of phoneStandardMatches) {
+      const raw = match[0].trim();
+      const digits = raw.replace(/\D/g, '');
+      if (digits.length >= 10 && digits.length <= 15) {
+        if (!socials.phone) socials.phone = raw;
+        addItem('PHONE', raw, digits);
       }
     }
 

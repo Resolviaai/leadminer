@@ -23,6 +23,7 @@ async function getData() {
           pending: sql<number>`count(*) filter (where status = 'PENDING')::int`,
           completed: sql<number>`count(*) filter (where status = 'COMPLETED')::int`,
           failed: sql<number>`count(*) filter (where status = 'FAILED')::int`,
+          paused: sql<number>`count(*) filter (where status = 'PAUSED')::int`,
         })
         .from(keywords),
     ]);
@@ -32,6 +33,7 @@ async function getData() {
       pending: 0,
       completed: 0,
       failed: 0,
+      paused: 0,
     };
 
     return { list: listResult || [], counts };
@@ -39,7 +41,7 @@ async function getData() {
     console.error("[KeywordsPage Error]", err);
     return {
       list: [],
-      counts: { total: 0, pending: 0, completed: 0, failed: 0 },
+      counts: { total: 0, pending: 0, completed: 0, failed: 0, paused: 0 },
     };
   }
 }
@@ -58,33 +60,37 @@ export default async function KeywordsPage() {
             </h1>
           </div>
           <p className="text-xs text-text-secondary mt-0.5">
-            {counts.total.toLocaleString()} keywords used to find creators on YouTube
+            {counts.total.toLocaleString()} search queries configured for autonomous discovery
           </p>
         </div>
         <form action="/api/workers/discovery" method="POST">
-          <Button size="sm" variant="default" className="gap-1.5 w-full sm:w-auto">
+          <Button size="sm" variant="default" className="gap-1.5 w-full sm:w-auto min-h-[44px]">
             <Play className="w-3.5 h-3.5 fill-current" />
             <span>Find Creators Now</span>
           </Button>
         </form>
       </Card>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <Card className="p-3.5">
-          <span className="text-[11px] text-text-muted block">Total Keywords</span>
-          <span className="text-lg font-bold text-text-main font-mono">{counts.total.toLocaleString()}</span>
+          <span className="text-[11px] text-text-muted block font-medium">Total</span>
+          <span className="text-lg font-bold text-text-main font-mono tabular-nums">{counts.total.toLocaleString()}</span>
         </Card>
         <Card className="p-3.5">
-          <span className="text-[11px] text-warning block">Waiting to Search</span>
-          <span className="text-lg font-bold text-warning font-mono">{counts.pending.toLocaleString()}</span>
+          <span className="text-[11px] text-warning block font-medium">Pending Queue</span>
+          <span className="text-lg font-bold text-warning font-mono tabular-nums">{counts.pending.toLocaleString()}</span>
         </Card>
         <Card className="p-3.5">
-          <span className="text-[11px] text-primary block">Searched</span>
-          <span className="text-lg font-bold text-primary font-mono">{counts.completed.toLocaleString()}</span>
+          <span className="text-[11px] text-primary block font-medium">Searched</span>
+          <span className="text-lg font-bold text-primary font-mono tabular-nums">{counts.completed.toLocaleString()}</span>
         </Card>
         <Card className="p-3.5">
-          <span className="text-[11px] text-danger block">Needs Retry</span>
-          <span className="text-lg font-bold text-danger font-mono">{counts.failed.toLocaleString()}</span>
+          <span className="text-[11px] text-text-muted block font-medium">Paused</span>
+          <span className="text-lg font-bold text-text-muted font-mono tabular-nums">{counts.paused.toLocaleString()}</span>
+        </Card>
+        <Card className="p-3.5 col-span-2 sm:col-span-1">
+          <span className="text-[11px] text-danger block font-medium">Needs Retry</span>
+          <span className="text-lg font-bold text-danger font-mono tabular-nums">{counts.failed.toLocaleString()}</span>
         </Card>
       </div>
 

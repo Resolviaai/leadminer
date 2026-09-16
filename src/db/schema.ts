@@ -22,6 +22,7 @@ export const keywordStatusEnum = pgEnum('keyword_status', [
   'FAILED',
   'RETRY',
   'SKIPPED',
+  'PAUSED',
 ]);
 
 export const leadQualificationStatusEnum = pgEnum('lead_qualification_status', [
@@ -60,6 +61,8 @@ export const contactTypeEnum = pgEnum('contact_type', [
   'LINKEDIN',
   'LINKTREE',
   'BEACONS',
+  'PHONE',
+  'WHATSAPP',
   'OTHER',
 ]);
 
@@ -175,6 +178,8 @@ export const leads = pgTable(
     discoveredAt: timestamp('discovered_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     country: varchar('country', { length: 10 }),
+    phone: varchar('phone', { length: 50 }),
+    contactPageUrl: varchar('contact_page_url', { length: 500 }),
     rawPayload: jsonb('raw_payload'),
   },
   (table) => [
