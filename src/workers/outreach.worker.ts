@@ -90,6 +90,7 @@ export async function runOutreachBatch(batchLimit?: number): Promise<{ sent: num
     const candidateLeads = await db
       .select({
         leadId: leads.id,
+        contactId: contacts.id,
         channelId: leads.channelId,
         channelTitle: leads.channelTitle,
         channelUrl: leads.channelUrl,
@@ -117,24 +118,37 @@ export async function runOutreachBatch(batchLimit?: number): Promise<{ sent: num
       return { sent: 0, skipped: 0, errors: 0 };
     }
 
-    // Deduplicate candidate leads by leadId
-    const seenLeadIds = new Set<number>();
-    const uniqueCandidateLeads = candidateLeads.filter((l) => {
-      if (seenLeadIds.has(l.leadId)) return false;
-      seenLeadIds.add(l.leadId);
+    // Deduplicate candidate contacts by (leadId, email) so we don't send duplicate emails to the same address,
+    // while fully preserving multi-email outreach across all unique verified emails for a creator.
+    const seenContactEmails = new Set<string>();
+    const uniqueCandidateContacts = candidateLeads.filter((c) => {
+      const key = `${c.leadId}_${c.email?.toLowerCase().trim()}`;
+      if (seenContactEmails.has(key)) return false;
+      seenContactEmails.add(key);
       return true;
     });
 
-    console.log(`📬 Found ${uniqueCandidateLeads.length} unique qualified leads for outreach.`);
+    console.log(`📬 Found ${uniqueCandidateContacts.length} verified candidate contacts for outreach.`);
 
     let sentCount = 0;
     let skippedCount = 0;
     let errorCount = 0;
 
-    for (const lead of uniqueCandidateLeads) {
+    for (const lead of uniqueCandidateContacts) {
       if (!lead.email) continue;
 
-      const idempotencyKey = `campaign_${campaign.id}_lead_${lead.leadId}`;
+      // Active Kill Switch Panic Check before each message dispatch
+      const activeKillSwitch = await db
+        .select()
+        .from(systemSettings)
+        .where(eq(systemSettings.key, 'kill_switch'))
+        .limit(1);
+      if (activeKillSwitch.length > 0 && (activeKillSwitch[0].value as any)?.enabled) {
+        console.warn('⛔ [Kill Switch Active] Outreach was halted mid-batch by user emergency stop.');
+        break;
+      }
+
+      const idempotencyKey = `campaign_${campaign.id}_lead_${lead.leadId}_contact_${lead.contactId}`;
 
       // Atomic locking / guard:
       // Step A: Check if message already exists with this idempotency key
@@ -242,6 +256,7 @@ export async function runOutreachBatch(batchLimit?: number): Promise<{ sent: num
         leadId: lead.leadId,
         campaignId: campaign.id,
         templateId: template.id,
+        contactId: lead.contactId,
         recipientEmail: lead.email,
         subject: renderedSubject,
         body: renderedBody,

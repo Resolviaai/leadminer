@@ -298,6 +298,7 @@ export const messages = pgTable(
     campaignId: bigint('campaign_id', { mode: 'number' }).notNull().references(() => campaigns.id, { onDelete: 'restrict' }),
     gmailAccountId: bigint('gmail_account_id', { mode: 'number' }).references(() => gmailAccounts.id, { onDelete: 'set null' }),
     templateId: bigint('template_id', { mode: 'number' }).references(() => templates.id, { onDelete: 'restrict' }),
+    contactId: bigint('contact_id', { mode: 'number' }).references(() => contacts.id, { onDelete: 'set null' }),
     recipientEmail: varchar('recipient_email', { length: 255 }).notNull(),
     subject: varchar('subject', { length: 500 }).notNull(),
     body: text('body').notNull(),
@@ -314,10 +315,11 @@ export const messages = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex('uq_messages_lead_campaign').on(table.leadId, table.campaignId),
+    uniqueIndex('uq_messages_lead_campaign_contact').on(table.leadId, table.campaignId, table.contactId),
     uniqueIndex('uq_messages_idempotency').on(table.idempotencyKey),
     index('idx_messages_send_status').on(table.sendStatus),
     index('idx_messages_thread_id').on(table.threadId),
+    index('idx_messages_contact_id').on(table.contactId),
   ]
 );
 

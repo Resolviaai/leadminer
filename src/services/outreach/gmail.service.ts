@@ -8,6 +8,7 @@ export interface SendEmailParams {
   leadId: number;
   campaignId: number;
   templateId?: number;
+  contactId?: number;
   recipientEmail: string;
   subject: string;
   body: string;
@@ -218,6 +219,7 @@ export class GmailSendingService {
             campaignId: params.campaignId,
             gmailAccountId: account ? account.id : null,
             templateId: params.templateId,
+            contactId: params.contactId,
             recipientEmail: params.recipientEmail,
             subject: params.subject,
             body: params.body,
@@ -265,6 +267,7 @@ export class GmailSendingService {
           campaignId: params.campaignId,
           gmailAccountId: account.id,
           templateId: params.templateId,
+          contactId: params.contactId,
           recipientEmail: params.recipientEmail,
           subject: params.subject,
           body: params.body,
