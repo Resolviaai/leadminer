@@ -25,6 +25,7 @@ export interface SendEmailResult {
   accountId?: number;
   senderEmail?: string;
   simulated?: boolean;
+  verified?: boolean;
   error?: string;
   skippedReason?: string;
 }
@@ -400,6 +401,7 @@ export class GmailSendingService {
           return {
             success: false,
             accountId: account.id,
+            skippedReason: 'SENDER_IDENTITY_MISMATCH',
             error: `Sender mismatch: OAuth token belongs to ${actualEmail}, expected ${expectedEmail}`,
           };
         }
@@ -501,26 +503,34 @@ export class GmailSendingService {
       liveMessageId = response.data.id || `live_msg_${Date.now()}`;
       liveThreadId = response.data.threadId || `live_thread_${Date.now()}`;
 
-      // Post-Send Live Verification: Confirm message exists in Gmail Sent history
-      try {
-        const verifiedMsg = await gmail.users.messages.get({
-          userId: 'me',
-          id: liveMessageId,
-          format: 'metadata',
-          metadataHeaders: ['From', 'To', 'Subject'],
-        });
+      // Post-Send Live Verification: Confirm message exists in Gmail Sent history (multi-attempt)
+      let verifiedInGmail = false;
+      for (let vAttempt = 1; vAttempt <= 3; vAttempt++) {
+        try {
+          const verifiedMsg = await gmail.users.messages.get({
+            userId: 'me',
+            id: liveMessageId,
+            format: 'metadata',
+            metadataHeaders: ['From', 'To', 'Subject'],
+          });
 
-        const labels = verifiedMsg.data.labelIds || [];
-        const hasSentLabel = labels.includes('SENT');
-        const headers = verifiedMsg.data.payload?.headers || [];
-        const fromVal = headers.find((h) => h.name?.toLowerCase() === 'from')?.value || account.email;
-        const toVal = headers.find((h) => h.name?.toLowerCase() === 'to')?.value || params.recipientEmail;
+          const labels = verifiedMsg.data.labelIds || [];
+          const hasSentLabel = labels.includes('SENT');
+          const headers = verifiedMsg.data.payload?.headers || [];
+          const fromVal = headers.find((h) => h.name?.toLowerCase() === 'from')?.value || account.email;
+          const toVal = headers.find((h) => h.name?.toLowerCase() === 'to')?.value || params.recipientEmail;
 
-        console.log(
-          `🔍 [Gmail Verification Confirmed] ID=${liveMessageId} | SENT_label=${hasSentLabel} | From: ${fromVal} | To: ${toVal}`
-        );
-      } catch (verifyErr: any) {
-        console.warn(`⚠️ [Gmail Verification Check Non-Fatal]: ${verifyErr.message}`);
+          console.log(
+            `🔍 [Gmail Verification Confirmed] Attempt ${vAttempt}: ID=${liveMessageId} | SENT_label=${hasSentLabel} | From: ${fromVal} | To: ${toVal}`
+          );
+          verifiedInGmail = true;
+          break;
+        } catch (verifyErr: any) {
+          console.warn(`⚠️ [Gmail Verification Attempt ${vAttempt}/3]: ${verifyErr.message}`);
+          if (vAttempt < 3) {
+            await new Promise((resolve) => setTimeout(resolve, 200 * vAttempt));
+          }
+        }
       }
 
       // Phase 2: Update message record to 'SENT' and lead to 'CONTACTED' with retry backoff
@@ -559,6 +569,7 @@ export class GmailSendingService {
         threadId: liveThreadId,
         accountId: account.id,
         senderEmail: account.email,
+        verified: verifiedInGmail,
       };
     } catch (error: any) {
       console.error(`[Gmail Send Error] Account ${account.email}:`, error);
