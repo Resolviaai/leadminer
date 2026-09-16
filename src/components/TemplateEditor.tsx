@@ -21,6 +21,8 @@ import {
   Power,
   GripVertical,
   Tag,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -83,10 +85,18 @@ function useAutoResize(ref: React.RefObject<HTMLTextAreaElement>, value: string)
 
 interface TemplateEditorProps {
   template: Template;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (id: number) => void;
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export function TemplateEditor({ template }: TemplateEditorProps) {
+export function TemplateEditor({
+  template,
+  selectable = false,
+  selected = false,
+  onToggleSelect,
+}: TemplateEditorProps) {
   const router = useRouter();
 
   // ── State ──
@@ -393,6 +403,23 @@ export function TemplateEditor({ template }: TemplateEditorProps) {
         }}
       >
         <div className="flex items-center gap-2 min-w-0">
+          {selectable && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleSelect?.(template.id);
+              }}
+              className="p-1 -ml-1 text-text-muted hover:text-primary transition-colors shrink-0"
+              aria-label={selected ? "Deselect template" : "Select template"}
+            >
+              {selected ? (
+                <CheckSquare className="w-4 h-4 text-primary" />
+              ) : (
+                <Square className="w-4 h-4 text-text-muted" />
+              )}
+            </button>
+          )}
           <Badge variant={isActive ? "success" : "secondary"} className="font-mono text-[10px]">
             {isActive ? "Active" : "Inactive"}
           </Badge>

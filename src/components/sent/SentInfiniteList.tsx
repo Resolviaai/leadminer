@@ -1,10 +1,9 @@
 "use client";
 
-import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   Loader2,
   ExternalLink,
-  Mail,
   Send,
   ArrowLeft,
   X,
@@ -13,15 +12,15 @@ import {
   Sparkles,
   Search,
   RefreshCw,
-  Star,
   Square,
+  CheckSquare,
+  MinusSquare,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 
 export type SentMessage = {
   id: number;
@@ -85,99 +84,105 @@ function getStatusBadge(status: string) {
   }
 }
 
+const PAGE_SIZE = 50;
+
 export function SentInfiniteList({ initialData, total, inboxes }: Props) {
   const [items, setItems] = useState<SentMessage[]>(initialData);
-  const [hasMore, setHasMore] = useState(initialData.length < total);
+  const [totalCount, setTotalCount] = useState<number>(total);
+  const [page, setPage] = useState<number>(1);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [activeEmail, setActiveEmail] = useState<SentMessage | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<string>("ALL");
+  const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeEmail, setActiveEmail] = useState<SentMessage | null>(null);
   const [copied, setCopied] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
-  const isLoadingRef = useRef(false);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Close custom account dropdown on outside click
   useEffect(() => {
-    return () => {
-      abortControllerRef.current?.abort();
-    };
-  }, []);
-
-  const loadMore = useCallback(async () => {
-    if (isLoadingRef.current || !hasMore) return;
-    isLoadingRef.current = true;
-    setLoading(true);
-    setError(null);
-    const lastId = items.length > 0 ? items[items.length - 1].id : 0;
-    abortControllerRef.current = new AbortController();
-    try {
-      const accParam = selectedAccountId !== "ALL" ? `&accountId=${selectedAccountId}` : "";
-      const res = await fetch(`/api/sent?lastId=${lastId}&limit=50${accParam}`, {
-        signal: abortControllerRef.current.signal,
-      });
-      if (!res.ok) throw new Error("fetch failed");
-      const data: SentMessage[] = await res.json();
-      if (data.length === 0) {
-        setHasMore(false);
-      } else {
-        setItems((prev) => {
-          const existingIds = new Set(prev.map((i) => i.id));
-          return [...prev, ...data.filter((i) => !existingIds.has(i.id))];
-        });
-        if (data.length < 50) setHasMore(false);
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setAccountDropdownOpen(false);
       }
-    } catch (e: unknown) {
-      if (e instanceof Error && e.name === "AbortError") return;
-      setError("Failed to load more — tap to retry");
-    } finally {
-      isLoadingRef.current = false;
-      setLoading(false);
     }
-  }, [items, hasMore, selectedAccountId]);
+    if (accountDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [accountDropdownOpen]);
 
-  const handleAccountChange = async (accId: string) => {
-    setSelectedAccountId(accId);
+  // Fetch a specific page of 50 items
+  const fetchPage = async (
+    targetPage: number,
+    accId = selectedAccountId,
+    query = searchQuery
+  ) => {
+    if (loading) return;
     setLoading(true);
     try {
       const accParam = accId !== "ALL" ? `&accountId=${accId}` : "";
-      const res = await fetch(`/api/sent?lastId=0&limit=50${accParam}`);
-      if (res.ok) {
-        const data: SentMessage[] = await res.json();
-        setItems(data);
-        setHasMore(data.length >= 50);
-      }
+      const qParam = query.trim() ? `&q=${encodeURIComponent(query.trim())}` : "";
+      const res = await fetch(
+        `/api/sent?page=${targetPage}&limit=${PAGE_SIZE}&paginated=true${accParam}${qParam}`
+      );
+      if (!res.ok) throw new Error("fetch failed");
+      const data = await res.json();
+      setItems(data.items || []);
+      setTotalCount(typeof data.total === "number" ? data.total : (data.items || []).length);
+      setPage(targetPage);
+      setSelectedIds(new Set());
     } catch (e) {
-      console.error(e);
+      console.error("[Sent page fetch error]", e);
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredItems = useMemo(() => {
-    if (!searchQuery.trim()) return items;
-    const q = searchQuery.toLowerCase();
-    return items.filter(
-      (m) =>
-        m.recipientEmail.toLowerCase().includes(q) ||
-        m.subject.toLowerCase().includes(q) ||
-        (m.channelTitle && m.channelTitle.toLowerCase().includes(q)) ||
-        (m.senderEmail && m.senderEmail.toLowerCase().includes(q))
-    );
-  }, [items, searchQuery]);
+  const handleAccountChange = (accId: string) => {
+    setSelectedAccountId(accId);
+    setAccountDropdownOpen(false);
+    fetchPage(1, accId, searchQuery);
+  };
 
-  // Infinite scroll
-  useEffect(() => {
-    if (!hasMore || loading || activeEmail) return;
-    const handleWindowScroll = () => {
-      if (!hasMore || loading || isLoadingRef.current) return;
-      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 300) {
-        loadMore();
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    fetchPage(1, selectedAccountId, searchQuery);
+  };
+
+  const handleClearSearch = () => {
+    setSearchQuery("");
+    fetchPage(1, selectedAccountId, "");
+  };
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
+  // Selection handlers
+  const allPageIds = useMemo(() => items.map((i) => i.id), [items]);
+  const isAllSelected = allPageIds.length > 0 && allPageIds.every((id) => selectedIds.has(id));
+  const isIndeterminate = !isAllSelected && allPageIds.some((id) => selectedIds.has(id));
+
+  const handleToggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(allPageIds));
+    }
+  };
+
+  const handleToggleRow = (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
       }
-    };
-    window.addEventListener("scroll", handleWindowScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleWindowScroll);
-  }, [hasMore, loading, loadMore, activeEmail]);
+      return next;
+    });
+  };
 
   const handleCopyBody = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -185,8 +190,16 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // Pagination bounds calculation
+  const startItem = totalCount > 0 ? (page - 1) * PAGE_SIZE + 1 : 0;
+  const endItem = totalCount > 0 ? Math.min(page * PAGE_SIZE, totalCount) : 0;
+  const rangeLabel = totalCount > 0 ? `${startItem}–${endItem} of ${totalCount.toLocaleString()}` : "0 of 0";
+
+  // Selected account object
+  const currentAccount = inboxes.find((i) => i.id.toString() === selectedAccountId);
+
   // ══════════════════════════════════════════════════════════════════════════════
-  // VIEW 2: GMAIL-STYLE EMAIL DETAIL VIEW (matches media_1789507920945.png)
+  // VIEW 2: GMAIL-STYLE EMAIL DETAIL VIEW
   // ══════════════════════════════════════════════════════════════════════════════
   if (activeEmail) {
     const senderLetter = (activeEmail.senderEmail?.[0] || "R").toUpperCase();
@@ -340,30 +353,48 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════════
-  // VIEW 1: GMAIL-STYLE SENT LIST VIEW (matches media_1789507877308.png)
+  // VIEW 1: GMAIL-STYLE SENT LIST VIEW
   // ══════════════════════════════════════════════════════════════════════════════
   return (
     <div className="space-y-3">
-      {/* Top Toolbar: Filter by Inbox, Search, and Gmail-styled Pagination */}
+      {/* Top Toolbar: Master Checkbox, Refresh, Custom Account Dropdown, Search, and 50-item Pagination */}
       <Card className="p-2.5 sm:p-3 border-border bg-surface-100/90 backdrop-blur-sm">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           {/* Left: Select, Refresh, Account Filter & Search */}
           <div className="flex items-center gap-2 flex-1 min-w-[240px] flex-wrap sm:flex-nowrap">
-            {/* Select toggle icon button */}
+            {/* Master Checkbox Toggle Button */}
             <button
               type="button"
-              className="p-1.5 rounded-md hover:bg-surface-200 text-text-muted hover:text-text-main transition-colors flex items-center gap-0.5"
-              title="Select"
+              onClick={handleToggleSelectAll}
+              disabled={items.length === 0}
+              className={`p-1.5 rounded-md hover:bg-surface-200 transition-colors flex items-center gap-0.5 ${
+                items.length === 0 ? "opacity-40 cursor-default" : "cursor-pointer text-text-muted hover:text-text-main"
+              }`}
+              title={isAllSelected ? "Deselect all" : "Select all on page"}
+              aria-label="Select all on page"
             >
-              <Square className="w-4 h-4" />
-              <ChevronDown className="w-2.5 h-2.5 opacity-60" />
+              {isAllSelected ? (
+                <CheckSquare className="w-4 h-4 text-primary" />
+              ) : isIndeterminate ? (
+                <MinusSquare className="w-4 h-4 text-primary" />
+              ) : (
+                <Square className="w-4 h-4" />
+              )}
             </button>
 
-            {/* Refresh button (Gmail-style placement right beside selection) */}
+            {/* Selection count badge if any selected */}
+            {selectedIds.size > 0 && (
+              <span className="text-[11px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20 shrink-0">
+                {selectedIds.size} selected
+              </span>
+            )}
+
+            {/* Refresh button */}
             <button
               type="button"
-              onClick={() => handleAccountChange(selectedAccountId)}
+              onClick={() => fetchPage(page, selectedAccountId, searchQuery)}
               title="Refresh outbox"
+              disabled={loading}
               className="p-1.5 rounded-md hover:bg-surface-200 text-text-muted hover:text-text-main transition-colors"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-primary" : ""}`} />
@@ -371,25 +402,85 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
 
             <div className="h-4 w-px bg-border/80 mx-1 hidden sm:block" />
 
-            {/* Account Selector */}
-            <div className="relative shrink-0">
-              <select
-                value={selectedAccountId}
-                onChange={(e) => handleAccountChange(e.target.value)}
-                className="bg-surface-200/80 border border-border/80 rounded-lg pl-2.5 pr-7 py-1.5 text-xs text-text-main font-medium focus:outline-none focus:ring-1 focus:ring-primary appearance-none cursor-pointer"
+            {/* Custom Sleek Account Selector Dropdown (Replaces native OS <select>) */}
+            <div className="relative shrink-0" ref={dropdownRef}>
+              <button
+                type="button"
+                onClick={() => setAccountDropdownOpen(!accountDropdownOpen)}
+                className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-surface-200/90 border border-border/80 hover:border-border text-xs text-text-main font-medium transition-all min-w-[210px]"
+                aria-haspopup="listbox"
+                aria-expanded={accountDropdownOpen}
               >
-                <option value="ALL">All Connected Accounts ({inboxes.length})</option>
-                {inboxes.map((acc) => (
-                  <option key={acc.id} value={acc.id.toString()}>
-                    {acc.email} ({acc.sentToday}/{acc.dailyLimit})
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="w-3.5 h-3.5 text-text-muted absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <div className="flex items-center gap-2 truncate">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                  <span className="truncate">
+                    {selectedAccountId === "ALL"
+                      ? `All Accounts (${inboxes.length})`
+                      : currentAccount?.email || "Selected Account"}
+                  </span>
+                </div>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-text-muted shrink-0 transition-transform duration-150 ${
+                    accountDropdownOpen ? "rotate-180 text-text-main" : ""
+                  }`}
+                />
+              </button>
+
+              {accountDropdownOpen && (
+                <div className="absolute left-0 top-full mt-1.5 z-50 min-w-[260px] max-w-[340px] bg-surface-100 border border-border rounded-xl shadow-2xl p-1 animate-in fade-in zoom-in-95 duration-100">
+                  <button
+                    type="button"
+                    onClick={() => handleAccountChange("ALL")}
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs transition-colors text-left ${
+                      selectedAccountId === "ALL"
+                        ? "bg-primary/15 text-primary font-semibold"
+                        : "text-text-main hover:bg-surface-200"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                      <span className="truncate">All Connected Accounts</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-[11px] font-mono text-text-muted">({inboxes.length})</span>
+                      {selectedAccountId === "ALL" && <Check className="w-3.5 h-3.5 text-primary" />}
+                    </div>
+                  </button>
+
+                  {inboxes.length > 0 && <div className="my-1 border-t border-border/60" />}
+
+                  {inboxes.map((acc) => {
+                    const isSelected = selectedAccountId === acc.id.toString();
+                    return (
+                      <button
+                        key={acc.id}
+                        type="button"
+                        onClick={() => handleAccountChange(acc.id.toString())}
+                        className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs transition-colors text-left ${
+                          isSelected
+                            ? "bg-primary/15 text-primary font-semibold"
+                            : "text-text-main hover:bg-surface-200"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 truncate min-w-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                          <span className="truncate font-mono text-[11px]">{acc.email}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-200 text-text-muted">
+                            {acc.sentToday}/{acc.dailyLimit}
+                          </span>
+                          {isSelected && <Check className="w-3.5 h-3.5 text-primary" />}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Search bar */}
-            <div className="relative flex-1 min-w-[180px]">
+            <form onSubmit={handleSearchSubmit} className="relative flex-1 min-w-[180px]">
               <Search className="w-3.5 h-3.5 text-text-muted absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 value={searchQuery}
@@ -399,44 +490,48 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
               />
               {searchQuery && (
                 <button
-                  onClick={() => setSearchQuery("")}
+                  type="button"
+                  onClick={handleClearSearch}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main"
+                  title="Clear search"
                 >
                   <X className="w-3 h-3" />
                 </button>
               )}
-            </div>
+            </form>
           </div>
 
-          {/* Right: Gmail-Style Pagination Counter with Chevrons (matches 1-40 of 40 < >) */}
-          <div className="flex items-center gap-1 text-xs text-text-muted font-mono select-none shrink-0">
+          {/* Right: Working 50-per-page Pagination Controls (< > arrows) */}
+          <div className="flex items-center gap-1.5 text-xs text-text-muted font-mono select-none shrink-0">
             <span className="px-1 text-[11px] sm:text-xs text-text-secondary">
-              {filteredItems.length > 0
-                ? `1–${filteredItems.length} of ${total.toLocaleString()}`
-                : "0 of 0"}
+              {rangeLabel}
             </span>
-            <div className="flex items-center">
+            <div className="flex items-center gap-0.5">
               <button
                 type="button"
-                disabled={true}
-                className="p-1 rounded text-text-muted/30 cursor-default"
+                onClick={() => fetchPage(page - 1)}
+                disabled={page <= 1 || loading}
+                className={`p-1.5 rounded-md transition-colors ${
+                  page > 1 && !loading
+                    ? "text-text-secondary hover:text-text-main hover:bg-surface-200 cursor-pointer"
+                    : "text-text-muted/30 cursor-default"
+                }`}
                 aria-label="Previous page"
+                title={page > 1 ? "Previous page" : "First page"}
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  if (hasMore && !loading) loadMore();
-                }}
-                disabled={!hasMore || loading}
-                className={`p-1 rounded transition-colors ${
-                  hasMore && !loading
+                onClick={() => fetchPage(page + 1)}
+                disabled={page >= totalPages || loading}
+                className={`p-1.5 rounded-md transition-colors ${
+                  page < totalPages && !loading
                     ? "text-text-secondary hover:text-text-main hover:bg-surface-200 cursor-pointer"
                     : "text-text-muted/30 cursor-default"
                 }`}
                 aria-label="Next page"
-                title={hasMore ? "Load next batch" : "All records loaded"}
+                title={page < totalPages ? "Next page" : "Last page"}
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
@@ -447,7 +542,7 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
 
       {/* Gmail-Style Email List Container */}
       <Card className="overflow-hidden border-border divide-y divide-border/40">
-        {filteredItems.length === 0 && !loading ? (
+        {items.length === 0 && !loading ? (
           <div className="p-12 text-center text-xs text-text-muted space-y-2">
             <Send className="w-8 h-8 mx-auto text-text-muted/40" />
             <p className="font-semibold text-text-secondary text-sm">No sent messages found</p>
@@ -456,20 +551,33 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
             </p>
           </div>
         ) : (
-          filteredItems.map((m) => {
+          items.map((m) => {
             const bodySnippet = m.body.replace(/\s+/g, " ").trim();
             const dateStr = formatDate(m.sentAt);
+            const isSelected = selectedIds.has(m.id);
 
             return (
               <div
                 key={m.id}
                 onClick={() => setActiveEmail(m)}
-                className="group flex items-center gap-3 px-3.5 py-2.5 sm:py-3 hover:bg-surface-200/70 cursor-pointer transition-colors text-xs select-none min-h-[44px]"
+                className={`group flex items-center gap-3 px-3.5 py-2.5 sm:py-3 cursor-pointer transition-colors text-xs select-none min-h-[44px] ${
+                  isSelected ? "bg-primary/[0.08] hover:bg-primary/[0.12]" : "hover:bg-surface-200/70"
+                }`}
               >
-                {/* Checkbox / Star indicators (Gmail style) */}
-                <div className="flex items-center gap-2 text-text-muted group-hover:text-text-secondary shrink-0">
-                  <Square className="w-3.5 h-3.5 opacity-50 hover:opacity-100 transition-opacity" />
-                  <Star className="w-3.5 h-3.5 opacity-40 hover:opacity-100 transition-opacity" />
+                {/* Checkbox button (Star completely removed as requested) */}
+                <div className="flex items-center shrink-0">
+                  <button
+                    type="button"
+                    onClick={(e) => handleToggleRow(m.id, e)}
+                    aria-label={isSelected ? "Deselect row" : "Select row"}
+                    className="p-1 -m-1 rounded hover:bg-surface-300/50 transition-colors"
+                  >
+                    {isSelected ? (
+                      <CheckSquare className="w-4 h-4 text-primary" />
+                    ) : (
+                      <Square className="w-4 h-4 text-text-muted/60 group-hover:text-text-secondary hover:text-text-main transition-colors" />
+                    )}
+                  </button>
                 </div>
 
                 {/* Recipient — clean single line, identical to Gmail */}
@@ -524,15 +632,20 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
       {loading && (
         <div className="flex items-center justify-center gap-2 py-4 text-xs text-primary">
           <Loader2 className="w-4 h-4 animate-spin" />
-          <span>Loading more sent mail...</span>
+          <span>Loading sent messages...</span>
         </div>
       )}
 
-      {/* Footer */}
-      {!hasMore && filteredItems.length > 0 && !loading && (
-        <p className="text-center text-[11px] text-text-muted py-2">
-          All {total.toLocaleString()} sent records loaded
-        </p>
+      {/* Pagination Footer Indicator */}
+      {totalCount > 0 && !loading && (
+        <div className="flex items-center justify-between text-[11px] text-text-muted px-2 py-1">
+          <span>
+            Showing page {page} of {totalPages} (50 per page)
+          </span>
+          <span>
+            Total {totalCount.toLocaleString()} sent record{totalCount === 1 ? "" : "s"}
+          </span>
+        </div>
       )}
     </div>
   );
