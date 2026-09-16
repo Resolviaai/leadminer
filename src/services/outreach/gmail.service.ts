@@ -3,6 +3,7 @@ import { db } from '../../db/client';
 import { gmailAccounts, systemSettings, suppressions, messages, leads } from '../../db/schema';
 import { eq, and, lt, gte, sql } from 'drizzle-orm';
 import { env } from '../../config/env';
+import { encryptionService } from '../security/encryption.service';
 
 export interface SendEmailParams {
   leadId: number;
@@ -22,6 +23,8 @@ export interface SendEmailResult {
   messageId?: string;
   threadId?: string;
   accountId?: number;
+  senderEmail?: string;
+  simulated?: boolean;
   error?: string;
   skippedReason?: string;
 }
@@ -161,7 +164,7 @@ export class GmailSendingService {
     }
   }
 
-  private createRfc2822Message(from: string, to: string, subject: string, bodyText: string): string {
+  private createRfc2822Message(from: string, to: string, subject: string, bodyText: string, unsubscribeUrl?: string): string {
     const utf8Subject = `=?utf-8?B?${Buffer.from(subject).toString('base64')}?=`;
     const messageParts = [
       `From: ${from}`,
@@ -169,9 +172,16 @@ export class GmailSendingService {
       'Content-Type: text/plain; charset=utf-8',
       'MIME-Version: 1.0',
       `Subject: ${utf8Subject}`,
-      '',
-      bodyText,
     ];
+
+    if (unsubscribeUrl) {
+      messageParts.push(`List-Unsubscribe: <${unsubscribeUrl}>`);
+      messageParts.push('List-Unsubscribe-Post: List-Unsubscribe=One-Click');
+    }
+
+    messageParts.push('');
+    messageParts.push(bodyText);
+
     const message = messageParts.join('\r\n');
     return Buffer.from(message)
       .toString('base64')
@@ -193,31 +203,22 @@ export class GmailSendingService {
       return { success: false, skippedReason: 'RECIPIENT_SUPPRESSED' };
     }
 
-    // 3. Atomically Reserve Sending Account Slot (Concurrency-safe)
-    const account = await this.reserveSendingAccount();
-
-    // When DRY_RUN = false and no available account with remaining quota:
-    if (!env.DRY_RUN && !account) {
-      console.warn('⛔ [Outreach] No healthy Gmail account available with remaining quota. Aborting send.');
-      return { success: false, skippedReason: 'NO_HEALTHY_GMAIL_ACCOUNT' };
-    }
-
-    // 4. DRY RUN Mode Handler
+    // 3. DRY RUN Mode Handler (Runs BEFORE reserving quota to ensure 0 quota consumption)
     if (env.DRY_RUN) {
       const mockMessageId = `mock_msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const mockThreadId = `mock_thread_${Date.now()}`;
 
-      console.log(`[DRY RUN OUTREACH] To: ${params.recipientEmail} | Subject: "${params.subject}"`);
+      console.log(`[DRY RUN SIMULATION] To: ${params.recipientEmail} | Subject: "${params.subject}"`);
       console.log(`[DRY RUN BODY PREVIEW]\n${params.body.slice(0, 150)}...\n---`);
 
-      // Persist dry run message to DB if connection available
+      // Persist dry run message to DB as SIMULATED (never SENT, never marks lead CONTACTED)
       try {
         await db
           .insert(messages)
           .values({
             leadId: params.leadId,
             campaignId: params.campaignId,
-            gmailAccountId: account ? account.id : null,
+            gmailAccountId: null,
             templateId: params.templateId,
             contactId: params.contactId,
             recipientEmail: params.recipientEmail,
@@ -225,36 +226,37 @@ export class GmailSendingService {
             body: params.body,
             personalizationStatus: params.personalizationStatus || 'NONE',
             personalizationModel: params.personalizationModel,
-            sendStatus: 'SENT',
-            sentAt: new Date(),
+            sendStatus: 'SIMULATED',
             messageId: mockMessageId,
             threadId: mockThreadId,
             idempotencyKey: params.idempotencyKey,
           })
           .onConflictDoNothing();
-
-        await db
-          .update(leads)
-          .set({ outreachStatus: 'CONTACTED', updatedAt: new Date() })
-          .where(eq(leads.id, params.leadId));
       } catch (e) {
-        // Table might not be migrated yet in tests
+        // Non-blocking fallback
       }
 
       return {
         success: true,
         messageId: mockMessageId,
         threadId: mockThreadId,
-        accountId: account?.id,
+        simulated: true,
       };
     }
 
-    // 5. Live Gmail Send Execution (Two-Phase Commit Pattern)
+    // 4. Atomically Reserve Sending Account Slot (Concurrency-safe, LIVE MODE ONLY)
+    const account = await this.reserveSendingAccount();
+
     if (!account) {
+      console.warn('⛔ [Outreach] No healthy Gmail account available with remaining quota. Aborting send.');
       return { success: false, skippedReason: 'NO_HEALTHY_GMAIL_ACCOUNT' };
     }
 
+    // 5. Live Gmail Send Execution (Two-Phase Commit Pattern)
     let messageRecordId: number | null = null;
+    let liveSendSucceeded = false;
+    let liveMessageId: string | null = null;
+    let liveThreadId: string | null = null;
 
     try {
       // Phase 1: Pre-insert message in 'SENDING' status with deterministic idempotency key.
@@ -340,19 +342,24 @@ export class GmailSendingService {
         env.GOOGLE_REDIRECT_URI
       );
 
+      // Transparent token decryption with AES-256-GCM / plaintext fallback
+      const decryptedRefreshToken = encryptionService.decrypt(account.refreshToken);
+      const decryptedAccessToken = account.accessToken ? encryptionService.decrypt(account.accessToken) : undefined;
+
       oauth2Client.setCredentials({
-        refresh_token: account.refreshToken,
-        access_token: account.accessToken || undefined,
+        refresh_token: decryptedRefreshToken,
+        access_token: decryptedAccessToken,
       });
 
-      // Persist refreshed OAuth tokens back to gmail_accounts table
+      // Persist refreshed OAuth tokens back to gmail_accounts table with AES-256-GCM encryption
       oauth2Client.on('tokens', async (tokens) => {
         try {
           const updateData: { accessToken?: string; tokenExpiresAt?: Date; updatedAt: Date } = {
             updatedAt: new Date(),
           };
           if (tokens.access_token) {
-            updateData.accessToken = tokens.access_token;
+            const enc = encryptionService.encrypt(tokens.access_token);
+            if (enc) updateData.accessToken = enc;
           }
           if (tokens.expiry_date) {
             updateData.tokenExpiresAt = new Date(tokens.expiry_date);
@@ -361,14 +368,127 @@ export class GmailSendingService {
             .update(gmailAccounts)
             .set(updateData)
             .where(eq(gmailAccounts.id, account.id));
-          console.log(`[OAuth] Refreshed and persisted access token for ${account.email}`);
+          console.log(`[OAuth] Refreshed and encrypted access token for ${account.email}`);
         } catch (tokErr: any) {
           console.warn(`[OAuth] Token persistence error for ${account.email}:`, tokErr.message);
         }
       });
 
       const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-      const raw = this.createRfc2822Message(account.email, params.recipientEmail, params.subject, params.body);
+
+      // Pre-send Sender Identity Verification:
+      // Verify that the OAuth token actually belongs to account.email
+      try {
+        const profile = await gmail.users.getProfile({ userId: 'me' });
+        const actualEmail = profile.data.emailAddress?.toLowerCase().trim();
+        const expectedEmail = account.email.toLowerCase().trim();
+
+        if (actualEmail && actualEmail !== expectedEmail) {
+          console.error(
+            `⛔ [Sender Identity Mismatch] Connected Gmail inbox is ${actualEmail}, but account is configured as ${expectedEmail}. Aborting send.`
+          );
+          await this.releaseAccountReservation(account.id);
+          await db
+            .update(gmailAccounts)
+            .set({
+              status: 'AUTH_ERROR',
+              lastError: `Sender mismatch: token belongs to ${actualEmail}, expected ${expectedEmail}`,
+              updatedAt: new Date(),
+            })
+            .where(eq(gmailAccounts.id, account.id));
+
+          return {
+            success: false,
+            accountId: account.id,
+            error: `Sender mismatch: OAuth token belongs to ${actualEmail}, expected ${expectedEmail}`,
+          };
+        }
+      } catch (profileErr: any) {
+        if (profileErr?.status === 401 || profileErr?.message?.includes('invalid_grant')) {
+          await this.releaseAccountReservation(account.id);
+          await db
+            .update(gmailAccounts)
+            .set({ status: 'AUTH_ERROR', lastError: profileErr.message, updatedAt: new Date() })
+            .where(eq(gmailAccounts.id, account.id));
+          return {
+            success: false,
+            accountId: account.id,
+            error: `Gmail OAuth authorization invalid: ${profileErr.message}`,
+          };
+        }
+        console.warn(`⚠️ [Sender Profile Check Non-Fatal]: ${profileErr.message}`);
+      }
+
+      // Pre-send In-Flight Gmail Reconciliation Check:
+      // Verify if a message with matching subject was already sent to recipient in the last 2 hours
+      try {
+        const listQuery = `to:${params.recipientEmail}`;
+        const existingList = await gmail.users.messages.list({
+          userId: 'me',
+          q: listQuery,
+          maxResults: 5,
+        });
+
+        if (existingList.data.messages && existingList.data.messages.length > 0) {
+          for (const msgItem of existingList.data.messages) {
+            if (!msgItem.id) continue;
+            const fullMsg = await gmail.users.messages.get({
+              userId: 'me',
+              id: msgItem.id,
+              format: 'metadata',
+              metadataHeaders: ['Subject', 'Date'],
+            });
+
+            const headers = fullMsg.data.payload?.headers || [];
+            const foundSubject = headers.find((h) => h.name?.toLowerCase() === 'subject')?.value;
+
+            if (foundSubject && foundSubject.trim() === params.subject.trim()) {
+              const internalDate = fullMsg.data.internalDate
+                ? new Date(parseInt(fullMsg.data.internalDate, 10))
+                : new Date();
+              const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+
+              if (internalDate >= twoHoursAgo) {
+                console.log(
+                  `[Gmail In-Flight Reconciliation] Found matching sent message in Gmail (ID: ${msgItem.id}). Reconciling without resending.`
+                );
+
+                if (messageRecordId) {
+                  await db
+                    .update(messages)
+                    .set({
+                      sendStatus: 'SENT',
+                      sentAt: internalDate,
+                      messageId: msgItem.id,
+                      threadId: fullMsg.data.threadId || undefined,
+                      updatedAt: new Date(),
+                    })
+                    .where(eq(messages.id, messageRecordId));
+                }
+
+                await db
+                  .update(leads)
+                  .set({ outreachStatus: 'CONTACTED', updatedAt: new Date() })
+                  .where(eq(leads.id, params.leadId));
+
+                return {
+                  success: true,
+                  messageId: msgItem.id,
+                  threadId: fullMsg.data.threadId || undefined,
+                  accountId: account.id,
+                  senderEmail: account.email,
+                };
+              }
+            }
+          }
+        }
+      } catch (listErr: any) {
+        console.warn(`[Gmail Pre-Send Check] List reconciliation check non-fatal: ${listErr.message}`);
+      }
+
+      // Construct Unsubscribe URL (RFC 2369 / RFC 8058 compliant)
+      const unsubUrl = `${env.APP_URL}/api/unsubscribe?email=${encodeURIComponent(params.recipientEmail)}&leadId=${params.leadId}`;
+      const raw = this.createRfc2822Message(account.email, params.recipientEmail, params.subject, params.body, unsubUrl);
 
       // Execute live send via Google API
       const response = await gmail.users.messages.send({
@@ -376,38 +496,103 @@ export class GmailSendingService {
         requestBody: { raw },
       });
 
-      const messageId = response.data.id || `live_msg_${Date.now()}`;
-      const threadId = response.data.threadId || `live_thread_${Date.now()}`;
+      // Mark live send as successfully dispatched
+      liveSendSucceeded = true;
+      liveMessageId = response.data.id || `live_msg_${Date.now()}`;
+      liveThreadId = response.data.threadId || `live_thread_${Date.now()}`;
 
-      // Phase 2: Update message record to 'SENT' and lead to 'CONTACTED'
-      if (messageRecordId) {
-        await db
-          .update(messages)
-          .set({
-            sendStatus: 'SENT',
-            sentAt: new Date(),
-            messageId,
-            threadId,
-            updatedAt: new Date(),
-          })
-          .where(eq(messages.id, messageRecordId));
+      // Post-Send Live Verification: Confirm message exists in Gmail Sent history
+      try {
+        const verifiedMsg = await gmail.users.messages.get({
+          userId: 'me',
+          id: liveMessageId,
+          format: 'metadata',
+          metadataHeaders: ['From', 'To', 'Subject'],
+        });
+
+        const labels = verifiedMsg.data.labelIds || [];
+        const hasSentLabel = labels.includes('SENT');
+        const headers = verifiedMsg.data.payload?.headers || [];
+        const fromVal = headers.find((h) => h.name?.toLowerCase() === 'from')?.value || account.email;
+        const toVal = headers.find((h) => h.name?.toLowerCase() === 'to')?.value || params.recipientEmail;
+
+        console.log(
+          `🔍 [Gmail Verification Confirmed] ID=${liveMessageId} | SENT_label=${hasSentLabel} | From: ${fromVal} | To: ${toVal}`
+        );
+      } catch (verifyErr: any) {
+        console.warn(`⚠️ [Gmail Verification Check Non-Fatal]: ${verifyErr.message}`);
       }
 
-      await db
-        .update(leads)
-        .set({ outreachStatus: 'CONTACTED', updatedAt: new Date() })
-        .where(eq(leads.id, params.leadId));
+      // Phase 2: Update message record to 'SENT' and lead to 'CONTACTED' with retry backoff
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          if (messageRecordId) {
+            await db
+              .update(messages)
+              .set({
+                sendStatus: 'SENT',
+                sentAt: new Date(),
+                messageId: liveMessageId,
+                threadId: liveThreadId,
+                updatedAt: new Date(),
+              })
+              .where(eq(messages.id, messageRecordId));
+          }
+
+          await db
+            .update(leads)
+            .set({ outreachStatus: 'CONTACTED', updatedAt: new Date() })
+            .where(eq(leads.id, params.leadId));
+
+          break; // Successfully updated
+        } catch (dbErr: any) {
+          console.warn(`⚠️ [Gmail Send DB Update] Attempt ${attempt}/3 failed: ${dbErr.message}`);
+          if (attempt < 3) {
+            await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+          }
+        }
+      }
 
       return {
         success: true,
-        messageId,
-        threadId,
+        messageId: liveMessageId,
+        threadId: liveThreadId,
         accountId: account.id,
+        senderEmail: account.email,
       };
     } catch (error: any) {
       console.error(`[Gmail Send Error] Account ${account.email}:`, error);
 
-      // Update message row to 'FAILED' so audit trail is preserved and no ghost sends occur
+      // CRITICAL CRASH SAFETY: If the live Gmail API call succeeded, NEVER mark as FAILED
+      // and NEVER release the account quota reservation!
+      if (liveSendSucceeded) {
+        console.error(
+          `⚠️ [CRITICAL] Live Gmail send succeeded (${liveMessageId}) but post-send DB update threw an error. Preserving SENT state to prevent duplicate outreach!`
+        );
+        // Best-effort background reconcile
+        if (messageRecordId && liveMessageId) {
+          db.update(messages)
+            .set({
+              sendStatus: 'SENT',
+              messageId: liveMessageId,
+              threadId: liveThreadId || undefined,
+              sentAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(eq(messages.id, messageRecordId))
+            .catch((e) => console.error('[Background Reconcile Failed]:', e.message));
+        }
+
+        return {
+          success: true,
+          messageId: liveMessageId || undefined,
+          threadId: liveThreadId || undefined,
+          accountId: account.id,
+          senderEmail: account.email,
+        };
+      }
+
+      // Update message row to 'FAILED' only if live send NEVER happened
       if (messageRecordId) {
         try {
           await db
@@ -423,7 +608,7 @@ export class GmailSendingService {
         }
       }
 
-      // Release the reserved quota slot since sending failed
+      // Release the reserved quota slot since sending never occurred
       await this.releaseAccountReservation(account.id);
 
       if (error?.status === 401 || error?.message?.includes('invalid_grant')) {

@@ -1,8 +1,11 @@
 import { db } from '../../db/client';
-import { messages, replies, leads, campaigns, gmailAccounts } from '../../db/schema';
+import { messages, replies, leads, campaigns, gmailAccounts, suppressions } from '../../db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { telegramService } from '../notifications/telegram.service';
 import { env } from '../../config/env';
+
+export const OPT_OUT_REGEX =
+  /\b(stop|unsubscribe|opt[- ]?out|remove\s+me|take\s+me\s+off|please\s+remove|don'?t\s+contact|leave\s+me\s+alone)\b/i;
 
 export interface InboundReplyPayload {
   threadId: string;
@@ -25,6 +28,7 @@ export class ReplyDetectorService {
           gmailAccountId: messages.gmailAccountId,
           leadTitle: leads.channelTitle,
           leadSubs: leads.subscriberCount,
+          leadChannelId: leads.channelId,
           campaignName: campaigns.name,
         })
         .from(messages)
@@ -61,31 +65,74 @@ export class ReplyDetectorService {
         return { recorded: false, reason: 'Reply was already processed previously' };
       }
 
-      // 3. Update lead outreach status to REPLIED
-      await db
-        .update(leads)
-        .set({
-          outreachStatus: 'REPLIED',
-          updatedAt: new Date(),
-        })
-        .where(eq(leads.id, match.leadId));
+      // 3. Detect unsubscribe / opt-out intent
+      const isOptOut = OPT_OUT_REGEX.test(payload.snippet);
 
-      // 4. Send high-signal Telegram notification
-      await telegramService.notifyReply({
-        channelTitle: match.leadTitle || 'Unknown Channel',
-        subscriberCount: match.leadSubs || undefined,
-        campaignName: match.campaignName || 'General Campaign',
-        senderEmail: payload.senderEmail,
-        snippet: payload.snippet,
-        threadId: payload.threadId,
-        leadId: match.leadId,
-      });
+      if (isOptOut) {
+        // Automatically insert into suppressions table
+        const cleanEmail = payload.senderEmail.toLowerCase().trim();
+        await db
+          .insert(suppressions)
+          .values({
+            email: cleanEmail,
+            channelId: match.leadChannelId || null,
+            reason: 'OPT_OUT_REPLY',
+            source: 'REPLY_DETECTOR',
+          })
+          .onConflictDoNothing();
 
-      // 5. Update telegram notified flag
-      await db
-        .update(replies)
-        .set({ telegramNotified: true })
-        .where(eq(replies.id, inserted[0].id));
+        // Update lead to UNSUBSCRIBED and flag suppressionStatus
+        await db
+          .update(leads)
+          .set({
+            outreachStatus: 'UNSUBSCRIBED',
+            suppressionStatus: true,
+            updatedAt: new Date(),
+          })
+          .where(eq(leads.id, match.leadId));
+
+        console.log(`🛑 [Opt-Out Detected] Suppressed creator ${cleanEmail} (Lead #${match.leadId})`);
+      } else {
+        // Regular interested / conversational reply: update lead to REPLIED
+        await db
+          .update(leads)
+          .set({
+            outreachStatus: 'REPLIED',
+            updatedAt: new Date(),
+          })
+          .where(eq(leads.id, match.leadId));
+      }
+
+      // 4. Send high-signal Telegram notification with isolated failure protection
+      try {
+        if (isOptOut) {
+          await telegramService.notifyUnsubscribe(
+            match.leadTitle || 'Unknown Channel',
+            payload.senderEmail,
+            `Opt-out snippet: "${payload.snippet.slice(0, 120)}"`
+          );
+        } else {
+          await telegramService.notifyReply({
+            channelTitle: match.leadTitle || 'Unknown Channel',
+            subscriberCount: match.leadSubs || undefined,
+            campaignName: match.campaignName || 'General Campaign',
+            senderEmail: payload.senderEmail,
+            snippet: payload.snippet,
+            threadId: payload.threadId,
+            leadId: match.leadId,
+          });
+        }
+
+        // 5. Update telegram notified flag
+        if (inserted.length > 0) {
+          await db
+            .update(replies)
+            .set({ telegramNotified: true })
+            .where(eq(replies.id, inserted[0].id));
+        }
+      } catch (tgErr: any) {
+        console.warn(`⚠️ [Reply Detector] Telegram notification error for reply ${inserted[0].id}:`, tgErr.message);
+      }
 
       return { recorded: true };
     } catch (error: any) {

@@ -27,6 +27,7 @@ type Lead = {
   emailStatus: string | null;
   sourceKeyword: string | null;
   category: string | null;
+  additionalEmails?: string[];
   socialLinks?: { type: string; value: string }[];
 };
 
@@ -197,11 +198,19 @@ export function LeadsInfiniteList({ initialData, total }: Props) {
                 {getQualBadge(lead.qualificationStatus)}
               </div>
               <div className="p-2 rounded-lg bg-surface-200 text-xs flex items-center justify-between">
-                <div className="flex items-center space-x-2 truncate">
+                <div className="flex items-center space-x-1.5 truncate">
                   <Mail className="w-3.5 h-3.5 text-text-muted shrink-0" />
                   <span className="font-mono text-text-secondary text-[11px] truncate">
                     {lead.email || "No email found"}
                   </span>
+                  {lead.additionalEmails && lead.additionalEmails.length > 0 && (
+                    <span
+                      title={lead.additionalEmails.join(', ')}
+                      className="text-[9px] px-1 py-0.2 rounded bg-surface-300 text-text-muted font-sans shrink-0"
+                    >
+                      +{lead.additionalEmails.length}
+                    </span>
+                  )}
                 </div>
                 {getEmailBadge(lead.emailStatus)}
               </div>
@@ -271,7 +280,17 @@ export function LeadsInfiniteList({ initialData, total }: Props) {
                     </TableCell>
                     <TableCell className="font-mono text-text-main">
                       <div>
-                        {lead.email || <span className="text-text-muted font-sans text-[11px]">None found</span>}
+                        <div className="flex items-center space-x-1.5">
+                          <span className="truncate">{lead.email || <span className="text-text-muted font-sans text-[11px]">None found</span>}</span>
+                          {lead.additionalEmails && lead.additionalEmails.length > 0 && (
+                            <span
+                              title={lead.additionalEmails.join(', ')}
+                              className="text-[9px] px-1 py-0.2 rounded bg-surface-200 text-text-muted font-sans shrink-0 border border-border/50"
+                            >
+                              +{lead.additionalEmails.length}
+                            </span>
+                          )}
+                        </div>
                         {lead.socialLinks && lead.socialLinks.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1 font-sans">
                             {lead.socialLinks.slice(0, 3).map((s, idx) => (

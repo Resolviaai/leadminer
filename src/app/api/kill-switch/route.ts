@@ -2,8 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/client';
 import { systemSettings } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { verifyWorkerAuth } from '@/lib/worker-auth';
 
 export async function POST(req: NextRequest) {
+  const auth = verifyWorkerAuth(req);
+  if (!auth.authorized) {
+    return auth.response!;
+  }
+
   try {
     let enabled = true;
 

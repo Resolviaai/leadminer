@@ -183,94 +183,94 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
             continue;
           }
 
-          // 10. Persist New Lead
-          const [newLead] = await pool
-            .insert(leads)
-            .values({
-              channelId: ch.channelId,
-              channelUrl: `https://youtube.com/channel/${ch.channelId}`,
-              channelTitle: ch.title,
-              customUrl: ch.customUrl,
-              description: ch.description,
-              website: ch.website,
-              thumbnailUrl: ch.thumbnailUrl,
-              subscriberCount: ch.subscriberCount,
-              videoCount: ch.videoCount,
-              viewCount: ch.viewCount,
-              publishedAt: ch.publishedAt ? new Date(ch.publishedAt) : null,
-              sourceKeywordId: kw.id,
-              qualificationStatus: 'UNQUALIFIED',
-              outreachStatus: 'UNPROCESSED',
-              country: ch.country || null,
-              rawPayload: ch.rawPayload,
-            })
-            .returning({ id: leads.id });
+          // 10. Persist New Lead atomically with provenance and contacts inside a single transaction
+          await pool.transaction(async (tx) => {
+            const [newLead] = await tx
+              .insert(leads)
+              .values({
+                channelId: ch.channelId,
+                channelUrl: `https://youtube.com/channel/${ch.channelId}`,
+                channelTitle: ch.title,
+                customUrl: ch.customUrl,
+                description: ch.description,
+                website: ch.website,
+                thumbnailUrl: ch.thumbnailUrl,
+                subscriberCount: ch.subscriberCount,
+                videoCount: ch.videoCount,
+                viewCount: ch.viewCount,
+                publishedAt: ch.publishedAt ? new Date(ch.publishedAt) : null,
+                sourceKeywordId: kw.id,
+                qualificationStatus: 'UNQUALIFIED',
+                outreachStatus: 'UNPROCESSED',
+                country: ch.country || null,
+                rawPayload: ch.rawPayload,
+              })
+              .returning({ id: leads.id });
 
-          const leadId = newLead.id;
+            const leadId = newLead.id;
+
+            // 11. Record Provenance in lead_keyword_sources
+            await tx
+              .insert(leadKeywordSources)
+              .values({
+                leadId,
+                keywordId: kw.id,
+                firstSeenAt: new Date(),
+                lastSeenAt: new Date(),
+              })
+              .onConflictDoNothing();
+
+            // 12. Contact Extraction: Preserve ALL Discovered Emails and Links
+            const extractedEmails = emailExtractor.extractEmails(ch.description || '');
+            const extractedSocials = socialExtractor.extractSocials(ch.description || '');
+
+            // Insert ALL discovered unique emails
+            for (let i = 0; i < extractedEmails.length; i++) {
+              const emailObj = extractedEmails[i];
+              const cleanEmail = emailObj.email.toLowerCase().trim();
+
+              await tx
+                .insert(contacts)
+                .values({
+                  leadId,
+                  contactType: 'EMAIL',
+                  value: cleanEmail,
+                  normalizedValue: cleanEmail,
+                  source: emailObj.source,
+                  isPrimary: i === 0,
+                  email: cleanEmail,
+                  emailStatus: 'UNKNOWN',
+                })
+                .onConflictDoNothing();
+
+              kwEmailsFoundCount++;
+            }
+
+            // Insert structured social/profile links (Linktree, Beacons, Instagram, Twitter, etc.)
+            for (const item of extractedSocials.items) {
+              if (item.type === 'EMAIL') continue; // Handled above
+
+              await tx
+                .insert(contacts)
+                .values({
+                  leadId,
+                  contactType: item.type,
+                  value: item.value,
+                  normalizedValue: item.normalizedValue,
+                  source: item.source,
+                  isPrimary: false,
+                  instagram: item.type === 'INSTAGRAM' ? item.normalizedValue : undefined,
+                  twitter: item.type === 'TWITTER_X' ? item.normalizedValue : undefined,
+                  discord: item.type === 'DISCORD' ? item.value : undefined,
+                  tiktok: item.type === 'TIKTOK' ? item.normalizedValue : undefined,
+                  linkedin: item.type === 'LINKEDIN' ? item.value : undefined,
+                })
+                .onConflictDoNothing();
+            }
+          });
+
           kwNewLeadsCount++;
           totalNewLeadsCount++;
-
-          // 11. Record Provenance in lead_keyword_sources
-          await pool
-            .insert(leadKeywordSources)
-            .values({
-              leadId,
-              keywordId: kw.id,
-              firstSeenAt: new Date(),
-              lastSeenAt: new Date(),
-            })
-            .onConflictDoNothing();
-
-          // 12. Contact Extraction: Preserve ALL Discovered Emails and Links
-          const extractedEmails = emailExtractor.extractEmails(ch.description || '');
-          const extractedSocials = socialExtractor.extractSocials(ch.description || '');
-
-          // Insert ALL discovered unique emails
-          for (let i = 0; i < extractedEmails.length; i++) {
-            const emailObj = extractedEmails[i];
-            const cleanEmail = emailObj.email.toLowerCase().trim();
-
-            await pool
-              .insert(contacts)
-              .values({
-                leadId,
-                contactType: 'EMAIL',
-                value: cleanEmail,
-                normalizedValue: cleanEmail,
-                source: emailObj.source,
-                isPrimary: i === 0,
-                email: cleanEmail,
-                emailStatus: 'UNKNOWN',
-              })
-              .onConflictDoNothing();
-
-            kwEmailsFoundCount++;
-            if (i === 0) {
-              await jobRunner.logEvent(jobId, 'CONTACT_FOUND', 'INFO', `Discovered email for ${ch.title}: ${cleanEmail}`, { leadId, email: cleanEmail });
-            }
-          }
-
-          // Insert structured social/profile links (Linktree, Beacons, Instagram, Twitter, etc.)
-          for (const item of extractedSocials.items) {
-            if (item.type === 'EMAIL') continue; // Handled above
-
-            await pool
-              .insert(contacts)
-              .values({
-                leadId,
-                contactType: item.type,
-                value: item.value,
-                normalizedValue: item.normalizedValue,
-                source: item.source,
-                isPrimary: false,
-                instagram: item.type === 'INSTAGRAM' ? item.normalizedValue : undefined,
-                twitter: item.type === 'TWITTER_X' ? item.normalizedValue : undefined,
-                discord: item.type === 'DISCORD' ? item.value : undefined,
-                tiktok: item.type === 'TIKTOK' ? item.normalizedValue : undefined,
-                linkedin: item.type === 'LINKEDIN' ? item.value : undefined,
-              })
-              .onConflictDoNothing();
-          }
         }
       }
 

@@ -82,6 +82,19 @@ export class TelegramNotificationService {
     return await this.sendMessage(message);
   }
 
+  public async notifyUnsubscribe(channelTitle: string, email: string, reason: string): Promise<boolean> {
+    const message = `
+🛑 <b>Lead Unsubscribed / Opt-Out Recorded</b>
+
+<b>Channel:</b> ${this.escapeHtml(channelTitle)}
+<b>Email:</b> ${this.escapeHtml(email)}
+<b>Reason:</b> ${this.escapeHtml(reason)}
+<i>Lead has been automatically marked UNSUBSCRIBED and added to the suppression list.</i>
+`.trim();
+
+    return await this.sendMessage(message);
+  }
+
   public async notifyCriticalError(title: string, details: string): Promise<boolean> {
     const message = `
 ⚠️ <b>CRITICAL SYSTEM ALERT</b>

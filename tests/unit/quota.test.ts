@@ -34,12 +34,29 @@ describe('YouTube Quota Manager', () => {
     expect(await qm.getRemainingGeneralQuota()).toBe(9995);
   });
 
+  it('should atomically claim search calls and decrement remaining', async () => {
+    const claimed = await qm.tryClaimSearchCall();
+    expect(claimed).toBe(true);
+    const quota = await qm.syncQuotaState();
+    expect(quota.searchCallsUsedToday).toBe(1);
+    expect(await qm.getRemainingSearchCalls()).toBe(99);
+  });
+
+  it('should atomically claim general quota units', async () => {
+    const claimed = await qm.tryClaimGeneralQuota(3);
+    expect(claimed).toBe(true);
+    const quota = await qm.syncQuotaState();
+    expect(quota.generalQuotaUsedToday).toBe(3);
+    expect(await qm.getRemainingGeneralQuota()).toBe(9997);
+  });
+
   it('should deny search calls when limit is reached', async () => {
     const quota = await qm.syncQuotaState();
     // Simulate quota reached
     for (let i = 0; i < quota.searchCallsDailyLimit; i++) {
-      await qm.recordSearchExecution();
+      await qm.tryClaimSearchCall();
     }
+    expect(await qm.tryClaimSearchCall()).toBe(false);
     expect(await qm.canExecuteSearch()).toBe(false);
     expect(await qm.getRemainingSearchCalls()).toBe(0);
   });

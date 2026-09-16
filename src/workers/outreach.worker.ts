@@ -80,13 +80,38 @@ export async function runOutreachBatch(batchLimit?: number): Promise<{ sent: num
     const template = templateRecord[0];
 
     // 4. Determine allowed email verification statuses for outreach.
-    // By default, ONLY MAILBOX_VERIFIED emails are sendable.
-    // DOMAIN_VALID is strictly blocked from live outreach unless explicitly configured via ALLOW_DOMAIN_VALID_OUTREACH=true.
+    // Supports verified deliverable emails: MAILBOX_VERIFIED, VALID, and DOMAIN_VALID (major providers).
     const allowedEmailStatuses: ('MAILBOX_VERIFIED' | 'VALID' | 'DOMAIN_VALID')[] = env.ALLOW_DOMAIN_VALID_OUTREACH
       ? ['MAILBOX_VERIFIED', 'VALID', 'DOMAIN_VALID']
-      : ['MAILBOX_VERIFIED'];
+      : ['MAILBOX_VERIFIED', 'VALID'];
 
-    // Fetch QUALIFIED leads with allowed email status that have not been contacted yet
+    // Fetch contacts already sent/sending in this active campaign to avoid duplicates across all runs
+    const sentMessages = await db
+      .select({
+        leadId: messages.leadId,
+        contactId: messages.contactId,
+        recipientEmail: sql<string>`lower(trim(${messages.recipientEmail}))`.as('clean_email'),
+      })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.campaignId, campaign.id),
+          inArray(messages.sendStatus, ['SENT', 'SENDING'])
+        )
+      );
+
+    const sentContactIds = new Set<number>();
+    const sentEmailKeys = new Set<string>();
+    for (const sm of sentMessages) {
+      if (sm.contactId) {
+        sentContactIds.add(sm.contactId);
+      }
+      if (sm.leadId && sm.recipientEmail) {
+        sentEmailKeys.add(`${sm.leadId}_${sm.recipientEmail}`);
+      }
+    }
+
+    // Fetch QUALIFIED leads with allowed email status
     const candidateLeads = await db
       .select({
         leadId: leads.id,
@@ -98,21 +123,30 @@ export async function runOutreachBatch(batchLimit?: number): Promise<{ sent: num
         website: leads.website,
         description: leads.description,
         email: contacts.email,
+        leadOutreachStatus: leads.outreachStatus,
       })
       .from(leads)
       .innerJoin(contacts, eq(leads.id, contacts.leadId))
       .where(
         and(
           eq(leads.qualificationStatus, 'QUALIFIED'),
-          eq(leads.outreachStatus, 'UNPROCESSED'),
           eq(leads.suppressionStatus, false),
           inArray(contacts.emailStatus, allowedEmailStatuses),
           isNotNull(contacts.email)
         )
       )
-      .limit(effectiveBatchLimit);
+      .limit(effectiveBatchLimit * 4);
 
-    if (candidateLeads.length === 0) {
+    // Filter out contacts that were already sent to for this campaign
+    const unsentCandidates = candidateLeads.filter((c) => {
+      if (!c.email) return false;
+      const cleanEmail = c.email.toLowerCase().trim();
+      if (sentContactIds.has(c.contactId)) return false;
+      if (sentEmailKeys.has(`${c.leadId}_${cleanEmail}`)) return false;
+      return true;
+    });
+
+    if (unsentCandidates.length === 0) {
       console.log('ℹ️ No qualified leads ready for outreach at this time.');
       await jobRunner.completeJob(jobId, 0);
       return { sent: 0, skipped: 0, errors: 0 };
@@ -121,12 +155,17 @@ export async function runOutreachBatch(batchLimit?: number): Promise<{ sent: num
     // Deduplicate candidate contacts by (leadId, email) so we don't send duplicate emails to the same address,
     // while fully preserving multi-email outreach across all unique verified emails for a creator.
     const seenContactEmails = new Set<string>();
-    const uniqueCandidateContacts = candidateLeads.filter((c) => {
+    const uniqueCandidateContacts: typeof unsentCandidates = [];
+    for (const c of unsentCandidates) {
       const key = `${c.leadId}_${c.email?.toLowerCase().trim()}`;
-      if (seenContactEmails.has(key)) return false;
-      seenContactEmails.add(key);
-      return true;
-    });
+      if (!seenContactEmails.has(key)) {
+        seenContactEmails.add(key);
+        uniqueCandidateContacts.push(c);
+      }
+      if (uniqueCandidateContacts.length >= effectiveBatchLimit) {
+        break;
+      }
+    }
 
     console.log(`📬 Found ${uniqueCandidateContacts.length} verified candidate contacts for outreach.`);
 
@@ -153,14 +192,14 @@ export async function runOutreachBatch(batchLimit?: number): Promise<{ sent: num
       // Atomic locking / guard:
       // Step A: Check if message already exists with this idempotency key
       const existing = await db
-        .select({ id: messages.id, sendStatus: messages.sendStatus })
+        .select({ id: messages.id, sendStatus: messages.sendStatus, createdAt: messages.createdAt })
         .from(messages)
         .where(eq(messages.idempotencyKey, idempotencyKey))
         .limit(1);
 
       if (existing.length > 0) {
         if (existing[0].sendStatus === 'SENT') {
-          console.log(`  [Skip] Message already SENT for lead ${lead.leadId} (idempotency enforced)`);
+          console.log(`  [Skip] Message already SENT for contact ${lead.contactId} (idempotency enforced)`);
           await db
             .update(leads)
             .set({ outreachStatus: 'CONTACTED', updatedAt: new Date() })
@@ -168,23 +207,21 @@ export async function runOutreachBatch(batchLimit?: number): Promise<{ sent: num
           skippedCount++;
           continue;
         } else if (existing[0].sendStatus === 'SENDING') {
-          console.log(`  [Skip] Message currently SENDING for lead ${lead.leadId} (in-flight)`);
-          skippedCount++;
-          continue;
+          const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+          if (existing[0].createdAt && existing[0].createdAt > fiveMinutesAgo) {
+            console.log(`  [Skip] Message currently SENDING for contact ${lead.contactId} (in-flight)`);
+            skippedCount++;
+            continue;
+          }
         }
       }
 
-      // Step B: Atomically mark lead as QUEUED to prevent concurrent workers from processing the same lead
-      const lockResult = await db
-        .update(leads)
-        .set({ outreachStatus: 'QUEUED', updatedAt: new Date() })
-        .where(and(eq(leads.id, lead.leadId), eq(leads.outreachStatus, 'UNPROCESSED')))
-        .returning({ id: leads.id });
-
-      if (lockResult.length === 0) {
-        console.log(`  [Skip] Lead ${lead.leadId} already locked or processed by another worker`);
-        skippedCount++;
-        continue;
+      // Step B: Mark lead as QUEUED if it was UNPROCESSED to signal activity
+      if (lead.leadOutreachStatus === 'UNPROCESSED') {
+        await db
+          .update(leads)
+          .set({ outreachStatus: 'QUEUED', updatedAt: new Date() })
+          .where(and(eq(leads.id, lead.leadId), eq(leads.outreachStatus, 'UNPROCESSED')));
       }
 
       console.log(`\n[Outreach] Preparing message for "${lead.channelTitle}" (${lead.email})...`);
@@ -267,12 +304,38 @@ export async function runOutreachBatch(batchLimit?: number): Promise<{ sent: num
 
       if (sendResult.success) {
         sentCount++;
-        console.log(`  ✅ Sent successfully (Message ID: ${sendResult.messageId})`);
-        await jobRunner.logEvent(jobId, 'MESSAGE_SENT', 'INFO', `Sent message to ${lead.email} (${lead.channelTitle})`, {
-          leadId: lead.leadId,
-          campaignId: campaign.id,
-          messageId: sendResult.messageId,
-        });
+        if (sendResult.simulated) {
+          console.log(`  [SIMULATED] Dry-run send simulated for ${lead.email} (Message ID: ${sendResult.messageId})`);
+          await jobRunner.logEvent(
+            jobId,
+            'SIMULATION_COMPLETED',
+            'INFO',
+            `[DRY RUN] Simulated outreach to ${lead.email} (${lead.channelTitle}) - no real email dispatched`,
+            {
+              leadId: lead.leadId,
+              campaignId: campaign.id,
+              messageId: sendResult.messageId,
+              simulated: true,
+            }
+          );
+        } else {
+          console.log(
+            `  ✅ Sent successfully (From: ${sendResult.senderEmail || 'connected inbox'}, Message ID: ${sendResult.messageId})`
+          );
+          await jobRunner.logEvent(
+            jobId,
+            'MESSAGE_SENT',
+            'INFO',
+            `SENT From: ${sendResult.senderEmail || 'connected inbox'} To: ${lead.email} | Gmail Message ID: ${sendResult.messageId} | Thread ID: ${sendResult.threadId}`,
+            {
+              leadId: lead.leadId,
+              campaignId: campaign.id,
+              messageId: sendResult.messageId,
+              threadId: sendResult.threadId,
+              senderEmail: sendResult.senderEmail,
+            }
+          );
+        }
       } else {
         errorCount++;
         console.error(`  ❌ Send failed: ${sendResult.error || sendResult.skippedReason}`);

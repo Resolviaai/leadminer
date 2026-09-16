@@ -55,4 +55,23 @@ describe('Social Extractor', () => {
     expect(socials.instagram).toBe('podcast_clips');
     expect(socials.twitter).toBe('podcastclips');
   });
+
+  it('should extract ALL websites and social links without premature break', () => {
+    const text = `
+      Check our merch at https://creatorstore.com and listen to our podcast at https://daily-cast.fm/listen.
+      Also follow second instagram: https://instagram.com/backup_channel and second twitter https://x.com/backup_tw!
+    `;
+    const socials = socialExtractor.extractSocials(text);
+    const websites = socials.items.filter((i) => i.type === 'WEBSITE');
+    const igs = socials.items.filter((i) => i.type === 'INSTAGRAM');
+    const tws = socials.items.filter((i) => i.type === 'TWITTER_X');
+
+    expect(websites).toHaveLength(2);
+    expect(websites[0].value).toBe('https://creatorstore.com');
+    expect(websites[1].value).toBe('https://daily-cast.fm/listen');
+    expect(igs).toHaveLength(1);
+    expect(igs[0].normalizedValue).toBe('backup_channel');
+    expect(tws).toHaveLength(1);
+    expect(tws[0].normalizedValue).toBe('backup_tw');
+  });
 });

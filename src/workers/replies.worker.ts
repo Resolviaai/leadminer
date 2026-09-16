@@ -5,6 +5,7 @@ import { eq, and, isNotNull, inArray, desc, gte } from 'drizzle-orm';
 import { env } from '../config/env';
 import { replyDetectorService } from '../services/replies/reply.detector';
 import { jobRunner } from '../services/jobs/job.runner';
+import { encryptionService } from '../services/security/encryption.service';
 
 export function isAutomatedBounceOrDaemon(headers: { name?: string; value?: string }[], fromHeader: string): boolean {
   const fromEmailLower = (fromHeader || '').toLowerCase();
@@ -120,19 +121,23 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
           env.GOOGLE_CLIENT_SECRET,
           env.GOOGLE_REDIRECT_URI
         );
+        const decryptedRefreshToken = encryptionService.decrypt(account.refreshToken);
+        const decryptedAccessToken = account.accessToken ? encryptionService.decrypt(account.accessToken) : undefined;
+
         oauth2Client.setCredentials({
-          refresh_token: account.refreshToken,
-          access_token: account.accessToken || undefined,
+          refresh_token: decryptedRefreshToken,
+          access_token: decryptedAccessToken,
         });
 
-        // Persist refreshed OAuth tokens back to gmail_accounts table
+        // Persist refreshed OAuth tokens back to gmail_accounts table with AES-256-GCM encryption
         oauth2Client.on('tokens', async (tokens) => {
           try {
             const updateData: { accessToken?: string; tokenExpiresAt?: Date; updatedAt: Date } = {
               updatedAt: new Date(),
             };
             if (tokens.access_token) {
-              updateData.accessToken = tokens.access_token;
+              const enc = encryptionService.encrypt(tokens.access_token);
+              if (enc) updateData.accessToken = enc;
             }
             if (tokens.expiry_date) {
               updateData.tokenExpiresAt = new Date(tokens.expiry_date);
@@ -141,7 +146,7 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
               .update(gmailAccounts)
               .set(updateData)
               .where(eq(gmailAccounts.id, account.id));
-            console.log(`[OAuth] Refreshed and saved access token for ${account.email} (reply sync)`);
+            console.log(`[OAuth] Refreshed and encrypted access token for ${account.email} (reply sync)`);
           } catch (tokErr: any) {
             console.warn(`[OAuth] Token persistence error for ${account.email}:`, tokErr.message);
           }
@@ -193,7 +198,8 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
           const dateHeader = headers.find((h: any) => h.name?.toLowerCase() === 'date')?.value;
           const msgTime = Number(tm.internalDate) || (dateHeader ? new Date(dateHeader).getTime() : Date.now());
 
-          if (!isOutbound && msgTime > outboundTime) {
+          // 5-second clock skew buffer to ensure near-instant creator responses or slight server time variations are reliably captured
+          if (!isOutbound && msgTime > (outboundTime - 5000)) {
             // Extract clean sender email
             const emailMatch = fromHeader.match(/<([^>]+)>/) || [null, fromHeader.trim()];
             const senderEmail = emailMatch[1] || msg.recipientEmail;

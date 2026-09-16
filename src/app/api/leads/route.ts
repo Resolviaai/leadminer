@@ -60,9 +60,12 @@ export async function GET(req: NextRequest) {
 
     const data = leadRows.map((l) => {
       const leadContacts = contactsByLead.get(l.id) || [];
+      const allEmailContacts = leadContacts.filter((c) => c.email);
       const primaryEmailContact =
-        leadContacts.find((c) => c.contactType === "EMAIL" && c.email) ||
-        leadContacts.find((c) => c.email);
+        allEmailContacts.find((c) => c.contactType === "EMAIL") || allEmailContacts[0];
+      const additionalEmails = allEmailContacts
+        .filter((c) => c.email !== primaryEmailContact?.email)
+        .map((c) => c.email as string);
 
       const socialLinks = leadContacts
         .filter((c) => c.contactType !== "EMAIL" || !c.email)
@@ -76,6 +79,7 @@ export async function GET(req: NextRequest) {
         ...l,
         email: primaryEmailContact?.email || null,
         emailStatus: primaryEmailContact?.emailStatus || null,
+        additionalEmails,
         socialLinks,
       };
     });

@@ -56,66 +56,88 @@ export class SocialExtractor {
       }
     };
 
-    // 1. Linktree
-    const linktreeMatch = text.match(/(?:https?:\/\/)?(?:www\.)?linktr\.ee\/([a-zA-Z0-9._-]+)/i);
-    if (linktreeMatch) {
-      const url = this.cleanUrl(linktreeMatch[0].startsWith('http') ? linktreeMatch[0] : `https://${linktreeMatch[0]}`);
-      socials.linktree = url;
+    // 1. Linktree (Global extraction)
+    const linktreeMatches = text.matchAll(/(?:https?:\/\/)?(?:www\.)?linktr\.ee\/([a-zA-Z0-9._-]+)/gi);
+    for (const match of linktreeMatches) {
+      const url = this.cleanUrl(match[0].startsWith('http') ? match[0] : `https://${match[0]}`);
+      if (!socials.linktree) socials.linktree = url;
       addItem('LINKTREE', url, url);
     }
 
-    // 2. Beacons
-    const beaconsMatch = text.match(/(?:https?:\/\/)?(?:www\.)?beacons\.ai\/([a-zA-Z0-9._-]+)/i);
-    if (beaconsMatch) {
-      const url = this.cleanUrl(beaconsMatch[0].startsWith('http') ? beaconsMatch[0] : `https://${beaconsMatch[0]}`);
-      socials.beacons = url;
+    // 2. Beacons (Global extraction)
+    const beaconsMatches = text.matchAll(/(?:https?:\/\/)?(?:www\.)?beacons\.ai\/([a-zA-Z0-9._-]+)/gi);
+    for (const match of beaconsMatches) {
+      const url = this.cleanUrl(match[0].startsWith('http') ? match[0] : `https://${match[0]}`);
+      if (!socials.beacons) socials.beacons = url;
       addItem('BEACONS', url, url);
     }
 
-    // 3. Instagram
-    const igMatch = text.match(/(?:https?:\/\/)?(?:www\.)?instagram\.com\/([a-zA-Z0-9._]+)/i) ||
-                    text.match(/(?:insta|ig|instagram):\s*@?([a-zA-Z0-9._]+)/i);
-    if (igMatch && igMatch[1] && !['p', 'reel', 'explore', 'stories'].includes(igMatch[1].toLowerCase())) {
-      const handle = igMatch[1].replace('@', '');
-      socials.instagram = handle;
-      addItem('INSTAGRAM', `https://instagram.com/${handle}`, handle);
+    // 3. Instagram (Global extraction: URL and shorthand)
+    const igUrlMatches = text.matchAll(/(?:https?:\/\/)?(?:www\.)?instagram\.com\/([a-zA-Z0-9._]+)/gi);
+    const igShortMatches = text.matchAll(/(?:insta|ig|instagram):\s*@?([a-zA-Z0-9._]+)/gi);
+    const igExcluded = new Set(['p', 'reel', 'reels', 'explore', 'stories', 'tv', 'direct', 'http', 'https', 'www']);
+
+    for (const match of [...igUrlMatches, ...igShortMatches]) {
+      if (match && match[1]) {
+        const handle = match[1].replace('@', '').trim();
+        if (handle && !igExcluded.has(handle.toLowerCase())) {
+          if (!socials.instagram) socials.instagram = handle;
+          addItem('INSTAGRAM', `https://instagram.com/${handle}`, handle);
+        }
+      }
     }
 
-    // 4. Twitter / X
-    const twitterMatch = text.match(/(?:https?:\/\/)?(?:www\.)?(?:twitter\.com|x\.com)\/([a-zA-Z0-9_]+)/i) ||
-                         text.match(/(?:twitter|x):\s*@?([a-zA-Z0-9_]+)/i);
-    if (twitterMatch && twitterMatch[1] && !['home', 'explore', 'notifications', 'messages'].includes(twitterMatch[1].toLowerCase())) {
-      const handle = twitterMatch[1].replace('@', '');
-      socials.twitter = handle;
-      addItem('TWITTER_X', `https://x.com/${handle}`, handle);
+    // 4. Twitter / X (Global extraction: URL and shorthand)
+    const twitterUrlMatches = text.matchAll(/(?:https?:\/\/)?(?:www\.)?(?:twitter\.com|x\.com)\/([a-zA-Z0-9_]+)/gi);
+    const twitterShortMatches = text.matchAll(/(?:twitter|x):\s*@?([a-zA-Z0-9_]+)/gi);
+    const twitterExcluded = new Set(['home', 'explore', 'notifications', 'messages', 'i', 'intent', 'share', 'http', 'https', 'www']);
+
+    for (const match of [...twitterUrlMatches, ...twitterShortMatches]) {
+      if (match && match[1]) {
+        const handle = match[1].replace('@', '').trim();
+        if (handle && !twitterExcluded.has(handle.toLowerCase())) {
+          if (!socials.twitter) socials.twitter = handle;
+          addItem('TWITTER_X', `https://x.com/${handle}`, handle);
+        }
+      }
     }
 
-    // 5. TikTok
-    const tiktokMatch = text.match(/(?:https?:\/\/)?(?:www\.)?tiktok\.com\/@([a-zA-Z0-9._]+)/i) ||
-                        text.match(/(?:tiktok):\s*@?([a-zA-Z0-9._]+)/i);
-    if (tiktokMatch && tiktokMatch[1]) {
-      const handle = tiktokMatch[1].replace('@', '');
-      socials.tiktok = handle;
-      addItem('TIKTOK', `https://tiktok.com/@${handle}`, handle);
+    // 5. TikTok (Global extraction: URL and shorthand)
+    const tiktokUrlMatches = text.matchAll(/(?:https?:\/\/)?(?:www\.)?tiktok\.com\/@([a-zA-Z0-9._]+)/gi);
+    const tiktokShortMatches = text.matchAll(/(?:tiktok):\s*@?([a-zA-Z0-9._]+)/gi);
+    const tiktokExcluded = new Set(['tag', 'discover', 'explore', 'share', 'http', 'https', 'www']);
+
+    for (const match of [...tiktokUrlMatches, ...tiktokShortMatches]) {
+      if (match && match[1]) {
+        const handle = match[1].replace('@', '').trim();
+        if (handle && !tiktokExcluded.has(handle.toLowerCase())) {
+          if (!socials.tiktok) socials.tiktok = handle;
+          addItem('TIKTOK', `https://tiktok.com/@${handle}`, handle);
+        }
+      }
     }
 
-    // 6. Discord
-    const discordMatch = text.match(/(?:https?:\/\/)?(?:www\.)?discord\.(?:gg|com\/invite)\/([a-zA-Z0-9-]+)/i);
-    if (discordMatch && discordMatch[0]) {
-      const url = this.cleanUrl(discordMatch[0].startsWith('http') ? discordMatch[0] : `https://${discordMatch[0]}`);
-      socials.discord = url;
-      addItem('DISCORD', url, url);
+    // 6. Discord (Global extraction)
+    const discordMatches = text.matchAll(/(?:https?:\/\/)?(?:www\.)?discord\.(?:gg|com\/invite)\/([a-zA-Z0-9-]+)/gi);
+    for (const match of discordMatches) {
+      if (match && match[0]) {
+        const url = this.cleanUrl(match[0].startsWith('http') ? match[0] : `https://${match[0]}`);
+        if (!socials.discord) socials.discord = url;
+        addItem('DISCORD', url, url);
+      }
     }
 
-    // 7. LinkedIn
-    const linkedinMatch = text.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/(?:in|company)\/([a-zA-Z0-9-_]+)/i);
-    if (linkedinMatch && linkedinMatch[0]) {
-      const url = this.cleanUrl(linkedinMatch[0].startsWith('http') ? linkedinMatch[0] : `https://${linkedinMatch[0]}`);
-      socials.linkedin = url;
-      addItem('LINKEDIN', url, url);
+    // 7. LinkedIn (Global extraction)
+    const linkedinMatches = text.matchAll(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/(?:in|company)\/([a-zA-Z0-9-_]+)/gi);
+    for (const match of linkedinMatches) {
+      if (match && match[0]) {
+        const url = this.cleanUrl(match[0].startsWith('http') ? match[0] : `https://${match[0]}`);
+        if (!socials.linkedin) socials.linkedin = url;
+        addItem('LINKEDIN', url, url);
+      }
     }
 
-    // 8. Website (standalone link that is not YouTube, Google, or major social networks)
+    // 8. Website (Global extraction without premature break)
     const urlMatches = text.match(/https?:\/\/[^\s<>"')\]]+/gi) || [];
     const excludedDomains = [
       'youtube.com',
@@ -134,7 +156,7 @@ export class SocialExtractor {
       'beacons.ai',
     ];
 
-    for (let rawUrl of urlMatches) {
+    for (const rawUrl of urlMatches) {
       const url = this.cleanUrl(rawUrl);
       const lower = url.toLowerCase();
       const isExcluded = excludedDomains.some((domain) => lower.includes(domain));
@@ -142,8 +164,8 @@ export class SocialExtractor {
         if (!socials.website) {
           socials.website = url;
         }
+        // Capture ALL valid websites into items without early break
         addItem('WEBSITE', url, url);
-        break;
       }
     }
 

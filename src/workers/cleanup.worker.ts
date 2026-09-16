@@ -1,7 +1,17 @@
+import { db } from '../db/client';
+import { logs, jobs } from '../db/schema';
+import { lt, and, inArray } from 'drizzle-orm';
 import { jobRunner } from '../services/jobs/job.runner';
 import { quotaManager } from '../services/youtube/quota';
+import { reconcilePendingLeadQualifications } from './verification.worker';
 
-export async function runCleanup(): Promise<void> {
+export async function runCleanup(): Promise<{
+  recoveredKeywords: number;
+  recoveredJobs: number;
+  recoveredLeads: number;
+  requalifiedLeads: number;
+  logsPruned: boolean;
+}> {
   console.log(`\n======================================================`);
   console.log(`🧹 Running System Watchdog & Cleanup Worker`);
   console.log(`======================================================\n`);
@@ -9,18 +19,64 @@ export async function runCleanup(): Promise<void> {
   const jobId = await jobRunner.createJob('CLEANUP');
 
   try {
-    // 1. Recover stale keywords and jobs
+    // 1. Recover stale keywords and abandoned jobs (> 30m timeout)
     const recovery = await jobRunner.recoverStaleJobsAndKeywords(30);
 
-    // 2. Sync YouTube quota and check Pacific Time daily reset
+    // 2. Recover any stale QUEUED or SENDING leads
+    const recoveredLeads = await jobRunner.recoverStaleOutreachLeads(30);
+
+    // 3. Reconcile pending lead qualifications against active campaigns
+    const requalifiedLeads = await reconcilePendingLeadQualifications();
+
+    // 4. Prune logs older than 30 days to maintain fast query performance
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    try {
+      await db.delete(logs).where(lt(logs.createdAt, thirtyDaysAgo));
+      console.log(`[Watchdog] Pruned audit logs older than 30 days.`);
+    } catch (logErr: any) {
+      console.warn(`[Watchdog] Note on log pruning:`, logErr.message);
+    }
+
+    // 5. Prune completed or failed jobs older than 60 days
+    const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+    try {
+      await db.delete(jobs).where(
+        and(
+          inArray(jobs.status, ['COMPLETED', 'FAILED', 'STOPPED_QUOTA']),
+          lt(jobs.createdAt, sixtyDaysAgo)
+        )
+      );
+    } catch (jobErr: any) {
+      // Non-critical
+    }
+
+    // 6. Sync YouTube quota and check Pacific Time daily reset
     const quota = await quotaManager.syncQuotaState();
     console.log(`[Quota Check] Search calls today: ${quota.searchCallsUsedToday}/${quota.searchCallsDailyLimit}`);
 
-    await jobRunner.completeJob(jobId, recovery.recoveredKeywords + recovery.recoveredJobs);
-    console.log(`✅ Cleanup completed. ${recovery.recoveredKeywords} keywords reset, ${recovery.recoveredJobs} abandoned jobs closed.`);
+    const totalProcessed = recovery.recoveredKeywords + recovery.recoveredJobs + recoveredLeads + requalifiedLeads;
+    await jobRunner.completeJob(jobId, totalProcessed);
+    console.log(
+      `✅ Cleanup completed. ${recovery.recoveredKeywords} keywords reset, ${recovery.recoveredJobs} abandoned jobs closed, ${recoveredLeads} leads unlocked, ${requalifiedLeads} leads qualified.`
+    );
+
+    return {
+      recoveredKeywords: recovery.recoveredKeywords,
+      recoveredJobs: recovery.recoveredJobs,
+      recoveredLeads,
+      requalifiedLeads,
+      logsPruned: true,
+    };
   } catch (error: any) {
     console.error('[Cleanup Worker] Error:', error);
     await jobRunner.failJob(jobId, error.message);
+    return {
+      recoveredKeywords: 0,
+      recoveredJobs: 0,
+      recoveredLeads: 0,
+      requalifiedLeads: 0,
+      logsPruned: false,
+    };
   }
 }
 

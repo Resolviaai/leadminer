@@ -62,3 +62,32 @@ describe('Anti-Bounce and Daemon Message Filter', () => {
   });
 });
 
+import { OPT_OUT_REGEX } from '../../src/services/replies/reply.detector';
+
+describe('Opt-Out & Unsubscribe Regex Detection', () => {
+  it('should accurately detect various unsubscribe phrases', () => {
+    expect(OPT_OUT_REGEX.test('Please unsubscribe me from your emails.')).toBe(true);
+    expect(OPT_OUT_REGEX.test('STOP')).toBe(true);
+    expect(OPT_OUT_REGEX.test('Please remove me from your list')).toBe(true);
+    expect(OPT_OUT_REGEX.test('I want to opt-out')).toBe(true);
+    expect(OPT_OUT_REGEX.test("Don't contact me again")).toBe(true);
+    expect(OPT_OUT_REGEX.test('take me off this list')).toBe(true);
+  });
+
+  it('should not flag positive creator responses as opt-outs', () => {
+    expect(OPT_OUT_REGEX.test('Sounds great! Can you send a portfolio over?')).toBe(false);
+    expect(OPT_OUT_REGEX.test('What are your rates for YouTube shorts editing?')).toBe(false);
+    expect(OPT_OUT_REGEX.test('Yes, let us connect on a call next Tuesday.')).toBe(false);
+  });
+
+  it('should format unsubscribe notification safely without throwing', async () => {
+    const res = await telegramService.notifyUnsubscribe(
+      'Creator Channel',
+      'creator@studio.com',
+      'User replied STOP'
+    );
+    expect(res).toBe(true);
+  });
+});
+
+

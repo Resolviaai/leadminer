@@ -79,6 +79,7 @@ export const messageSendStatusEnum = pgEnum('message_send_status', [
   'SENT',
   'FAILED',
   'CANCELLED',
+  'SIMULATED',
 ]);
 
 export const personalizationStatusEnum = pgEnum('personalization_status', [

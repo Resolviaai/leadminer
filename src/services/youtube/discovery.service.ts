@@ -45,14 +45,13 @@ export class YouTubeDiscoveryService {
   }
 
   public async searchChannelIds(params: YouTubeSearchParams): Promise<{ channelIds: string[]; quotaReached: boolean }> {
-    const canSearch = await quotaManager.canExecuteSearch();
-    if (!canSearch) {
+    const claimed = await quotaManager.tryClaimSearchCall();
+    if (!claimed) {
       console.warn(`[YouTube Quota] Daily search.list limit reached (${env.YOUTUBE_DAILY_SEARCH_LIMIT} calls). Pausing discovery.`);
       return { channelIds: [], quotaReached: true };
     }
 
     if (!this.youtube) {
-      await quotaManager.recordSearchExecution();
       const cleanQuery = params.query.replace(/[^a-zA-Z0-9]/g, '');
       const count = Math.min(params.maxResults || 3, 3);
       const mockIds: string[] = [];
@@ -74,8 +73,6 @@ export class YouTubeDiscoveryService {
           relevanceLanguage: params.relevanceLanguage || env.YOUTUBE_TARGET_LANGUAGE || 'en',
         });
       });
-
-      await quotaManager.recordSearchExecution();
 
       const items = searchResponse.data.items || [];
       const rawIds = items
@@ -106,14 +103,14 @@ export class YouTubeDiscoveryService {
     // In-memory deduplication guard
     const uniqueChannelIds = Array.from(new Set(channelIds));
 
-    const canFetchChannels = await quotaManager.canExecuteGeneralCall(1);
-    if (!canFetchChannels) {
+    const chunksCount = Math.ceil(uniqueChannelIds.length / 50);
+    const claimed = await quotaManager.tryClaimGeneralQuota(chunksCount);
+    if (!claimed) {
       console.warn(`[YouTube Quota] General quota limit reached. Pausing.`);
       return { channels: [], quotaReached: true };
     }
 
     if (!this.youtube) {
-      await quotaManager.recordGeneralQuotaUsage(1);
       const mockChannels: YouTubeChannelDetails[] = uniqueChannelIds.map((id, index) => ({
         channelId: id,
         title: `Creator ${id.slice(-8)}`,
@@ -143,8 +140,6 @@ export class YouTubeDiscoveryService {
             id: chunk,
           });
         });
-
-        await quotaManager.recordGeneralQuotaUsage(1);
 
         const channelItems = channelsResponse.data.items || [];
         for (const c of channelItems) {

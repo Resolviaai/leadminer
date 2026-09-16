@@ -1,6 +1,6 @@
 import { db } from '../../db/client';
 import { systemSettings } from '../../db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { env } from '../../config/env';
 import { QuotaState } from './types';
 
@@ -91,6 +91,115 @@ export class YouTubeQuotaManager {
         });
     } catch (e) {
       // Graceful in-memory fallback
+    }
+  }
+
+  /**
+   * Concurrency-Safe Atomic Claim for Search Calls (1 search.list call).
+   * Atomically checks quota against limit in PostgreSQL via conditional UPDATE.
+   */
+  public async tryClaimSearchCall(): Promise<boolean> {
+    if (this.inMemoryOnly) {
+      await this.syncQuotaState();
+      if (this.inMemoryQuota.searchCallsUsedToday < this.inMemoryQuota.searchCallsDailyLimit) {
+        this.inMemoryQuota.searchCallsUsedToday += 1;
+        return true;
+      }
+      return false;
+    }
+
+    try {
+      await this.syncQuotaState();
+
+      const result = await db.execute(sql`
+        UPDATE system_settings
+        SET value = jsonb_set(
+          value,
+          '{search_calls_used_today}',
+          to_jsonb(COALESCE((value->>'search_calls_used_today')::int, 0) + 1)
+        ),
+        updated_at = NOW()
+        WHERE key = 'youtube_quota'
+          AND (COALESCE((value->>'search_calls_used_today')::int, 0) + 1) <= COALESCE((value->>'search_calls_daily_limit')::int, ${this.inMemoryQuota.searchCallsDailyLimit})
+        RETURNING value;
+      `);
+
+      if (result.rows && result.rows.length > 0) {
+        const updatedVal = (result.rows[0] as any).value;
+        if (updatedVal) {
+          this.inMemoryQuota.searchCallsUsedToday = updatedVal.search_calls_used_today ?? (this.inMemoryQuota.searchCallsUsedToday + 1);
+        }
+        return true;
+      }
+
+      const exists = await db.select({ key: systemSettings.key }).from(systemSettings).where(eq(systemSettings.key, 'youtube_quota')).limit(1);
+      if (exists.length === 0) {
+        this.inMemoryQuota.searchCallsUsedToday = 1;
+        await this.persistQuotaState();
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      if (this.inMemoryQuota.searchCallsUsedToday < this.inMemoryQuota.searchCallsDailyLimit) {
+        this.inMemoryQuota.searchCallsUsedToday += 1;
+        return true;
+      }
+      return false;
+    }
+  }
+
+  /**
+   * Concurrency-Safe Atomic Claim for General Quota (e.g. channels.list).
+   */
+  public async tryClaimGeneralQuota(units: number = 1): Promise<boolean> {
+    if (this.inMemoryOnly) {
+      await this.syncQuotaState();
+      if (this.inMemoryQuota.generalQuotaUsedToday + units <= this.inMemoryQuota.generalQuotaDailyLimit) {
+        this.inMemoryQuota.generalQuotaUsedToday += units;
+        return true;
+      }
+      return false;
+    }
+
+    try {
+      await this.syncQuotaState();
+
+      const result = await db.execute(sql`
+        UPDATE system_settings
+        SET value = jsonb_set(
+          value,
+          '{general_quota_used_today}',
+          to_jsonb(COALESCE((value->>'general_quota_used_today')::int, 0) + ${units})
+        ),
+        updated_at = NOW()
+        WHERE key = 'youtube_quota'
+          AND (COALESCE((value->>'general_quota_used_today')::int, 0) + ${units}) <= COALESCE((value->>'general_quota_daily_limit')::int, ${this.inMemoryQuota.generalQuotaDailyLimit})
+        RETURNING value;
+      `);
+
+      if (result.rows && result.rows.length > 0) {
+        const updatedVal = (result.rows[0] as any).value;
+        if (updatedVal) {
+          this.inMemoryQuota.generalQuotaUsedToday = updatedVal.general_quota_used_today ?? (this.inMemoryQuota.generalQuotaUsedToday + units);
+        }
+        return true;
+      }
+
+      const exists = await db.select({ key: systemSettings.key }).from(systemSettings).where(eq(systemSettings.key, 'youtube_quota')).limit(1);
+      if (exists.length === 0) {
+        this.inMemoryQuota.generalQuotaUsedToday = units;
+        await this.persistQuotaState();
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      if (this.inMemoryQuota.generalQuotaUsedToday + units <= this.inMemoryQuota.generalQuotaDailyLimit) {
+        this.inMemoryQuota.generalQuotaUsedToday += units;
+        return true;
+      }
+      return false;
     }
   }
 

@@ -4,6 +4,7 @@ import { db } from "../../../../../db/client";
 import { gmailAccounts } from "../../../../../db/schema";
 import { env } from "../../../../../config/env";
 import { eq } from "drizzle-orm";
+import { encryptionService } from "@/services/security/encryption.service";
 
 export const dynamic = "force-dynamic";
 
@@ -52,13 +53,16 @@ export async function GET(req: NextRequest) {
       .where(eq(gmailAccounts.email, email))
       .limit(1);
 
+    const encryptedAccessToken = tokens.access_token ? encryptionService.encrypt(tokens.access_token) : null;
+    const encryptedRefreshToken = tokens.refresh_token ? encryptionService.encrypt(tokens.refresh_token) : null;
+
     if (existing.length > 0) {
       await db
         .update(gmailAccounts)
         .set({
           status: "ACTIVE",
-          accessToken: tokens.access_token || null,
-          refreshToken: tokens.refresh_token || existing[0].refreshToken,
+          accessToken: encryptedAccessToken,
+          refreshToken: encryptedRefreshToken || existing[0].refreshToken,
           tokenExpiresAt: expiresAt,
           lastError: null,
           updatedAt: new Date(),
@@ -71,8 +75,8 @@ export async function GET(req: NextRequest) {
         dailyLimit: 25,
         sentToday: 0,
         credentialReference: `oauth2:${email}`,
-        accessToken: tokens.access_token || null,
-        refreshToken: tokens.refresh_token || null,
+        accessToken: encryptedAccessToken,
+        refreshToken: encryptedRefreshToken,
         tokenExpiresAt: expiresAt,
       });
     }

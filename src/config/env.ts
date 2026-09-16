@@ -8,8 +8,17 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   APP_URL: z.string().default('http://localhost:3000'),
   API_URL: z.string().default('http://localhost:3000/api'),
-  PORT: z.coerce.number().default(3000),
-  DRY_RUN: z.string().transform((val) => val === 'true').default('true'),
+  DRY_RUN: z
+    .preprocess((val) => {
+      if (typeof val === 'boolean') return val;
+      if (typeof val === 'string') {
+        const lower = val.toLowerCase().trim();
+        if (lower === 'false' || lower === '0') return false;
+        if (lower === 'true' || lower === '1') return true;
+      }
+      return process.env.NODE_ENV === 'production' ? false : true;
+    }, z.boolean())
+    .default(process.env.NODE_ENV === 'production' ? false : true),
 
   // Database
   DATABASE_URL: z.string().optional().default('postgresql://postgres:postgres@localhost:5432/leadminer'),
@@ -42,7 +51,7 @@ const envSchema = z.object({
       (val) => (typeof val === 'string' ? val.toLowerCase() === 'true' || val === '1' : Boolean(val)),
       z.boolean()
     )
-    .default(false),
+    .default(true),
 
   // Google OAuth / Gmail
   GOOGLE_CLIENT_ID: z.string().optional().default(''),
@@ -52,6 +61,7 @@ const envSchema = z.object({
   // Security
   SESSION_SECRET: z.string().default('default-session-secret-change-in-production'),
   ENCRYPTION_KEY: z.string().default('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'),
+  CRON_SECRET: z.string().optional(),
 
   // Discovery Quality Filter Thresholds (n8n Reintegration)
   MIN_DISCOVERY_SUBSCRIBERS: z.coerce.number().default(10),
@@ -87,6 +97,9 @@ if (parsedEnv.NODE_ENV === 'production') {
   }
   if (!parsedEnv.DATABASE_URL || parsedEnv.DATABASE_URL.includes('localhost') || parsedEnv.DATABASE_URL.includes('127.0.0.1')) {
     throw new Error('[FATAL] A non-localhost production DATABASE_URL is required in production.');
+  }
+  if (parsedEnv.DRY_RUN === true) {
+    throw new Error('[FATAL] Production cannot run with DRY_RUN=true! Live outreach mode is required. Explicitly set DRY_RUN=false in production.');
   }
 } else {
   if (!parsedEnv.SESSION_SECRET || parsedEnv.SESSION_SECRET === 'default-session-secret-change-in-production') {
