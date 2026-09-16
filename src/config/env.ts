@@ -77,24 +77,23 @@ try {
   parsedEnv = envSchema.parse({});
 }
 
-// Production security guard (safely generates cryptographically strong keys if not supplied in env)
-if (!parsedEnv.SESSION_SECRET || parsedEnv.SESSION_SECRET === 'default-session-secret-change-in-production') {
-  if (parsedEnv.NODE_ENV === 'production') {
-    console.warn('⚠️ [SECURITY WARNING] SESSION_SECRET not provided in production. Using generated fallback.');
+// Production security guard: fail fast in production, safely generate fallbacks in dev/test
+if (parsedEnv.NODE_ENV === 'production') {
+  if (!parsedEnv.SESSION_SECRET || parsedEnv.SESSION_SECRET === 'default-session-secret-change-in-production') {
+    throw new Error('[FATAL] SESSION_SECRET is required and must not use the default fallback in production.');
   }
-  parsedEnv.SESSION_SECRET = crypto.randomBytes(32).toString('base64');
-}
-
-if (!parsedEnv.ENCRYPTION_KEY || parsedEnv.ENCRYPTION_KEY === '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef') {
-  if (parsedEnv.NODE_ENV === 'production') {
-    console.warn('⚠️ [SECURITY WARNING] ENCRYPTION_KEY not provided in production. Using generated fallback.');
+  if (!parsedEnv.ENCRYPTION_KEY || parsedEnv.ENCRYPTION_KEY === '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef') {
+    throw new Error('[FATAL] ENCRYPTION_KEY is required and must not use the default fallback in production.');
   }
-  parsedEnv.ENCRYPTION_KEY = crypto.randomBytes(32).toString('hex');
-}
-
-if (!parsedEnv.DATABASE_URL || parsedEnv.DATABASE_URL.includes('localhost')) {
-  if (parsedEnv.NODE_ENV === 'production') {
-    console.warn('⚠️ [SECURITY WARNING] DATABASE_URL points to localhost in production.');
+  if (!parsedEnv.DATABASE_URL || parsedEnv.DATABASE_URL.includes('localhost') || parsedEnv.DATABASE_URL.includes('127.0.0.1')) {
+    throw new Error('[FATAL] A non-localhost production DATABASE_URL is required in production.');
+  }
+} else {
+  if (!parsedEnv.SESSION_SECRET || parsedEnv.SESSION_SECRET === 'default-session-secret-change-in-production') {
+    parsedEnv.SESSION_SECRET = crypto.randomBytes(32).toString('base64');
+  }
+  if (!parsedEnv.ENCRYPTION_KEY || parsedEnv.ENCRYPTION_KEY === '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef') {
+    parsedEnv.ENCRYPTION_KEY = crypto.randomBytes(32).toString('hex');
   }
 }
 

@@ -27,6 +27,7 @@ type Lead = {
   emailStatus: string | null;
   sourceKeyword: string | null;
   category: string | null;
+  socialLinks?: { type: string; value: string }[];
 };
 
 interface Props {
@@ -204,6 +205,18 @@ export function LeadsInfiniteList({ initialData, total }: Props) {
                 </div>
                 {getEmailBadge(lead.emailStatus)}
               </div>
+              {lead.socialLinks && lead.socialLinks.length > 0 && (
+                <div className="flex flex-wrap gap-1 text-[10px] pt-0.5">
+                  {lead.socialLinks.map((s, idx) => (
+                    <span
+                      key={idx}
+                      className="px-1.5 py-0.5 rounded bg-surface-200 border border-border/50 text-text-secondary text-[10px]"
+                    >
+                      {s.type.replace('_X', '')}: <span className="font-mono text-text-main">{s.value}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
               <div className="flex items-center justify-between text-[11px] text-text-muted pt-1">
                 <span>Keyword: {lead.sourceKeyword || "—"}</span>
                 {getOutreachBadge(lead.outreachStatus)}
@@ -257,7 +270,22 @@ export function LeadsInfiniteList({ initialData, total }: Props) {
                       {lead.subscriberCount ? lead.subscriberCount.toLocaleString() : "0"}
                     </TableCell>
                     <TableCell className="font-mono text-text-main">
-                      {lead.email || <span className="text-text-muted font-sans text-[11px]">None found</span>}
+                      <div>
+                        {lead.email || <span className="text-text-muted font-sans text-[11px]">None found</span>}
+                        {lead.socialLinks && lead.socialLinks.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1 font-sans">
+                            {lead.socialLinks.slice(0, 3).map((s, idx) => (
+                              <span
+                                key={idx}
+                                title={`${s.type}: ${s.value}`}
+                                className="inline-block text-[9px] px-1 py-0.5 bg-surface-200 text-text-secondary rounded border border-border/50 uppercase"
+                              >
+                                {s.type.replace('_X', '')}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>{getEmailBadge(lead.emailStatus)}</TableCell>
                     <TableCell>{getQualBadge(lead.qualificationStatus)}</TableCell>

@@ -66,7 +66,8 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
   let totalNewLeadsCount = 0;
   let quotaReached = false;
 
-  for (const kw of claimedKeywords) {
+  for (let i = 0; i < claimedKeywords.length; i++) {
+    const kw = claimedKeywords[i];
     console.log(`\n[Keyword ${kw.id}] Processing: "${kw.keyword}" (${kw.category} / ${kw.entity}) [Priority: ${kw.priorityScore}]...`);
 
     let kwNewLeadsCount = 0;
@@ -80,14 +81,22 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
       });
 
       if (searchResult.quotaReached) {
-        console.warn(`⚠️ [YouTube Quota Reached] Stopping discovery batch cleanly.`);
         quotaReached = true;
+        const remainingKeywords = claimedKeywords.slice(i);
+        const remainingIds = remainingKeywords.map((k) => k.id);
+        console.warn(`⚠️ [YouTube Quota Reached] Stopping discovery batch cleanly. Rolling back ${remainingIds.length} unprocessed keywords to PENDING.`);
 
-        // Reset current keyword to PENDING so it can be resumed
-        await pool
-          .update(keywords)
-          .set({ status: 'PENDING', updatedAt: new Date() })
-          .where(eq(keywords.id, kw.id));
+        // Reset current and all remaining keywords in batch back to PENDING and decrement attemptCount
+        if (remainingIds.length > 0) {
+          await pool
+            .update(keywords)
+            .set({
+              status: 'PENDING',
+              attemptCount: sql`GREATEST(0, ${keywords.attemptCount} - 1)`,
+              updatedAt: new Date(),
+            })
+            .where(inArray(keywords.id, remainingIds));
+        }
 
         break;
       }

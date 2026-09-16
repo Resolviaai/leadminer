@@ -90,5 +90,10 @@ describe('Outreach Hardening & Volume Jitter', () => {
     expect(typeof gmailSendingService.reserveSendingAccount).toBe('function');
     expect(typeof gmailSendingService.releaseAccountReservation).toBe('function');
   });
+
+  it('should calculate Pacific Time date string matching YYYY-MM-DD format', () => {
+    const ptDate = gmailSendingService.getPacificDateStr();
+    expect(ptDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
 });
 

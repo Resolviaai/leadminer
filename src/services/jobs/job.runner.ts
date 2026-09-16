@@ -1,5 +1,5 @@
 import { db } from '../../db/client';
-import { jobs, keywords, logs, leads } from '../../db/schema';
+import { jobs, keywords, logs, leads, messages } from '../../db/schema';
 import { eq, and, lt, sql } from 'drizzle-orm';
 import { env } from '../../config/env';
 
@@ -162,24 +162,63 @@ export class JobRunner {
   public async recoverStaleOutreachLeads(timeoutMinutes = 30): Promise<number> {
     try {
       const staleThreshold = new Date(Date.now() - timeoutMinutes * 60 * 1000);
-      const staleLeads = await db
-        .update(leads)
-        .set({
-          outreachStatus: 'UNPROCESSED',
-          updatedAt: new Date(),
-        })
+
+      // Find stale QUEUED leads
+      const staleQueuedLeads = await db
+        .select({ id: leads.id })
+        .from(leads)
         .where(
           and(
             eq(leads.outreachStatus, 'QUEUED'),
             lt(leads.updatedAt, staleThreshold)
           )
-        )
-        .returning({ id: leads.id });
+        );
 
-      if (staleLeads.length > 0) {
-        console.log(`[Recovery] Reset ${staleLeads.length} stale QUEUED leads to UNPROCESSED.`);
+      if (staleQueuedLeads.length === 0) return 0;
+
+      let recovered = 0;
+
+      for (const lead of staleQueuedLeads) {
+        // Check if a message already exists for this lead
+        const msg = await db
+          .select({ id: messages.id, sendStatus: messages.sendStatus })
+          .from(messages)
+          .where(eq(messages.leadId, lead.id))
+          .limit(1);
+
+        if (msg.length > 0 && msg[0].sendStatus === 'SENT') {
+          // Message was actually sent! Ensure lead is marked CONTACTED
+          await db
+            .update(leads)
+            .set({ outreachStatus: 'CONTACTED', updatedAt: new Date() })
+            .where(eq(leads.id, lead.id));
+          recovered++;
+        } else {
+          // If a message was stuck in SENDING, mark it FAILED
+          if (msg.length > 0 && msg[0].sendStatus === 'SENDING') {
+            await db
+              .update(messages)
+              .set({
+                sendStatus: 'FAILED',
+                error: 'Outreach worker timed out mid-send',
+                updatedAt: new Date(),
+              })
+              .where(eq(messages.id, msg[0].id));
+          }
+
+          // Reset lead to UNPROCESSED so it can be retried cleanly
+          await db
+            .update(leads)
+            .set({ outreachStatus: 'UNPROCESSED', updatedAt: new Date() })
+            .where(eq(leads.id, lead.id));
+          recovered++;
+        }
       }
-      return staleLeads.length;
+
+      if (recovered > 0) {
+        console.log(`[Recovery] Reconciled and recovered ${recovered} stale QUEUED leads.`);
+      }
+      return recovered;
     } catch (e: any) {
       console.warn('[Recovery] Warning during stale lead recovery:', e.message);
       return 0;

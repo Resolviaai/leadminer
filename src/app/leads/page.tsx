@@ -1,7 +1,7 @@
 import React from "react";
 import { db } from "../../db/client";
 import { leads, contacts, keywords } from "../../db/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, inArray } from "drizzle-orm";
 import { Users, Play } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ export const revalidate = 5;
 
 async function getData() {
   try {
-    const [listResult, countResult] = await Promise.all([
+    const [leadRows, countResult] = await Promise.all([
       db
         .select({
           id: leads.id,
@@ -23,13 +23,10 @@ async function getData() {
           outreachStatus: leads.outreachStatus,
           country: leads.country,
           discoveredAt: leads.discoveredAt,
-          email: contacts.email,
-          emailStatus: contacts.emailStatus,
           sourceKeyword: keywords.keyword,
           category: keywords.category,
         })
         .from(leads)
-        .leftJoin(contacts, eq(leads.id, contacts.leadId))
         .leftJoin(keywords, eq(leads.sourceKeywordId, keywords.id))
         .orderBy(desc(leads.id))
         .limit(50),
@@ -37,7 +34,59 @@ async function getData() {
     ]);
 
     const total = countResult?.[0]?.total ?? 0;
-    return { list: listResult || [], total };
+
+    if (leadRows.length === 0) {
+      return { list: [], total };
+    }
+
+    const leadIds = leadRows.map((l) => l.id);
+    const allContacts = await db
+      .select({
+        id: contacts.id,
+        leadId: contacts.leadId,
+        contactType: contacts.contactType,
+        value: contacts.value,
+        email: contacts.email,
+        emailStatus: contacts.emailStatus,
+        instagram: contacts.instagram,
+        twitter: contacts.twitter,
+        tiktok: contacts.tiktok,
+        discord: contacts.discord,
+        linkedin: contacts.linkedin,
+      })
+      .from(contacts)
+      .where(inArray(contacts.leadId, leadIds));
+
+    const contactsByLead = new Map<number, typeof allContacts>();
+    for (const c of allContacts) {
+      const list = contactsByLead.get(c.leadId) || [];
+      list.push(c);
+      contactsByLead.set(c.leadId, list);
+    }
+
+    const list = leadRows.map((l) => {
+      const leadContacts = contactsByLead.get(l.id) || [];
+      const primaryEmailContact =
+        leadContacts.find((c) => c.contactType === "EMAIL" && c.email) ||
+        leadContacts.find((c) => c.email);
+
+      const socialLinks = leadContacts
+        .filter((c) => c.contactType !== "EMAIL" || !c.email)
+        .map((c) => ({
+          type: c.contactType,
+          value: c.value || c.instagram || c.twitter || c.tiktok || c.discord || c.linkedin || "",
+        }))
+        .filter((s) => Boolean(s.value));
+
+      return {
+        ...l,
+        email: primaryEmailContact?.email || null,
+        emailStatus: primaryEmailContact?.emailStatus || null,
+        socialLinks,
+      };
+    });
+
+    return { list, total };
   } catch (err) {
     console.error("[LeadsPage Error]", err);
     return { list: [], total: 0 };

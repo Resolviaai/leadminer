@@ -1,10 +1,35 @@
 import { google } from 'googleapis';
 import { db } from '../db/client';
-import { gmailAccounts, messages, replies } from '../db/schema';
-import { eq, and, isNotNull, inArray, desc } from 'drizzle-orm';
+import { gmailAccounts, messages, replies, leads } from '../db/schema';
+import { eq, and, isNotNull, inArray, desc, gte } from 'drizzle-orm';
 import { env } from '../config/env';
 import { replyDetectorService } from '../services/replies/reply.detector';
 import { jobRunner } from '../services/jobs/job.runner';
+
+export function isAutomatedBounceOrDaemon(headers: { name?: string; value?: string }[], fromHeader: string): boolean {
+  const fromEmailLower = (fromHeader || '').toLowerCase();
+  const autoSubmitted = headers.find((h: any) => h.name?.toLowerCase() === 'auto-submitted')?.value?.toLowerCase();
+  const precedence = headers.find((h: any) => h.name?.toLowerCase() === 'precedence')?.value?.toLowerCase();
+  const xAutoreply = headers.find((h: any) => h.name?.toLowerCase() === 'x-autoreply')?.value?.toLowerCase();
+  const subject = headers.find((h: any) => h.name?.toLowerCase() === 'subject')?.value?.toLowerCase() || '';
+
+  const isAutoSubmitted = autoSubmitted && autoSubmitted !== 'no';
+  const isBulkOrBounce = precedence === 'bulk' || precedence === 'junk' || precedence === 'bounce';
+  const isDaemonOrBounceAddress =
+    fromEmailLower.includes('mailer-daemon') ||
+    fromEmailLower.includes('postmaster') ||
+    fromEmailLower.includes('noreply') ||
+    fromEmailLower.includes('no-reply') ||
+    fromEmailLower.includes('delivery-status') ||
+    fromEmailLower.includes('mail delivery subsystem');
+  const isDeliveryFailureSubject =
+    subject.includes('delivery status notification') ||
+    subject.includes('failure notice') ||
+    subject.includes('undeliverable') ||
+    subject.includes('returned mail');
+
+  return Boolean(isAutoSubmitted || isBulkOrBounce || xAutoreply || isDaemonOrBounceAddress || isDeliveryFailureSubject);
+}
 
 export async function runReplySync(): Promise<{ repliesDetected: number }> {
   console.log(`\n======================================================`);
@@ -14,7 +39,9 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
   const jobId = await jobRunner.createJob('REPLY_SYNC');
 
   try {
-    // 1. Fetch recent sent messages from messages where send_status = 'SENT' and thread_id is present
+    // 1. Fetch active sent messages within rolling 30 days where lead is awaiting reply (CONTACTED)
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
     const recentSent = await db
       .select({
         id: messages.id,
@@ -27,9 +54,16 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
         threadId: messages.threadId,
       })
       .from(messages)
-      .where(and(eq(messages.sendStatus, 'SENT'), isNotNull(messages.threadId)))
-      .orderBy(desc(messages.sentAt))
-      .limit(50);
+      .innerJoin(leads, eq(messages.leadId, leads.id))
+      .where(
+        and(
+          eq(messages.sendStatus, 'SENT'),
+          isNotNull(messages.threadId),
+          eq(leads.outreachStatus, 'CONTACTED'),
+          gte(messages.sentAt, thirtyDaysAgo)
+        )
+      )
+      .orderBy(desc(messages.sentAt));
 
     if (recentSent.length === 0) {
       console.log('ℹ️ No active sent threads to inspect for replies.');
@@ -90,6 +124,29 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
           refresh_token: account.refreshToken,
           access_token: account.accessToken || undefined,
         });
+
+        // Persist refreshed OAuth tokens back to gmail_accounts table
+        oauth2Client.on('tokens', async (tokens) => {
+          try {
+            const updateData: { accessToken?: string; tokenExpiresAt?: Date; updatedAt: Date } = {
+              updatedAt: new Date(),
+            };
+            if (tokens.access_token) {
+              updateData.accessToken = tokens.access_token;
+            }
+            if (tokens.expiry_date) {
+              updateData.tokenExpiresAt = new Date(tokens.expiry_date);
+            }
+            await db
+              .update(gmailAccounts)
+              .set(updateData)
+              .where(eq(gmailAccounts.id, account.id));
+            console.log(`[OAuth] Refreshed and saved access token for ${account.email} (reply sync)`);
+          } catch (tokErr: any) {
+            console.warn(`[OAuth] Token persistence error for ${account.email}:`, tokErr.message);
+          }
+        });
+
         const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
         gmailClientsMap.set(accId, { gmail, account });
       } catch (e: any) {
@@ -111,7 +168,7 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
           userId: 'me',
           id: msg.threadId,
           format: 'metadata',
-          metadataHeaders: ['From', 'Date', 'Subject'],
+          metadataHeaders: ['From', 'Date', 'Subject', 'Auto-Submitted', 'Precedence', 'X-Autoreply'],
         });
 
         const threadMessages = threadRes.data.messages || [];
@@ -125,7 +182,13 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
           const fromHeader = headers.find((h: any) => h.name?.toLowerCase() === 'from')?.value || '';
           const fromEmailLower = fromHeader.toLowerCase();
 
-          // Inspect messages in thread: find any message with from != account.email and timestamp after outbound sent timestamp
+          // Anti-Bounce & Auto-Reply Protection:
+          if (isAutomatedBounceOrDaemon(headers, fromHeader)) {
+            console.log(`  [Skip Inbound] Ignored automated bounce / daemon notification from ${fromHeader}`);
+            continue;
+          }
+
+          // Inspect messages in thread: find genuine creator reply where from != account.email and timestamp after outbound send
           const isOutbound = fromEmailLower.includes(accountEmailLower);
           const dateHeader = headers.find((h: any) => h.name?.toLowerCase() === 'date')?.value;
           const msgTime = Number(tm.internalDate) || (dateHeader ? new Date(dateHeader).getTime() : Date.now());

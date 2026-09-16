@@ -40,7 +40,12 @@ export class GmailSendingService {
 
   private async isSuppressed(email: string): Promise<boolean> {
     try {
-      const supp = await db.select().from(suppressions).where(eq(suppressions.email, email.toLowerCase().trim())).limit(1);
+      const cleanEmail = email.toLowerCase().trim();
+      const supp = await db
+        .select()
+        .from(suppressions)
+        .where(sql`lower(${suppressions.email}) = ${cleanEmail}`)
+        .limit(1);
       return supp.length > 0;
     } catch (e) {
       return false;
@@ -48,14 +53,22 @@ export class GmailSendingService {
   }
 
   /**
+   * Returns current Pacific Time (America/Los_Angeles) date string YYYY-MM-DD.
+   * Google Workspace and Gmail API reset daily sending quotas on Pacific Time.
+   */
+  public getPacificDateStr(date = new Date()): string {
+    return date.toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+  }
+
+  /**
    * Calculates a daily randomized sending limit (volume jitter)
    * For baseLimit 25, generates a natural target between 18 and 25.
-   * Uses date string (YYYY-MM-DD) + accountId as seed so the target remains stable throughout each calendar day.
+   * Uses Pacific Time date string (YYYY-MM-DD) + accountId as seed so the target remains stable throughout each calendar day.
    */
   public getTodayEffectiveLimit(accountId: number, baseLimit = 25): number {
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const ptDateStr = this.getPacificDateStr();
     let hash = 0;
-    const str = `${todayStr}_acc_${accountId}`;
+    const str = `${ptDateStr}_acc_${accountId}`;
     for (let i = 0; i < str.length; i++) {
       hash = (hash << 5) - hash + str.charCodeAt(i);
       hash |= 0;
@@ -81,22 +94,18 @@ export class GmailSendingService {
         .where(eq(gmailAccounts.status, 'ACTIVE'))
         .limit(10);
 
-      const now = new Date();
-      const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+      const currentPtDate = this.getPacificDateStr();
 
       for (const account of accounts) {
-        // 1. Midnight rollover check: reset sentToday if lastSendAt was before today UTC
-        if (!account.lastSendAt || new Date(account.lastSendAt) < todayUtc) {
+        // 1. Pacific Time Midnight rollover check: reset sentToday if lastSendAt was before today in PT
+        const lastSendPtDate = account.lastSendAt ? this.getPacificDateStr(new Date(account.lastSendAt)) : null;
+        if (!lastSendPtDate || lastSendPtDate !== currentPtDate) {
           try {
             await db
               .update(gmailAccounts)
               .set({ sentToday: 0, updatedAt: new Date() })
-              .where(
-                and(
-                  eq(gmailAccounts.id, account.id),
-                  sql`(${gmailAccounts.lastSendAt} < ${todayUtc} OR ${gmailAccounts.lastSendAt} IS NULL)`
-                )
-              );
+              .where(eq(gmailAccounts.id, account.id));
+            account.sentToday = 0;
           } catch {
             // Non-blocking fallback
           }
@@ -238,12 +247,90 @@ export class GmailSendingService {
       };
     }
 
-    // 5. Live Gmail Send Execution
+    // 5. Live Gmail Send Execution (Two-Phase Commit Pattern)
     if (!account) {
       return { success: false, skippedReason: 'NO_HEALTHY_GMAIL_ACCOUNT' };
     }
 
+    let messageRecordId: number | null = null;
+
     try {
+      // Phase 1: Pre-insert message in 'SENDING' status with deterministic idempotency key.
+      // This guarantees that even if a serverless timeout or DB connection drop occurs post-send,
+      // the existence of this row prevents duplicate outreach from ever being dispatched to the creator.
+      const preInsert = await db
+        .insert(messages)
+        .values({
+          leadId: params.leadId,
+          campaignId: params.campaignId,
+          gmailAccountId: account.id,
+          templateId: params.templateId,
+          recipientEmail: params.recipientEmail,
+          subject: params.subject,
+          body: params.body,
+          personalizationStatus: params.personalizationStatus || 'NONE',
+          personalizationModel: params.personalizationModel,
+          sendStatus: 'SENDING',
+          idempotencyKey: params.idempotencyKey,
+        })
+        .onConflictDoNothing()
+        .returning({ id: messages.id });
+
+      if (preInsert.length > 0) {
+        messageRecordId = preInsert[0].id;
+      } else {
+        // Record already exists for this idempotency key
+        const existing = await db
+          .select({
+            id: messages.id,
+            sendStatus: messages.sendStatus,
+            messageId: messages.messageId,
+            threadId: messages.threadId,
+            gmailAccountId: messages.gmailAccountId,
+            createdAt: messages.createdAt,
+          })
+          .from(messages)
+          .where(eq(messages.idempotencyKey, params.idempotencyKey))
+          .limit(1);
+
+        if (existing.length > 0) {
+          const row = existing[0];
+          if (row.sendStatus === 'SENT') {
+            // Already delivered! Release reservation and confirm lead is CONTACTED
+            await this.releaseAccountReservation(account.id);
+            await db
+              .update(leads)
+              .set({ outreachStatus: 'CONTACTED', updatedAt: new Date() })
+              .where(eq(leads.id, params.leadId));
+            return {
+              success: true,
+              messageId: row.messageId || undefined,
+              threadId: row.threadId || undefined,
+              accountId: row.gmailAccountId || account.id,
+            };
+          }
+
+          // If currently SENDING within the last 5 minutes, an active worker is already handling it
+          const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+          if (row.sendStatus === 'SENDING' && row.createdAt && row.createdAt > fiveMinutesAgo) {
+            await this.releaseAccountReservation(account.id);
+            return { success: false, skippedReason: 'IN_FLIGHT_SENDING' };
+          }
+
+          // Otherwise, reuse this existing record for sending
+          messageRecordId = row.id;
+          await db
+            .update(messages)
+            .set({
+              sendStatus: 'SENDING',
+              gmailAccountId: account.id,
+              updatedAt: new Date(),
+            })
+            .where(eq(messages.id, messageRecordId));
+        }
+      }
+
+      // Initialize OAuth2 client with auto-refresh persistence
       const oauth2Client = new google.auth.OAuth2(
         env.GOOGLE_CLIENT_ID,
         env.GOOGLE_CLIENT_SECRET,
@@ -252,12 +339,35 @@ export class GmailSendingService {
 
       oauth2Client.setCredentials({
         refresh_token: account.refreshToken,
-        access_token: account.accessToken,
+        access_token: account.accessToken || undefined,
+      });
+
+      // Persist refreshed OAuth tokens back to gmail_accounts table
+      oauth2Client.on('tokens', async (tokens) => {
+        try {
+          const updateData: { accessToken?: string; tokenExpiresAt?: Date; updatedAt: Date } = {
+            updatedAt: new Date(),
+          };
+          if (tokens.access_token) {
+            updateData.accessToken = tokens.access_token;
+          }
+          if (tokens.expiry_date) {
+            updateData.tokenExpiresAt = new Date(tokens.expiry_date);
+          }
+          await db
+            .update(gmailAccounts)
+            .set(updateData)
+            .where(eq(gmailAccounts.id, account.id));
+          console.log(`[OAuth] Refreshed and persisted access token for ${account.email}`);
+        } catch (tokErr: any) {
+          console.warn(`[OAuth] Token persistence error for ${account.email}:`, tokErr.message);
+        }
       });
 
       const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
       const raw = this.createRfc2822Message(account.email, params.recipientEmail, params.subject, params.body);
 
+      // Execute live send via Google API
       const response = await gmail.users.messages.send({
         userId: 'me',
         requestBody: { raw },
@@ -266,23 +376,19 @@ export class GmailSendingService {
       const messageId = response.data.id || `live_msg_${Date.now()}`;
       const threadId = response.data.threadId || `live_thread_${Date.now()}`;
 
-      // 6. Record sent message state (Quota was already claimed atomically during reservation)
-      await db.insert(messages).values({
-        leadId: params.leadId,
-        campaignId: params.campaignId,
-        gmailAccountId: account.id,
-        templateId: params.templateId,
-        recipientEmail: params.recipientEmail,
-        subject: params.subject,
-        body: params.body,
-        personalizationStatus: params.personalizationStatus || 'NONE',
-        personalizationModel: params.personalizationModel,
-        sendStatus: 'SENT',
-        sentAt: new Date(),
-        messageId,
-        threadId,
-        idempotencyKey: params.idempotencyKey,
-      });
+      // Phase 2: Update message record to 'SENT' and lead to 'CONTACTED'
+      if (messageRecordId) {
+        await db
+          .update(messages)
+          .set({
+            sendStatus: 'SENT',
+            sentAt: new Date(),
+            messageId,
+            threadId,
+            updatedAt: new Date(),
+          })
+          .where(eq(messages.id, messageRecordId));
+      }
 
       await db
         .update(leads)
@@ -297,6 +403,22 @@ export class GmailSendingService {
       };
     } catch (error: any) {
       console.error(`[Gmail Send Error] Account ${account.email}:`, error);
+
+      // Update message row to 'FAILED' so audit trail is preserved and no ghost sends occur
+      if (messageRecordId) {
+        try {
+          await db
+            .update(messages)
+            .set({
+              sendStatus: 'FAILED',
+              error: error.message,
+              updatedAt: new Date(),
+            })
+            .where(eq(messages.id, messageRecordId));
+        } catch {
+          // Non-blocking fallback
+        }
+      }
 
       // Release the reserved quota slot since sending failed
       await this.releaseAccountReservation(account.id);

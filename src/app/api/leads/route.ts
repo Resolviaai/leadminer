@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "../../../db/client";
 import { leads, contacts, keywords } from "../../../db/schema";
-import { eq, desc, lt } from "drizzle-orm";
+import { eq, desc, lt, inArray } from "drizzle-orm";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const lastId = parseInt(searchParams.get("lastId") ?? "0", 10);
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "50", 10), 100);
   try {
-    const data = await db
+    const leadRows = await db
       .select({
         id: leads.id,
         channelId: leads.channelId,
@@ -19,17 +19,67 @@ export async function GET(req: NextRequest) {
         outreachStatus: leads.outreachStatus,
         country: leads.country,
         discoveredAt: leads.discoveredAt,
-        email: contacts.email,
-        emailStatus: contacts.emailStatus,
         sourceKeyword: keywords.keyword,
         category: keywords.category,
       })
       .from(leads)
-      .leftJoin(contacts, eq(leads.id, contacts.leadId))
       .leftJoin(keywords, eq(leads.sourceKeywordId, keywords.id))
       .where(lastId > 0 ? lt(leads.id, lastId) : undefined)
       .orderBy(desc(leads.id))
       .limit(limit);
+
+    if (leadRows.length === 0) {
+      return NextResponse.json([]);
+    }
+
+    const leadIds = leadRows.map((l) => l.id);
+    const allContacts = await db
+      .select({
+        id: contacts.id,
+        leadId: contacts.leadId,
+        contactType: contacts.contactType,
+        value: contacts.value,
+        email: contacts.email,
+        emailStatus: contacts.emailStatus,
+        instagram: contacts.instagram,
+        twitter: contacts.twitter,
+        tiktok: contacts.tiktok,
+        discord: contacts.discord,
+        linkedin: contacts.linkedin,
+      })
+      .from(contacts)
+      .where(inArray(contacts.leadId, leadIds));
+
+    // Map contacts to leads
+    const contactsByLead = new Map<number, typeof allContacts>();
+    for (const c of allContacts) {
+      const list = contactsByLead.get(c.leadId) || [];
+      list.push(c);
+      contactsByLead.set(c.leadId, list);
+    }
+
+    const data = leadRows.map((l) => {
+      const leadContacts = contactsByLead.get(l.id) || [];
+      const primaryEmailContact =
+        leadContacts.find((c) => c.contactType === "EMAIL" && c.email) ||
+        leadContacts.find((c) => c.email);
+
+      const socialLinks = leadContacts
+        .filter((c) => c.contactType !== "EMAIL" || !c.email)
+        .map((c) => ({
+          type: c.contactType,
+          value: c.value || c.instagram || c.twitter || c.tiktok || c.discord || c.linkedin || "",
+        }))
+        .filter((s) => Boolean(s.value));
+
+      return {
+        ...l,
+        email: primaryEmailContact?.email || null,
+        emailStatus: primaryEmailContact?.emailStatus || null,
+        socialLinks,
+      };
+    });
+
     return NextResponse.json(data);
   } catch (e) {
     return NextResponse.json([], { status: 500 });

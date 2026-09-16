@@ -24,3 +24,41 @@ describe('Telegram Notification Service', () => {
   });
 });
 
+import { isAutomatedBounceOrDaemon } from '../../src/workers/replies.worker';
+
+describe('Anti-Bounce and Daemon Message Filter', () => {
+  it('should flag mailer-daemon and delivery subsystem senders as automated bounce', () => {
+    expect(isAutomatedBounceOrDaemon([], 'mailer-daemon@googlemail.com')).toBe(true);
+    expect(isAutomatedBounceOrDaemon([], 'Mail Delivery Subsystem <mailer-daemon@google.com>')).toBe(true);
+    expect(isAutomatedBounceOrDaemon([], 'postmaster@domain.com')).toBe(true);
+    expect(isAutomatedBounceOrDaemon([], 'noreply@service.com')).toBe(true);
+  });
+
+  it('should flag Auto-Submitted headers as automated replies', () => {
+    expect(isAutomatedBounceOrDaemon([{ name: 'Auto-Submitted', value: 'auto-replied' }], 'creator@channel.com')).toBe(true);
+    expect(isAutomatedBounceOrDaemon([{ name: 'Auto-Submitted', value: 'auto-generated' }], 'creator@channel.com')).toBe(true);
+    expect(isAutomatedBounceOrDaemon([{ name: 'X-Autoreply', value: 'yes' }], 'creator@channel.com')).toBe(true);
+  });
+
+  it('should flag delivery failure subjects as bounce', () => {
+    expect(
+      isAutomatedBounceOrDaemon(
+        [{ name: 'Subject', value: 'Delivery Status Notification (Failure)' }],
+        'notifications@google.com'
+      )
+    ).toBe(true);
+  });
+
+  it('should identify genuine creator human replies as valid (not bounce)', () => {
+    expect(
+      isAutomatedBounceOrDaemon(
+        [
+          { name: 'Subject', value: 'Re: Video editing proposal' },
+          { name: 'Auto-Submitted', value: 'no' },
+        ],
+        'Alex Creator <alex@studio.com>'
+      )
+    ).toBe(false);
+  });
+});
+

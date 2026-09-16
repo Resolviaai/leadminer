@@ -139,19 +139,25 @@ export async function runOutreachBatch(batchLimit?: number): Promise<{ sent: num
       // Atomic locking / guard:
       // Step A: Check if message already exists with this idempotency key
       const existing = await db
-        .select({ id: messages.id })
+        .select({ id: messages.id, sendStatus: messages.sendStatus })
         .from(messages)
         .where(eq(messages.idempotencyKey, idempotencyKey))
         .limit(1);
 
       if (existing.length > 0) {
-        console.log(`  [Skip] Message already exists for lead ${lead.leadId} (idempotency enforced)`);
-        await db
-          .update(leads)
-          .set({ outreachStatus: 'CONTACTED', updatedAt: new Date() })
-          .where(eq(leads.id, lead.leadId));
-        skippedCount++;
-        continue;
+        if (existing[0].sendStatus === 'SENT') {
+          console.log(`  [Skip] Message already SENT for lead ${lead.leadId} (idempotency enforced)`);
+          await db
+            .update(leads)
+            .set({ outreachStatus: 'CONTACTED', updatedAt: new Date() })
+            .where(eq(leads.id, lead.leadId));
+          skippedCount++;
+          continue;
+        } else if (existing[0].sendStatus === 'SENDING') {
+          console.log(`  [Skip] Message currently SENDING for lead ${lead.leadId} (in-flight)`);
+          skippedCount++;
+          continue;
+        }
       }
 
       // Step B: Atomically mark lead as QUEUED to prevent concurrent workers from processing the same lead
@@ -260,6 +266,9 @@ export async function runOutreachBatch(batchLimit?: number): Promise<{ sent: num
             .update(leads)
             .set({ outreachStatus: 'UNSUBSCRIBED', suppressionStatus: true, updatedAt: new Date() })
             .where(eq(leads.id, lead.leadId));
+        } else if (sendResult.skippedReason === 'IN_FLIGHT_SENDING') {
+          // Leave lead in current state; active worker is currently dispatching
+          console.log(`  [In-Flight] Lead ${lead.leadId} is already being dispatched by an active worker.`);
         } else {
           // Revert to UNPROCESSED so pipeline checkpoint allows clean retry on next run
           await db

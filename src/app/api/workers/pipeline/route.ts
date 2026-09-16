@@ -5,7 +5,7 @@ import { runVerificationBatch } from '@/workers/verification.worker';
 import { runOutreachBatch } from '@/workers/outreach.worker';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60; // Max permitted duration for Vercel functions
+export const maxDuration = 300; // 300s max execution duration for batch processing
 
 async function executePipeline() {
   const startedAt = new Date();
