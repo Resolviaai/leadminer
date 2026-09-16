@@ -15,7 +15,6 @@ import {
   Activity,
   Terminal,
   Settings,
-  ShieldCheck,
   Menu,
   X,
   Zap,
@@ -239,21 +238,6 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
                   </Link>
                 );
               })}
-            </div>
-
-            {/* Mobile Kill Switch Shortcut */}
-            <div className="p-3.5 rounded-xl bg-surface-200 border border-border flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <ShieldCheck className="w-4 h-4 text-danger" />
-                <span className="text-xs font-medium text-text-main">Kill Switch Ready</span>
-              </div>
-              <Link
-                href="/settings"
-                onClick={() => setIsMobileMoreOpen(false)}
-                className="px-3.5 py-2 rounded-lg bg-destructive/15 border border-destructive/30 text-danger text-xs font-semibold hover:bg-destructive/25 min-h-[38px] flex items-center transition-colors active:scale-95"
-              >
-                Manage
-              </Link>
             </div>
           </div>
         </div>

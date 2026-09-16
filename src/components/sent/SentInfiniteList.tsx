@@ -358,16 +358,17 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
   return (
     <div className="space-y-3">
       {/* Top Toolbar: Master Checkbox, Refresh, Custom Account Dropdown, Search, and 50-item Pagination */}
-      <Card className="p-2.5 sm:p-3 border-border bg-surface-100/90 backdrop-blur-sm">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          {/* Left: Select, Refresh, Account Filter & Search */}
-          <div className="flex items-center gap-2 flex-1 min-w-[240px] flex-wrap sm:flex-nowrap">
+      <Card className="p-2.5 sm:p-3 border-border bg-surface-100/90 backdrop-blur-sm space-y-2 sm:space-y-0">
+        {/* Mobile: Row 1 | Desktop: Integrated single bar */}
+        <div className="flex items-center justify-between gap-2">
+          {/* Controls: Checkbox, Refresh & Account Selector */}
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0">
             {/* Master Checkbox Toggle Button */}
             <button
               type="button"
               onClick={handleToggleSelectAll}
               disabled={items.length === 0}
-              className={`p-2 rounded-lg hover:bg-surface-200 transition-all min-h-[38px] min-w-[38px] flex items-center justify-center active:scale-95 ${
+              className={`p-2 rounded-lg hover:bg-surface-200 transition-all min-h-[38px] min-w-[38px] flex items-center justify-center active:scale-95 shrink-0 ${
                 items.length === 0 ? "opacity-40 cursor-default" : "cursor-pointer text-text-muted hover:text-text-main"
               }`}
               title={isAllSelected ? "Deselect all" : "Select all on page"}
@@ -384,7 +385,7 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
 
             {/* Selection count badge if any selected */}
             {selectedIds.size > 0 && (
-              <span className="text-[11px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20 shrink-0">
+              <span className="text-[10px] sm:text-[11px] font-medium text-primary bg-primary/10 px-1.5 sm:px-2 py-0.5 rounded-md border border-primary/20 shrink-0">
                 {selectedIds.size} selected
               </span>
             )}
@@ -395,25 +396,25 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
               onClick={() => fetchPage(page, selectedAccountId, searchQuery)}
               title="Refresh outbox"
               disabled={loading}
-              className="p-2 rounded-lg hover:bg-surface-200 text-text-muted hover:text-text-main transition-all min-h-[38px] min-w-[38px] flex items-center justify-center active:scale-95"
+              className="p-2 rounded-lg hover:bg-surface-200 text-text-muted hover:text-text-main transition-all min-h-[38px] min-w-[38px] flex items-center justify-center active:scale-95 shrink-0"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-primary" : ""}`} />
             </button>
 
-            <div className="h-4 w-px bg-border/80 mx-1 hidden sm:block" />
+            <div className="h-4 w-px bg-border/80 mx-0.5 hidden sm:block shrink-0" />
 
-            {/* Custom Sleek Account Selector Dropdown (Replaces native OS <select>) */}
-            <div className="relative shrink-0" ref={dropdownRef}>
+            {/* Custom Sleek Account Selector Dropdown */}
+            <div className="relative flex-1 min-w-0 sm:flex-initial" ref={dropdownRef}>
               <button
                 type="button"
                 onClick={() => setAccountDropdownOpen(!accountDropdownOpen)}
-                className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-surface-200/90 border border-border/80 hover:border-border text-xs text-text-main font-medium transition-all min-w-[210px] min-h-[38px] active:scale-[0.99]"
+                className="w-full flex items-center justify-between gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-surface-200/90 border border-border/80 hover:border-border text-xs text-text-main font-medium transition-all sm:min-w-[210px] min-h-[38px] active:scale-[0.99]"
                 aria-haspopup="listbox"
                 aria-expanded={accountDropdownOpen}
               >
-                <div className="flex items-center gap-2 truncate">
+                <div className="flex items-center gap-1.5 sm:gap-2 truncate min-w-0">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                  <span className="truncate">
+                  <span className="truncate text-[11px] sm:text-xs">
                     {selectedAccountId === "ALL"
                       ? `All Accounts (${inboxes.length})`
                       : currentAccount?.email || "Selected Account"}
@@ -427,7 +428,7 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
               </button>
 
               {accountDropdownOpen && (
-                <div className="absolute left-0 top-full mt-1.5 z-50 min-w-[260px] max-w-[340px] bg-surface-100 border border-border rounded-xl shadow-2xl p-1 animate-in fade-in zoom-in-95 duration-100">
+                <div className="absolute left-0 top-full mt-1.5 z-50 min-w-[240px] sm:min-w-[260px] max-w-[320px] sm:max-w-[340px] bg-surface-100 border border-border rounded-xl shadow-2xl p-1 animate-in fade-in zoom-in-95 duration-100">
                   <button
                     type="button"
                     onClick={() => handleAccountChange("ALL")}
@@ -479,8 +480,8 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
               )}
             </div>
 
-            {/* Search bar */}
-            <form onSubmit={handleSearchSubmit} className="relative flex-1 min-w-[180px]">
+            {/* Desktop search bar */}
+            <form onSubmit={handleSearchSubmit} className="relative hidden sm:block flex-1 min-w-[180px]">
               <Search className="w-3.5 h-3.5 text-text-muted absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 value={searchQuery}
@@ -502,16 +503,16 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
           </div>
 
           {/* Right: Working 50-per-page Pagination Controls (< > arrows) */}
-          <div className="flex items-center gap-1.5 text-xs text-text-muted font-mono select-none shrink-0">
-            <span className="px-1 text-[11px] sm:text-xs text-text-secondary">
+          <div className="flex items-center gap-1 text-xs text-text-muted font-mono select-none shrink-0">
+            <span className="px-1 text-[10px] sm:text-xs text-text-secondary whitespace-nowrap">
               {rangeLabel}
             </span>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center">
               <button
                 type="button"
                 onClick={() => fetchPage(page - 1)}
                 disabled={page <= 1 || loading}
-                className={`p-2 rounded-lg min-h-[38px] min-w-[38px] flex items-center justify-center transition-all ${
+                className={`p-1.5 sm:p-2 rounded-lg min-h-[36px] min-w-[36px] sm:min-h-[38px] sm:min-w-[38px] flex items-center justify-center transition-all ${
                   page > 1 && !loading
                     ? "text-text-secondary hover:text-text-main hover:bg-surface-200 cursor-pointer active:scale-95"
                     : "text-text-muted/30 cursor-default"
@@ -525,7 +526,7 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
                 type="button"
                 onClick={() => fetchPage(page + 1)}
                 disabled={page >= totalPages || loading}
-                className={`p-2 rounded-lg min-h-[38px] min-w-[38px] flex items-center justify-center transition-all ${
+                className={`p-1.5 sm:p-2 rounded-lg min-h-[36px] min-w-[36px] sm:min-h-[38px] sm:min-w-[38px] flex items-center justify-center transition-all ${
                   page < totalPages && !loading
                     ? "text-text-secondary hover:text-text-main hover:bg-surface-200 cursor-pointer active:scale-95"
                     : "text-text-muted/30 cursor-default"
@@ -538,6 +539,27 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
             </div>
           </div>
         </div>
+
+        {/* Mobile: Row 2 - Full-Width Search Input */}
+        <form onSubmit={handleSearchSubmit} className="relative block sm:hidden w-full">
+          <Search className="w-3.5 h-3.5 text-text-muted absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search recipient, channel, or subject..."
+            className="w-full bg-surface-200/80 border border-border/80 rounded-lg pl-8 pr-7 py-2 text-xs min-h-[38px] text-text-main focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-text-muted"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={handleClearSearch}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main p-1 rounded min-w-[28px] min-h-[28px] flex items-center justify-center"
+              title="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </form>
       </Card>
 
       {/* Gmail-Style Email List Container */}

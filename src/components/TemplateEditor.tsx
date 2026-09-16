@@ -395,192 +395,352 @@ export function TemplateEditor({
     <div className="space-y-4">
       {/* ── Top Bar with ID, Status badge, and Controls ── */}
       <div
-        className={`flex items-center justify-between gap-3 flex-wrap transition-colors ${
+        className={`transition-colors ${
           editing || expanded ? "border-b border-border/50 pb-3" : ""
-        } ${!editing ? "cursor-pointer group select-none" : ""}`}
-        onClick={() => {
-          if (!editing) setExpanded((v) => !v);
-        }}
+        }`}
       >
-        <div className="flex items-center gap-2 min-w-0">
-          {selectable && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleSelect?.(template.id);
-              }}
-              className="p-1 -ml-1 text-text-muted hover:text-primary transition-colors shrink-0"
-              aria-label={selected ? "Deselect template" : "Select template"}
-            >
-              {selected ? (
-                <CheckSquare className="w-4 h-4 text-primary" />
-              ) : (
-                <Square className="w-4 h-4 text-text-muted" />
-              )}
-            </button>
-          )}
-          <Badge variant={isActive ? "success" : "secondary"} className="font-mono text-[10px]">
-            {isActive ? "Active" : "Inactive"}
-          </Badge>
-          <Badge variant="secondary" className="font-mono text-[10px]">
-            ID #{template.id}
-          </Badge>
+        {/* ── MOBILE HEADER LAYOUT (< sm) ── */}
+        <div className="sm:hidden space-y-2.5">
+          {!editing ? (
+            <>
+              {/* Mobile Row 1: Checkbox + Status + Title + Expand/Collapse */}
+              <div
+                className="flex items-center justify-between gap-2 cursor-pointer select-none"
+                onClick={() => setExpanded((v) => !v)}
+              >
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  {selectable && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleSelect?.(template.id);
+                      }}
+                      className="p-1 -ml-1 text-text-muted hover:text-primary transition-colors shrink-0"
+                      aria-label={selected ? "Deselect template" : "Select template"}
+                    >
+                      {selected ? (
+                        <CheckSquare className="w-4 h-4 text-primary" />
+                      ) : (
+                        <Square className="w-4 h-4 text-text-muted" />
+                      )}
+                    </button>
+                  )}
+                  <Badge variant={isActive ? "success" : "secondary"} className="font-mono text-[10px] shrink-0">
+                    {isActive ? "Active" : "Inactive"}
+                  </Badge>
+                  <h2 className="text-xs font-semibold text-text-main truncate">
+                    {template.name}
+                  </h2>
+                </div>
 
-          {editing ? (
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="bg-surface-300 border border-border rounded-md px-2.5 py-1 text-sm font-semibold text-text-main focus:outline-none focus:ring-1 focus:ring-primary transition-shadow"
-              placeholder="Template name..."
-              maxLength={100}
-            />
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setExpanded((v) => !v);
+                  }}
+                  className="p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-200 transition-all min-h-[36px] min-w-[36px] flex items-center justify-center active:scale-95 shrink-0"
+                  aria-label={expanded ? "Collapse template" : "Expand template"}
+                >
+                  {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+              </div>
+
+              {/* Mobile Row 2: ID + Save status (left), Actions (right) */}
+              <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/40">
+                <div className="flex items-center gap-1.5 text-[10px] font-mono text-text-muted">
+                  <span>ID #{template.id}</span>
+                  {saveState === "saved" && (
+                    <span className="text-emerald-400 font-sans font-medium flex items-center gap-0.5">
+                      <Check className="w-3 h-3" /> Saved
+                    </span>
+                  )}
+                  {isDirty && saveState === "idle" && (
+                    <span className="text-warning font-sans">(unsaved)</span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={handleToggleActive}
+                    title={isActive ? "Deactivate template" : "Activate template"}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs transition-all min-h-[36px] active:scale-95 ${
+                      isActive
+                        ? "bg-surface-200 border-border text-text-secondary hover:text-warning"
+                        : "bg-surface-200 border-border text-text-muted hover:text-emerald-400"
+                    }`}
+                  >
+                    <Power className="w-3.5 h-3.5" />
+                    <span className="text-[11px]">{isActive ? "Pause" : "Activate"}</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setEditing(true);
+                      setExpanded(true);
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/25 text-primary text-xs font-semibold hover:bg-primary/20 active:scale-95 transition-all min-h-[36px]"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    <span className="text-[11px]">Edit</span>
+                  </button>
+
+                  {!confirmDelete ? (
+                    <button
+                      onClick={() => setConfirmDelete(true)}
+                      title="Delete template"
+                      className="p-2 rounded-lg bg-surface-200 border border-border text-text-muted hover:text-danger hover:bg-destructive/10 hover:border-destructive/30 transition-all min-h-[36px] min-w-[36px] flex items-center justify-center active:scale-95"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-1 bg-destructive/10 border border-destructive/30 rounded-lg p-0.5">
+                      <button
+                        onClick={handleDelete}
+                        disabled={deleting}
+                        className="px-2 py-1 text-xs font-semibold text-danger hover:bg-destructive/20 rounded min-h-[32px] transition-colors"
+                      >
+                        {deleting ? "…" : "Confirm"}
+                      </button>
+                      <button
+                        onClick={() => setConfirmDelete(false)}
+                        className="p-1 text-text-muted hover:text-text-main rounded min-h-[32px] min-w-[28px] flex items-center justify-center"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
           ) : (
-            <h2 className="text-sm font-semibold text-text-main group-hover:text-primary transition-colors truncate ml-1">
-              {template.name}
-            </h2>
-          )}
+            /* Mobile Edit Mode Header */
+            <div className="space-y-2">
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full bg-surface-300 border border-border rounded-lg px-3 py-1.5 text-sm font-semibold text-text-main focus:outline-none focus:ring-1 focus:ring-primary transition-shadow"
+                placeholder="Template name..."
+                maxLength={100}
+              />
+              <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/40">
+                <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={isActive}
+                    onChange={(e) => setIsActive(e.target.checked)}
+                    className="rounded border-border bg-surface-300 text-primary focus:ring-primary h-4 w-4"
+                  />
+                  <span>Active</span>
+                </label>
 
-          {/* Save state indicator */}
-          {saveState === "saved" && (
-            <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-medium shrink-0">
-              <Check className="w-3 h-3" /> Saved
-            </span>
-          )}
-          {isDirty && saveState === "idle" && (
-            <span className="text-[10px] text-warning font-medium shrink-0">unsaved</span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={handleCancel}
+                    disabled={saveState === "saving"}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-surface-200 border border-border text-text-secondary text-xs font-medium hover:text-text-main active:scale-95 transition-all min-h-[36px]"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>Cancel</span>
+                  </button>
+
+                  <button
+                    onClick={handleSave}
+                    disabled={saveState === "saving" || !isDirty}
+                    className="flex items-center gap-1 px-3.5 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-brand-hover active:scale-95 transition-all min-h-[36px] disabled:opacity-50"
+                  >
+                    {saveState === "saving" ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Check className="w-3.5 h-3.5" />
+                    )}
+                    <span>{saveState === "saving" ? "Saving…" : "Save"}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {!editing ? (
-            <>
-              {/* Toggle active state */}
+        {/* ── DESKTOP HEADER LAYOUT (sm+) ── */}
+        <div
+          className={`hidden sm:flex items-center justify-between gap-3 flex-wrap ${
+            !editing ? "cursor-pointer group select-none" : ""
+          }`}
+          onClick={() => {
+            if (!editing) setExpanded((v) => !v);
+          }}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            {selectable && (
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleToggleActive();
+                  onToggleSelect?.(template.id);
                 }}
-                title={isActive ? "Deactivate template" : "Activate template"}
-                className={`p-2 rounded-lg border text-xs transition-all min-h-[38px] min-w-[38px] flex items-center justify-center active:scale-95 ${
-                  isActive
-                    ? "bg-surface-200 border-border text-text-secondary hover:text-warning"
-                    : "bg-surface-200 border-border text-text-muted hover:text-emerald-400"
-                }`}
+                className="p-1 -ml-1 text-text-muted hover:text-primary transition-colors shrink-0"
+                aria-label={selected ? "Deselect template" : "Select template"}
               >
-                <Power className="w-3.5 h-3.5" />
+                {selected ? (
+                  <CheckSquare className="w-4 h-4 text-primary" />
+                ) : (
+                  <Square className="w-4 h-4 text-text-muted" />
+                )}
               </button>
+            )}
+            <Badge variant={isActive ? "success" : "secondary"} className="font-mono text-[10px]">
+              {isActive ? "Active" : "Inactive"}
+            </Badge>
+            <Badge variant="secondary" className="font-mono text-[10px]">
+              ID #{template.id}
+            </Badge>
 
-              {/* Edit button */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditing(true);
-                  setExpanded(true);
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/25 text-primary text-xs font-semibold hover:bg-primary/20 active:scale-95 transition-all min-h-[38px]"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-                <span>Edit</span>
-              </button>
+            {editing ? (
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="bg-surface-300 border border-border rounded-md px-2.5 py-1 text-sm font-semibold text-text-main focus:outline-none focus:ring-1 focus:ring-primary transition-shadow"
+                placeholder="Template name..."
+                maxLength={100}
+              />
+            ) : (
+              <h2 className="text-sm font-semibold text-text-main group-hover:text-primary transition-colors truncate ml-1">
+                {template.name}
+              </h2>
+            )}
 
-              {/* Delete button */}
-              {!confirmDelete ? (
+            {saveState === "saved" && (
+              <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-medium shrink-0">
+                <Check className="w-3 h-3" /> Saved
+              </span>
+            )}
+            {isDirty && saveState === "idle" && (
+              <span className="text-[10px] text-warning font-medium shrink-0">unsaved</span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {!editing ? (
+              <>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    setConfirmDelete(true);
+                    handleToggleActive();
                   }}
-                  title="Delete template"
-                  className="p-2 rounded-lg bg-surface-200 border border-border text-text-muted hover:text-danger hover:bg-destructive/10 hover:border-destructive/30 transition-all min-h-[38px] min-w-[38px] flex items-center justify-center active:scale-95"
+                  title={isActive ? "Deactivate template" : "Activate template"}
+                  className={`p-2 rounded-lg border text-xs transition-all min-h-[38px] min-w-[38px] flex items-center justify-center active:scale-95 ${
+                    isActive
+                      ? "bg-surface-200 border-border text-text-secondary hover:text-warning"
+                      : "bg-surface-200 border-border text-text-muted hover:text-emerald-400"
+                  }`}
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Power className="w-3.5 h-3.5" />
                 </button>
-              ) : (
-                <div
-                  className="flex items-center gap-1 bg-destructive/10 border border-destructive/30 rounded-lg p-1"
-                  onClick={(e) => e.stopPropagation()}
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditing(true);
+                    setExpanded(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/25 text-primary text-xs font-semibold hover:bg-primary/20 active:scale-95 transition-all min-h-[38px]"
                 >
+                  <Pencil className="w-3.5 h-3.5" />
+                  <span>Edit</span>
+                </button>
+
+                {!confirmDelete ? (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleDelete();
+                      setConfirmDelete(true);
                     }}
-                    disabled={deleting}
-                    className="px-2.5 py-1 text-xs font-semibold text-danger hover:bg-destructive/20 rounded min-h-[32px] transition-colors"
+                    title="Delete template"
+                    className="p-2 rounded-lg bg-surface-200 border border-border text-text-muted hover:text-danger hover:bg-destructive/10 hover:border-destructive/30 transition-all min-h-[38px] min-w-[38px] flex items-center justify-center active:scale-95"
                   >
-                    {deleting ? "Deleting…" : "Confirm Delete"}
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setConfirmDelete(false);
-                    }}
-                    className="p-1 text-text-muted hover:text-text-main rounded min-h-[32px] min-w-[32px] flex items-center justify-center"
+                ) : (
+                  <div
+                    className="flex items-center gap-1 bg-destructive/10 border border-destructive/30 rounded-lg p-1"
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
-
-              {/* Expand / Collapse */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setExpanded((v) => !v);
-                }}
-                className="p-2 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-200 transition-all min-h-[38px] min-w-[38px] flex items-center justify-center active:scale-95"
-                aria-label={expanded ? "Collapse template" : "Expand template"}
-              >
-                {expanded ? (
-                  <ChevronUp className="w-4 h-4" />
-                ) : (
-                  <ChevronDown className="w-4 h-4" />
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete();
+                      }}
+                      disabled={deleting}
+                      className="px-2.5 py-1 text-xs font-semibold text-danger hover:bg-destructive/20 rounded min-h-[32px] transition-colors"
+                    >
+                      {deleting ? "…" : "Confirm"}
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setConfirmDelete(false);
+                      }}
+                      className="p-1 text-text-muted hover:text-text-main rounded min-h-[32px] min-w-[32px] flex items-center justify-center"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 )}
-              </button>
-            </>
-          ) : (
-            <>
-              {/* Active Toggle in edit mode */}
-              <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer mr-2 select-none">
-                <input
-                  type="checkbox"
-                  checked={isActive}
-                  onChange={(e) => setIsActive(e.target.checked)}
-                  className="rounded border-border bg-surface-300 text-primary focus:ring-primary h-3.5 w-3.5"
-                />
-                <span>Active</span>
-              </label>
 
-              {/* Keyboard shortcut hint */}
-              <span className="hidden sm:flex items-center gap-1 text-[10px] text-text-muted">
-                <Keyboard className="w-3 h-3" />
-                <kbd className="font-mono">Ctrl+S</kbd>
-              </span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setExpanded((v) => !v);
+                  }}
+                  className="p-2 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-200 transition-all min-h-[38px] min-w-[38px] flex items-center justify-center active:scale-95"
+                  aria-label={expanded ? "Collapse template" : "Expand template"}
+                >
+                  {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+              </>
+            ) : (
+              <>
+                <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer mr-2 select-none">
+                  <input
+                    type="checkbox"
+                    checked={isActive}
+                    onChange={(e) => setIsActive(e.target.checked)}
+                    className="rounded border-border bg-surface-300 text-primary focus:ring-primary h-3.5 w-3.5"
+                  />
+                  <span>Active</span>
+                </label>
 
-              <button
-                onClick={handleCancel}
-                disabled={saveState === "saving"}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-surface-200 border border-border text-text-secondary text-xs font-medium hover:text-text-main active:scale-95 transition-all min-h-[34px] disabled:opacity-50"
-              >
-                <X className="w-3.5 h-3.5" />
-                Cancel
-              </button>
+                <span className="hidden sm:flex items-center gap-1 text-[10px] text-text-muted">
+                  <Keyboard className="w-3 h-3" />
+                  <kbd className="font-mono">Ctrl+S</kbd>
+                </span>
 
-              <button
-                onClick={handleSave}
-                disabled={saveState === "saving" || !isDirty}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-white text-xs font-semibold hover:bg-brand-hover active:scale-95 transition-all min-h-[34px] disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {saveState === "saving" ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Check className="w-3.5 h-3.5" />
-                )}
-                {saveState === "saving" ? "Saving…" : "Save"}
-              </button>
-            </>
-          )}
+                <button
+                  onClick={handleCancel}
+                  disabled={saveState === "saving"}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-surface-200 border border-border text-text-secondary text-xs font-medium hover:text-text-main active:scale-95 transition-all min-h-[34px] disabled:opacity-50"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Cancel
+                </button>
+
+                <button
+                  onClick={handleSave}
+                  disabled={saveState === "saving" || !isDirty}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-white text-xs font-semibold hover:bg-brand-hover active:scale-95 transition-all min-h-[34px] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {saveState === "saving" ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5" />
+                  )}
+                  {saveState === "saving" ? "Saving…" : "Save"}
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
 

@@ -384,9 +384,9 @@ export function TemplatesManager({
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
             {/* Quick Stats */}
-            <div className="px-3 py-1.5 rounded-lg bg-surface-200 border border-border text-xs flex items-center gap-2">
+            <div className="px-3 py-1.5 rounded-lg bg-surface-200 border border-border text-xs flex items-center gap-2 shrink-0">
               <span className="text-text-muted">Total:</span>
               <span className="font-mono font-semibold text-text-main">
                 {initialTemplates.length}
@@ -398,59 +398,61 @@ export function TemplatesManager({
               </span>
             </div>
 
-            {/* Selection Toggle Button (Icon only — NO spelling/text written) */}
-            <button
-              type="button"
-              onClick={() => {
-                setMultiSelectMode((v) => !v);
-                setSelectedIds(new Set());
-              }}
-              title={multiSelectMode ? "Cancel selection" : "Select multiple templates"}
-              aria-label={multiSelectMode ? "Cancel selection" : "Select multiple templates"}
-              className={`p-2 rounded-lg text-xs font-medium border transition-all active:scale-95 min-h-[36px] min-w-[36px] flex items-center justify-center ${
-                multiSelectMode
-                  ? "bg-primary/15 border-primary/40 text-primary font-semibold"
-                  : "bg-surface-200 border-border text-text-secondary hover:text-text-main hover:bg-surface-300"
-              }`}
-            >
-              <CheckSquare className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-2 flex-1 sm:flex-none justify-end">
+              {/* Selection Toggle Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setMultiSelectMode((v) => !v);
+                  setSelectedIds(new Set());
+                }}
+                title={multiSelectMode ? "Cancel selection" : "Select multiple templates"}
+                aria-label={multiSelectMode ? "Cancel selection" : "Select multiple templates"}
+                className={`p-2.5 rounded-lg text-xs font-medium border transition-all active:scale-95 min-h-[40px] min-w-[40px] flex items-center justify-center ${
+                  multiSelectMode
+                    ? "bg-primary/15 border-primary/40 text-primary font-semibold"
+                    : "bg-surface-200 border-border text-text-secondary hover:text-text-main hover:bg-surface-300"
+                }`}
+              >
+                <CheckSquare className="w-4 h-4" />
+              </button>
 
-            {/* + New Template Button (Sleek solid primary button — NO dashed box) */}
-            <button
-              onClick={() => setIsCreating(true)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-brand-hover active:scale-95 shadow-sm transition-all min-h-[36px]"
-            >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>New Template</span>
-            </button>
+              {/* + New Template Button */}
+              <button
+                onClick={() => setIsCreating(true)}
+                className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-brand-hover active:scale-95 shadow-sm transition-all min-h-[40px] flex-1 sm:flex-initial"
+              >
+                <Plus className="w-4 h-4 stroke-[2.5]" />
+                <span>New Template</span>
+              </button>
+            </div>
           </div>
         </div>
       </Card>
 
-      {/* ── Merge Tags Reference Card ── */}
-      <Card className="p-4 border-border bg-surface-100">
-        <div className="flex items-center gap-2 mb-2.5">
-          <Info className="w-3.5 h-3.5 text-primary shrink-0" />
-          <span className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
-            Available Merge Tags
+      {/* ── Merge Tags Reference Card (Compact horizontal scroll on mobile) ── */}
+      <Card className="p-3 sm:p-4 border-border bg-surface-100">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="flex items-center gap-2">
+            <Info className="w-3.5 h-3.5 text-primary shrink-0" />
+            <span className="text-[10px] sm:text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
+              Available Merge Tags
+            </span>
+          </div>
+          <span className="text-[10px] text-text-muted hidden sm:inline">
+            <span className="font-medium text-text-secondary">custom_line</span> is AI personalized with Gemini
           </span>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 sm:flex-wrap">
           {VARIABLES.map((v) => (
             <code
               key={v.token}
-              className="text-[11px] font-mono px-2 py-0.5 rounded bg-brand-soft border border-primary/20 text-brand-accent"
+              className="text-[11px] font-mono px-2.5 py-1 rounded-md bg-brand-soft border border-primary/20 text-brand-accent shrink-0 select-all"
             >
               {v.token}
             </code>
           ))}
         </div>
-        <p className="text-[11px] text-text-muted mt-2">
-          <span className="font-medium text-text-secondary">custom_line</span>{" "}
-          is generated by Gemini AI to create a tailored opening hook based on recent
-          channel activity.
-        </p>
       </Card>
 
       {/* ── Batch Notification Message ── */}
