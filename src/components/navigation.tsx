@@ -114,23 +114,23 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
       {/* ==================================================== */}
       {/* 2. MOBILE TOP APP BAR (< md)                         */}
       {/* ==================================================== */}
-      <header className="md:hidden sticky top-0 z-40 h-[calc(3.5rem+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)] bg-surface-100/90 backdrop-blur-md border-b border-border px-4 flex items-center justify-between">
-        <Link href="/" className="flex items-center space-x-2.5 min-h-[44px]">
+      <header className="md:hidden sticky top-0 z-40 h-[calc(3.5rem+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)] bg-surface-100/90 backdrop-blur-md border-b border-border px-3.5 sm:px-4 flex items-center justify-between">
+        <Link href="/" className="flex items-center space-x-2 min-h-[44px]">
           <img src="/favicon.svg" alt="LeadMiner Logo" className="w-7 h-7 rounded-lg shrink-0" />
           <span className="font-semibold text-sm text-text-main tracking-tight">LeadMiner</span>
         </Link>
 
-        <div className="flex items-center space-x-2">
-          <NotificationCenter />
-          <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-[11px] text-primary font-medium">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
-            <span>Online</span>
+        <div className="flex items-center space-x-1.5 sm:space-x-2">
+          <div className="flex items-center space-x-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] sm:text-[11px] text-emerald-400 font-medium">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span className="hidden xs:inline">Online</span>
           </div>
           {dryRun && (
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/30 font-medium">
+            <span className="text-[9px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/30 font-medium">
               DRY RUN
             </span>
           )}
+          <NotificationCenter />
         </div>
       </header>
 

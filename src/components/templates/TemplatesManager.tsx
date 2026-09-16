@@ -384,21 +384,20 @@ export function TemplatesManager({
             </p>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 w-full sm:w-auto">
             {/* Quick Stats */}
-            <div className="px-3 py-1.5 rounded-lg bg-surface-200 border border-border text-xs flex items-center gap-2 shrink-0">
-              <span className="text-text-muted">Total:</span>
+            <div className="px-3 py-1.5 rounded-lg bg-surface-200 border border-border text-xs flex items-center justify-between sm:justify-start gap-2">
+              <span className="text-text-muted">Templates:</span>
               <span className="font-mono font-semibold text-text-main">
-                {initialTemplates.length}
+                {initialTemplates.length} total
               </span>
               <span className="text-border">|</span>
-              <span className="text-text-muted">Active:</span>
               <span className="font-mono font-semibold text-emerald-400">
-                {activeCount}
+                {activeCount} active
               </span>
             </div>
 
-            <div className="flex items-center gap-2 flex-1 sm:flex-none justify-end">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               {/* Selection Toggle Button */}
               <button
                 type="button"
@@ -408,7 +407,7 @@ export function TemplatesManager({
                 }}
                 title={multiSelectMode ? "Cancel selection" : "Select multiple templates"}
                 aria-label={multiSelectMode ? "Cancel selection" : "Select multiple templates"}
-                className={`p-2.5 rounded-lg text-xs font-medium border transition-all active:scale-95 min-h-[40px] min-w-[40px] flex items-center justify-center ${
+                className={`p-2.5 rounded-lg text-xs font-medium border transition-all active:scale-95 min-h-[40px] min-w-[40px] flex items-center justify-center shrink-0 ${
                   multiSelectMode
                     ? "bg-primary/15 border-primary/40 text-primary font-semibold"
                     : "bg-surface-200 border-border text-text-secondary hover:text-text-main hover:bg-surface-300"

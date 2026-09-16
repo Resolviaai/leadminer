@@ -67,22 +67,22 @@ export default async function GmailAccountsPage() {
 
       {/* Summary Chips (Mobile & Desktop) */}
       {accounts.length > 0 && (
-        <div className="grid grid-cols-3 gap-2 sm:gap-3">
-          <Card className="p-3 sm:p-3.5 text-center">
-            <span className="text-[10px] sm:text-xs text-text-muted block">Inboxes</span>
-            <span className="text-base sm:text-lg font-bold font-mono text-text-main">
-              {activeCount} <span className="text-[10px] text-emerald-400 font-normal">active</span>
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
+          <Card className="p-2.5 sm:p-3.5 text-center">
+            <span className="text-[9px] sm:text-xs text-text-muted block">Inboxes</span>
+            <span className="text-sm sm:text-lg font-bold font-mono text-text-main">
+              {activeCount} <span className="text-[9px] sm:text-[10px] text-emerald-400 font-normal">active</span>
             </span>
           </Card>
-          <Card className="p-3 sm:p-3.5 text-center">
-            <span className="text-[10px] sm:text-xs text-text-muted block">Sent Today</span>
-            <span className="text-base sm:text-lg font-bold font-mono text-primary tabular-nums">
+          <Card className="p-2.5 sm:p-3.5 text-center">
+            <span className="text-[9px] sm:text-xs text-text-muted block">Sent Today</span>
+            <span className="text-sm sm:text-lg font-bold font-mono text-primary tabular-nums">
               {totalSentToday}
             </span>
           </Card>
-          <Card className="p-3 sm:p-3.5 text-center">
-            <span className="text-[10px] sm:text-xs text-text-muted block">Daily Capacity</span>
-            <span className="text-base sm:text-lg font-bold font-mono text-text-main tabular-nums">
+          <Card className="p-2.5 sm:p-3.5 text-center">
+            <span className="text-[9px] sm:text-xs text-text-muted block">Daily Capacity</span>
+            <span className="text-sm sm:text-lg font-bold font-mono text-text-main tabular-nums">
               {totalCapacity}
             </span>
           </Card>
@@ -146,21 +146,21 @@ export default async function GmailAccountsPage() {
                 </div>
 
                 {/* 3 Metric Chips */}
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="p-2 rounded-lg bg-surface-200 border border-border/60">
-                    <span className="text-[10px] text-text-muted block">Sent Today</span>
+                <div className="grid grid-cols-3 gap-1.5 sm:gap-2 text-center">
+                  <div className="p-1.5 sm:p-2 rounded-lg bg-surface-200 border border-border/60">
+                    <span className="text-[9px] sm:text-[10px] text-text-muted block">Sent Today</span>
                     <span className="text-xs font-mono font-bold text-primary tabular-nums">
                       {acc.sentToday}
                     </span>
                   </div>
-                  <div className="p-2 rounded-lg bg-surface-200 border border-border/60">
-                    <span className="text-[10px] text-text-muted block">Remaining</span>
+                  <div className="p-1.5 sm:p-2 rounded-lg bg-surface-200 border border-border/60">
+                    <span className="text-[9px] sm:text-[10px] text-text-muted block">Remaining</span>
                     <span className="text-xs font-mono font-bold text-text-main tabular-nums">
                       {remaining}
                     </span>
                   </div>
-                  <div className="p-2 rounded-lg bg-surface-200 border border-border/60">
-                    <span className="text-[10px] text-text-muted block">Daily Limit</span>
+                  <div className="p-1.5 sm:p-2 rounded-lg bg-surface-200 border border-border/60">
+                    <span className="text-[9px] sm:text-[10px] text-text-muted block">Daily Limit</span>
                     <span className="text-xs font-mono font-bold text-text-muted tabular-nums">
                       {acc.dailyLimit}
                     </span>

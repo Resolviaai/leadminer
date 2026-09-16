@@ -109,50 +109,50 @@ export default async function SentPage() {
       </Card>
 
       {/* KPI Metric Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card className="p-3.5 space-y-1.5">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-text-muted font-medium">Total Messages</span>
-            <span className="text-[10px] text-text-muted font-mono">All time</span>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+        <Card className="p-3 sm:p-3.5 space-y-1 sm:space-y-1.5">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[10px] sm:text-[11px] text-text-muted font-medium truncate">Total Messages</span>
+            <span className="text-[9px] sm:text-[10px] text-text-muted font-mono shrink-0">All time</span>
           </div>
           <div className="flex items-baseline justify-end">
-            <span className="text-xl font-bold text-text-main font-mono tracking-tight">
+            <span className="text-lg sm:text-xl font-bold text-text-main font-mono tracking-tight tabular-nums">
               {counts.total.toLocaleString()}
             </span>
           </div>
         </Card>
 
-        <Card className="p-3.5 space-y-1.5">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-emerald-400 font-medium">Delivered Sent</span>
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 opacity-80" />
+        <Card className="p-3 sm:p-3.5 space-y-1 sm:space-y-1.5">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[10px] sm:text-[11px] text-emerald-400 font-medium truncate">Delivered Sent</span>
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 opacity-80 shrink-0" />
           </div>
           <div className="flex items-baseline justify-end">
-            <span className="text-xl font-bold text-emerald-400 font-mono tracking-tight">
+            <span className="text-lg sm:text-xl font-bold text-emerald-400 font-mono tracking-tight tabular-nums">
               {counts.sentCount.toLocaleString()}
             </span>
           </div>
         </Card>
 
-        <Card className="p-3.5 space-y-1.5">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-primary font-medium">Sent Today</span>
-            <Clock className="w-3.5 h-3.5 text-primary opacity-80" />
+        <Card className="p-3 sm:p-3.5 space-y-1 sm:space-y-1.5">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[10px] sm:text-[11px] text-primary font-medium truncate">Sent Today</span>
+            <Clock className="w-3.5 h-3.5 text-primary opacity-80 shrink-0" />
           </div>
           <div className="flex items-baseline justify-end">
-            <span className="text-xl font-bold text-primary font-mono tracking-tight">
+            <span className="text-lg sm:text-xl font-bold text-primary font-mono tracking-tight tabular-nums">
               {counts.sentToday.toLocaleString()}
             </span>
           </div>
         </Card>
 
-        <Card className="p-3.5 space-y-1.5">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-danger font-medium">Failed / Blocked</span>
-            <AlertTriangle className="w-3.5 h-3.5 text-danger opacity-80" />
+        <Card className="p-3 sm:p-3.5 space-y-1 sm:space-y-1.5">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[10px] sm:text-[11px] text-danger font-medium truncate">Failed / Blocked</span>
+            <AlertTriangle className="w-3.5 h-3.5 text-danger opacity-80 shrink-0" />
           </div>
           <div className="flex items-baseline justify-end">
-            <span className="text-xl font-bold text-danger font-mono tracking-tight">
+            <span className="text-lg sm:text-xl font-bold text-danger font-mono tracking-tight tabular-nums">
               {counts.failedCount.toLocaleString()}
             </span>
           </div>
