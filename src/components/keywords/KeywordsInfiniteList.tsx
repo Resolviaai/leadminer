@@ -91,6 +91,23 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
   const isLoadingRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Close dropdown on outside click or tap
+  useEffect(() => {
+    if (menuOpenId === null) return;
+    const handleGlobalClick = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-keyword-menu="true"]')) {
+        setMenuOpenId(null);
+      }
+    };
+    document.addEventListener("mousedown", handleGlobalClick);
+    document.addEventListener("touchstart", handleGlobalClick);
+    return () => {
+      document.removeEventListener("mousedown", handleGlobalClick);
+      document.removeEventListener("touchstart", handleGlobalClick);
+    };
+  }, [menuOpenId]);
+
   // Refetch when tab or search changes
   const fetchKeywords = useCallback(async (isReset = false) => {
     if (isLoadingRef.current) return;
@@ -138,17 +155,14 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
     }
   }, [items, activeTab, searchQuery]);
 
-  // Handle Tab change
   const handleTabChange = (tab: FilterTab) => {
     setActiveTab(tab);
     setSelectedIds(new Set());
-    // Trigger reset fetch
     setTimeout(() => {
       fetchKeywords(true);
     }, 0);
   };
 
-  // Search debounce
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchKeywords(true);
@@ -156,7 +170,6 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
     return () => clearTimeout(timer);
   }, [searchQuery, activeTab]);
 
-  // Load more on scroll
   const handleContainerScroll = (e: React.UIEvent<HTMLDivElement>) => {
     if (!hasMore || loading || isLoadingRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
@@ -329,19 +342,19 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
   };
 
   return (
-    <div className="space-y-4">
-      {/* Top Controls: Search, Tabs & Add Button */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-        {/* Filter Tabs */}
-        <div className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+    <div className="space-y-3.5 flex-1 min-h-0 flex flex-col">
+      {/* Top Controls: Search, Tabs & Add Button (Pinned at top of list) */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 shrink-0">
+        {/* Filter Pills */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none no-scrollbar -mx-1 px-1">
           {(["ALL", "PENDING", "COMPLETED", "PAUSED", "FAILED"] as FilterTab[]).map((tab) => (
             <button
               key={tab}
               type="button"
               onClick={() => handleTabChange(tab)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap min-h-[36px] cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap min-h-[38px] cursor-pointer active:scale-95 touch-manipulation ${
                 activeTab === tab
-                  ? "bg-primary text-primary-foreground font-semibold"
+                  ? "bg-primary text-primary-foreground font-semibold shadow-sm"
                   : "bg-surface-200 text-text-secondary hover:text-text-main hover:bg-surface-300"
               }`}
             >
@@ -353,19 +366,19 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
         <div className="flex items-center gap-2">
           {/* Search Input */}
           <div className="relative flex-1 md:w-64">
-            <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-text-muted" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted pointer-events-none" />
             <input
               type="text"
               placeholder="Filter keywords..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-surface-100 border border-border rounded-md pl-8 pr-3 py-1.5 text-xs text-text-main placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary min-h-[36px]"
+              className="w-full bg-surface-100 border border-border rounded-lg pl-9 pr-8 py-2 text-xs sm:text-sm text-text-main placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary min-h-[42px]"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery("")}
-                className="absolute right-2 top-2.5 text-text-muted hover:text-text-main cursor-pointer"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main p-1 cursor-pointer min-h-[32px] min-w-[32px] flex items-center justify-center"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -376,9 +389,9 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
           <Button
             size="sm"
             onClick={() => setShowAddModal(true)}
-            className="gap-1.5 min-h-[36px] shrink-0"
+            className="gap-1.5 min-h-[42px] px-3.5 shrink-0 active:scale-95 transition-transform"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-4 h-4" />
             <span>Add Keyword</span>
           </Button>
         </div>
@@ -386,7 +399,7 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
 
       {/* Floating/Docked Bulk Action Toolbar */}
       {selectedIds.size > 0 && (
-        <div className="flex items-center justify-between gap-3 bg-surface-200 border border-primary/30 p-2.5 rounded-lg text-xs animate-in fade-in slide-in-from-top-2">
+        <div className="flex items-center justify-between gap-3 bg-surface-200 border border-primary/30 p-2.5 rounded-lg text-xs animate-in fade-in slide-in-from-top-2 shrink-0">
           <div className="flex items-center gap-2 font-medium text-text-main">
             <span className="font-mono bg-primary/20 text-primary px-2 py-0.5 rounded">
               {selectedIds.size}
@@ -447,8 +460,8 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
         </div>
       )}
 
-      {/* Mobile Cards */}
-      <div className="md:hidden space-y-2.5">
+      {/* Mobile Cards (Native Mobile App Experience) */}
+      <div className="md:hidden space-y-3 overflow-y-auto pb-4">
         {loading && items.length === 0 ? (
           <div className="p-8 text-center text-xs text-text-muted">Loading keywords...</div>
         ) : items.length === 0 ? (
@@ -459,81 +472,137 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
           items.map((k) => (
             <div
               key={k.id}
-              className={`bg-surface-100 border rounded-lg p-3.5 space-y-2.5 transition-colors ${
-                selectedIds.has(k.id) ? "border-primary/50 bg-primary/[0.02]" : "border-border"
+              className={`bg-surface-100 border rounded-xl p-4 space-y-3 transition-all ${
+                selectedIds.has(k.id) ? "border-primary/50 bg-primary/[0.02]" : "border-border shadow-sm"
               }`}
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2 flex-1 min-w-0">
+              {/* Header */}
+              <div className="flex items-start justify-between gap-2.5">
+                <div className="flex items-start gap-2.5 flex-1 min-w-0">
                   <button
                     type="button"
                     onClick={() => toggleSelect(k.id)}
-                    className="text-text-muted hover:text-primary p-0.5 cursor-pointer min-h-[30px] min-w-[30px] flex items-center justify-center"
+                    className="text-text-muted hover:text-primary mt-0.5 cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center -ml-1.5"
+                    aria-label={selectedIds.has(k.id) ? "Deselect keyword" : "Select keyword"}
                   >
                     {selectedIds.has(k.id) ? (
-                      <CheckSquare className="w-4 h-4 text-primary" />
+                      <CheckSquare className="w-4.5 h-4.5 text-primary" />
                     ) : (
-                      <Square className="w-4 h-4" />
+                      <Square className="w-4.5 h-4.5" />
                     )}
                   </button>
-                  <span className="font-semibold text-xs text-text-main truncate">{k.keyword}</span>
+                  <div className="flex-1 min-w-0">
+                    <span className="font-semibold text-sm text-text-main leading-tight block truncate">
+                      {k.keyword}
+                    </span>
+                    <div className="flex items-center gap-1.5 mt-1 text-[11px] text-text-muted flex-wrap">
+                      <span className="px-1.5 py-0.5 rounded bg-surface-200 text-text-secondary text-[10px]">
+                        {k.category || "General"}
+                      </span>
+                      {k.entity && (
+                        <span className="px-1.5 py-0.5 rounded bg-surface-200 text-text-secondary text-[10px]">
+                          {k.entity}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                {getStatusBadge(k.status)}
+                <div className="shrink-0 pt-0.5">
+                  {getStatusBadge(k.status)}
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 text-[11px] text-text-secondary pt-1 border-t border-border/50">
+              {/* Metrics Box (Layer 2) */}
+              <div className="grid grid-cols-3 gap-2 p-2.5 rounded-lg bg-surface-200/70 border border-border/40 text-center text-xs">
                 <div>
-                  <span className="text-text-muted block text-[10px]">Category</span>
-                  <span>{k.category || "General"}</span>
+                  <span className="text-[10px] text-text-muted block">Channels</span>
+                  <span className="font-mono font-bold text-text-main text-xs">{k.channelsFound}</span>
                 </div>
-                <div className="text-right">
-                  <span className="text-text-muted block text-[10px]">Channels Found</span>
-                  <span className="font-mono text-text-main">{k.channelsFound}</span>
+                <div>
+                  <span className="text-[10px] text-text-muted block">Attempts</span>
+                  <span className="font-mono text-text-muted text-xs">{k.attemptCount}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-text-muted block">Priority</span>
+                  <span className="font-mono text-primary text-xs font-semibold">{k.priorityScore || 50}</span>
                 </div>
               </div>
 
+              {/* Mobile Action Bar with 44px Hit Targets */}
               <div className="flex items-center justify-between pt-2 border-t border-border/50">
-                <div className="text-[10px] text-text-muted">
-                  Attempts: <span className="font-mono text-text-main">{k.attemptCount}</span>
+                <div className="text-[10px] text-text-muted truncate max-w-[130px]">
+                  {k.lastAttemptAt ? new Date(k.lastAttemptAt).toLocaleDateString() : "Never run"}
                 </div>
 
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1.5">
                   <Button
                     size="sm"
-                    variant="ghost"
+                    variant="outline"
                     disabled={actionLoading === k.id}
                     onClick={() => handleRetry(k.id)}
-                    className="h-7 px-2 text-[11px] gap-1"
+                    className="min-h-[40px] px-3 text-xs gap-1.5 active:scale-95 transition-transform"
                   >
-                    <RotateCcw className="w-3 h-3" />
+                    <RotateCcw className="w-3.5 h-3.5" />
                     <span>Retry</span>
                   </Button>
                   <Button
                     size="sm"
-                    variant="ghost"
+                    variant="outline"
                     disabled={actionLoading === k.id}
                     onClick={() => handleToggle(k.id)}
-                    className="h-7 px-2 text-[11px] gap-1"
+                    className="min-h-[40px] px-3 text-xs gap-1.5 active:scale-95 transition-transform"
                   >
-                    {k.status === "PAUSED" ? <Play className="w-3 h-3 text-primary" /> : <Pause className="w-3 h-3" />}
+                    {k.status === "PAUSED" ? (
+                      <Play className="w-3.5 h-3.5 text-primary" />
+                    ) : (
+                      <Pause className="w-3.5 h-3.5" />
+                    )}
                     <span>{k.status === "PAUSED" ? "Resume" : "Pause"}</span>
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setEditKeywordItem(k)}
-                    className="h-7 w-7 p-0 text-text-muted hover:text-text-main"
-                  >
-                    <Edit3 className="w-3 h-3" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleDelete(k.id)}
-                    className="h-7 w-7 p-0 text-danger hover:bg-danger/10"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </Button>
+
+                  <div className="relative inline-block text-left" data-keyword-menu="true">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setMenuOpenId(menuOpenId === k.id ? null : k.id)}
+                      className="min-h-[40px] min-w-[40px] p-0 active:scale-95"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </Button>
+
+                    {menuOpenId === k.id && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-30 cursor-default"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMenuOpenId(null);
+                          }}
+                        />
+                        <div className="absolute right-0 bottom-full mb-1 sm:bottom-auto sm:top-full sm:mt-1 w-36 bg-surface-100 border border-border rounded-xl shadow-xl py-1 z-40 text-xs animate-in fade-in zoom-in-95">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMenuOpenId(null);
+                              setEditKeywordItem(k);
+                            }}
+                            className="w-full text-left px-3.5 py-2.5 flex items-center gap-2 hover:bg-surface-200 text-text-main cursor-pointer min-h-[40px]"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span>Edit</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(k.id)}
+                            className="w-full text-left px-3.5 py-2.5 flex items-center gap-2 hover:bg-danger/10 text-danger cursor-pointer min-h-[40px]"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete</span>
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -541,11 +610,11 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
         )}
       </div>
 
-      {/* Desktop Table */}
-      <Card className="hidden md:block overflow-hidden">
-        <div onScroll={handleContainerScroll} className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+      {/* Desktop Table (Takes Remaining Screen Height and Scrolls Internally) */}
+      <Card className="hidden md:flex flex-1 min-h-0 flex-col overflow-hidden border-border">
+        <div onScroll={handleContainerScroll} className="flex-1 min-h-0 overflow-y-auto overflow-x-auto relative pb-16">
           <Table>
-            <TableHeader className="sticky top-0 z-10 bg-surface-200">
+            <TableHeader className="sticky top-0 z-10 bg-surface-200 shadow-sm">
               <TableRow>
                 <TableHead className="w-10">
                   <button
@@ -640,8 +709,8 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
                           )}
                         </Button>
 
-                        {/* More menu */}
-                        <div className="relative inline-block text-left">
+                        {/* More menu with Backdrop Dismiss */}
+                        <div className="relative inline-block text-left" data-keyword-menu="true">
                           <Button
                             size="sm"
                             variant="ghost"
@@ -652,27 +721,36 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
                           </Button>
 
                           {menuOpenId === k.id && (
-                            <div className="absolute right-0 mt-1 w-32 bg-surface-100 border border-border rounded-md shadow-lg py-1 z-20 text-xs">
-                              <button
-                                type="button"
-                                onClick={() => {
+                            <>
+                              <div
+                                className="fixed inset-0 z-30 cursor-default"
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   setMenuOpenId(null);
-                                  setEditKeywordItem(k);
                                 }}
-                                className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-surface-200 text-text-main cursor-pointer"
-                              >
-                                <Edit3 className="w-3 h-3" />
-                                <span>Edit</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(k.id)}
-                                className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-danger/10 text-danger cursor-pointer"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                                <span>Delete</span>
-                              </button>
-                            </div>
+                              />
+                              <div className="absolute right-0 mt-1 w-32 bg-surface-100 border border-border rounded-md shadow-lg py-1 z-40 text-xs">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setMenuOpenId(null);
+                                    setEditKeywordItem(k);
+                                  }}
+                                  className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-surface-200 text-text-main cursor-pointer"
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                  <span>Edit</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDelete(k.id)}
+                                  className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-danger/10 text-danger cursor-pointer"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>Delete</span>
+                                </button>
+                              </div>
+                            </>
                           )}
                         </div>
                       </div>
@@ -685,8 +763,8 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
         </div>
       </Card>
 
-      {/* Footer controls & counters */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-1 py-1 text-[11px] text-text-muted">
+      {/* Footer controls & counters (Pinned at bottom of list) */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-1 py-1 text-[11px] text-text-muted shrink-0">
         <span>
           Showing <span className="font-mono text-text-main">{items.length.toLocaleString()}</span> of{" "}
           <span className="font-mono text-text-main">{totalCount.toLocaleString()}</span> keywords
@@ -734,7 +812,7 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
-                className="text-text-muted hover:text-text-main cursor-pointer"
+                className="text-text-muted hover:text-text-main cursor-pointer p-1 min-h-[36px] min-w-[36px] flex items-center justify-center"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -751,7 +829,7 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
                   placeholder="e.g. AI automation workflows"
                   value={addKeywordText}
                   onChange={(e) => setAddKeywordText(e.target.value)}
-                  className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary min-h-[40px]"
                 />
               </div>
 
@@ -763,7 +841,7 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
                     placeholder="e.g. AI Tech"
                     value={addCategory}
                     onChange={(e) => setAddCategory(e.target.value)}
-                    className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary min-h-[40px]"
                   />
                 </div>
                 <div>
@@ -773,7 +851,7 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
                     placeholder="e.g. Creator"
                     value={addEntity}
                     onChange={(e) => setAddEntity(e.target.value)}
-                    className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary min-h-[40px]"
                   />
                 </div>
               </div>
@@ -786,7 +864,7 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
                     placeholder="e.g. tutorial"
                     value={addModifier}
                     onChange={(e) => setAddModifier(e.target.value)}
-                    className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary min-h-[40px]"
                   />
                 </div>
                 <div>
@@ -797,7 +875,7 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
                     max={100}
                     value={addPriority}
                     onChange={(e) => setAddPriority(parseInt(e.target.value, 10) || 50)}
-                    className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main focus:outline-none focus:ring-1 focus:ring-primary min-h-[40px]"
                   />
                 </div>
               </div>
@@ -808,6 +886,7 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
                   variant="outline"
                   size="sm"
                   onClick={() => setShowAddModal(false)}
+                  className="min-h-[40px]"
                 >
                   Cancel
                 </Button>
@@ -815,7 +894,7 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
                   type="submit"
                   size="sm"
                   disabled={isSubmittingAdd || !addKeywordText.trim()}
-                  className="gap-1.5"
+                  className="gap-1.5 min-h-[40px]"
                 >
                   {isSubmittingAdd && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>Save Keyword</span>
@@ -835,7 +914,7 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
               <button
                 type="button"
                 onClick={() => setEditKeywordItem(null)}
-                className="text-text-muted hover:text-text-main cursor-pointer"
+                className="text-text-muted hover:text-text-main cursor-pointer p-1 min-h-[36px] min-w-[36px] flex items-center justify-center"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -851,7 +930,7 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
                   onChange={(e) =>
                     setEditKeywordItem({ ...editKeywordItem, keyword: e.target.value })
                   }
-                  className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main focus:outline-none focus:ring-1 focus:ring-primary min-h-[40px]"
                 />
               </div>
 
@@ -864,7 +943,7 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
                     onChange={(e) =>
                       setEditKeywordItem({ ...editKeywordItem, category: e.target.value })
                     }
-                    className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main focus:outline-none focus:ring-1 focus:ring-primary min-h-[40px]"
                   />
                 </div>
                 <div>
@@ -875,7 +954,7 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
                     onChange={(e) =>
                       setEditKeywordItem({ ...editKeywordItem, entity: e.target.value })
                     }
-                    className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main focus:outline-none focus:ring-1 focus:ring-primary min-h-[40px]"
                   />
                 </div>
               </div>
@@ -893,7 +972,7 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
                       priorityScore: parseInt(e.target.value, 10) || 50,
                     })
                   }
-                  className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main focus:outline-none focus:ring-1 focus:ring-primary min-h-[40px]"
                 />
               </div>
 
@@ -903,10 +982,11 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
                   variant="outline"
                   size="sm"
                   onClick={() => setEditKeywordItem(null)}
+                  className="min-h-[40px]"
                 >
                   Cancel
                 </Button>
-                <Button type="submit" size="sm" disabled={isSubmittingEdit} className="gap-1.5">
+                <Button type="submit" size="sm" disabled={isSubmittingEdit} className="gap-1.5 min-h-[40px]">
                   {isSubmittingEdit && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>Update Keyword</span>
                 </Button>

@@ -116,8 +116,8 @@ export default async function LeadsPage() {
   const { list, total, counts } = await getData();
 
   return (
-    <div className="space-y-5 max-w-7xl mx-auto">
-      <Card className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-border">
+    <div className="flex flex-col md:h-full flex-1 min-h-0 space-y-3.5 max-w-7xl mx-auto w-full md:overflow-hidden">
+      <Card className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-border shrink-0">
         <div>
           <div className="flex items-center space-x-2">
             <Users className="w-5 h-5 text-primary" />
@@ -138,7 +138,7 @@ export default async function LeadsPage() {
         </form>
       </Card>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 shrink-0">
         <Card className="p-3.5">
           <span className="text-[11px] text-text-muted block font-medium">Total Discovered Leads</span>
           <span className="text-lg font-bold text-text-main font-mono tabular-nums">{total.toLocaleString()}</span>
@@ -153,7 +153,9 @@ export default async function LeadsPage() {
         </Card>
       </div>
 
-      <LeadsInfiniteList initialData={list} total={total} />
+      <div className="flex-1 min-h-0 flex flex-col">
+        <LeadsInfiniteList initialData={list} total={total} />
+      </div>
     </div>
   );
 }

@@ -128,6 +128,23 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
   const isLoadingRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Close menu on outside click/tap
+  useEffect(() => {
+    if (menuOpenId === null) return;
+    const handleGlobalClick = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-lead-menu="true"]')) {
+        setMenuOpenId(null);
+      }
+    };
+    document.addEventListener("mousedown", handleGlobalClick);
+    document.addEventListener("touchstart", handleGlobalClick);
+    return () => {
+      document.removeEventListener("mousedown", handleGlobalClick);
+      document.removeEventListener("touchstart", handleGlobalClick);
+    };
+  }, [menuOpenId]);
+
   const fetchLeads = useCallback(
     async (isReset = false) => {
       if (isLoadingRef.current) return;
@@ -324,7 +341,6 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
             )
           );
         } else {
-          // Reprocess or Verify: refetch current view
           await fetchLeads(true);
         }
         setSelectedIds(new Set());
@@ -339,7 +355,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
     if (selectedIds.size === items.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(items.map((l) => l.id)));
+      setSelectedIds(new Set(items.map((k) => k.id)));
     }
   };
 
@@ -391,11 +407,11 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
   };
 
   return (
-    <div className="space-y-4">
-      {/* Top Filter Tabs & Search Bar */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-        {/* Filter Tabs */}
-        <div className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+    <div className="space-y-3.5 flex-1 min-h-0 flex flex-col">
+      {/* Top Filter Tabs & Search Bar (Pinned at top of list) */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 shrink-0">
+        {/* Filter Pills */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none no-scrollbar -mx-1 px-1">
           {[
             { key: "ALL", label: "All Leads" },
             { key: "EMAIL_FOUND", label: "Email Found" },
@@ -408,9 +424,9 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
               key={tab.key}
               type="button"
               onClick={() => handleTabChange(tab.key as FilterTab)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap min-h-[36px] cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap min-h-[38px] cursor-pointer active:scale-95 touch-manipulation ${
                 activeTab === tab.key
-                  ? "bg-primary text-primary-foreground font-semibold"
+                  ? "bg-primary text-primary-foreground font-semibold shadow-sm"
                   : "bg-surface-200 text-text-secondary hover:text-text-main hover:bg-surface-300"
               }`}
             >
@@ -420,20 +436,20 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
         </div>
 
         {/* Search */}
-        <div className="relative md:w-72">
-          <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-text-muted" />
+        <div className="relative flex-1 md:w-72">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted pointer-events-none" />
           <input
             type="text"
             placeholder="Search channels or emails..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-surface-100 border border-border rounded-md pl-8 pr-3 py-1.5 text-xs text-text-main placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary min-h-[36px]"
+            className="w-full bg-surface-100 border border-border rounded-lg pl-9 pr-8 py-2 text-xs sm:text-sm text-text-main placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary min-h-[42px]"
           />
           {searchQuery && (
             <button
               type="button"
               onClick={() => setSearchQuery("")}
-              className="absolute right-2 top-2.5 text-text-muted hover:text-text-main cursor-pointer"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main p-1 cursor-pointer min-h-[32px] min-w-[32px] flex items-center justify-center"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -443,7 +459,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
 
       {/* Floating Bulk Action Toolbar */}
       {selectedIds.size > 0 && (
-        <div className="flex items-center justify-between gap-3 bg-surface-200 border border-primary/30 p-2.5 rounded-lg text-xs animate-in fade-in slide-in-from-top-2">
+        <div className="flex items-center justify-between gap-3 bg-surface-200 border border-primary/30 p-2.5 rounded-lg text-xs animate-in fade-in slide-in-from-top-2 shrink-0">
           <div className="flex items-center gap-2 font-medium text-text-main">
             <span className="font-mono bg-primary/20 text-primary px-2 py-0.5 rounded">
               {selectedIds.size}
@@ -504,8 +520,8 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
         </div>
       )}
 
-      {/* Mobile Cards */}
-      <div className="md:hidden space-y-2.5">
+      {/* Mobile Cards (Native Mobile App Experience) */}
+      <div className="md:hidden space-y-3 overflow-y-auto pb-4">
         {loading && items.length === 0 ? (
           <div className="p-8 text-center text-xs text-text-muted">Loading leads...</div>
         ) : items.length === 0 ? (
@@ -516,29 +532,32 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
           items.map((lead) => (
             <div
               key={lead.id}
-              className={`bg-surface-100 border rounded-lg p-3.5 space-y-2.5 transition-colors ${
-                selectedIds.has(lead.id) ? "border-primary/50 bg-primary/[0.02]" : "border-border"
+              className={`bg-surface-100 border rounded-xl p-4 space-y-3 transition-all ${
+                selectedIds.has(lead.id) ? "border-primary/50 bg-primary/[0.02]" : "border-border shadow-sm"
               }`}
             >
               {/* Header */}
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2 flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-2.5">
+                <div className="flex items-start gap-2 flex-1 min-w-0">
                   <button
                     type="button"
                     onClick={() => toggleSelect(lead.id)}
-                    className="text-text-muted hover:text-primary p-0.5 cursor-pointer min-h-[30px] min-w-[30px] flex items-center justify-center"
+                    className="text-text-muted hover:text-primary mt-0.5 cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center -ml-1.5"
+                    aria-label={selectedIds.has(lead.id) ? "Deselect lead" : "Select lead"}
                   >
                     {selectedIds.has(lead.id) ? (
-                      <CheckSquare className="w-4 h-4 text-primary" />
+                      <CheckSquare className="w-4.5 h-4.5 text-primary" />
                     ) : (
-                      <Square className="w-4 h-4" />
+                      <Square className="w-4.5 h-4.5" />
                     )}
                   </button>
-                  <div className="truncate">
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-semibold text-xs text-text-main">{lead.channelTitle}</span>
+                      <span className="font-semibold text-sm text-text-main leading-tight truncate">
+                        {lead.channelTitle}
+                      </span>
                       {lead.country && (
-                        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 uppercase font-mono text-text-muted">
+                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 uppercase font-mono text-text-muted">
                           {lead.country}
                         </Badge>
                       )}
@@ -546,61 +565,73 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                         href={lead.channelUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-text-muted hover:text-text-main inline-flex items-center justify-center p-1 rounded"
+                        className="text-text-muted hover:text-text-main inline-flex items-center justify-center p-1 rounded min-w-[28px] min-h-[28px]"
+                        aria-label={`Open ${lead.channelTitle} on YouTube`}
                       >
-                        <ExternalLink className="w-3 h-3" />
+                        <ExternalLink className="w-3.5 h-3.5" />
                       </a>
                     </div>
-                    <span className="text-[11px] text-text-muted font-mono block">
-                      {lead.subscriberCount ? lead.subscriberCount.toLocaleString() : "0"} subscribers
-                    </span>
+                    <div className="flex items-center gap-2 mt-1 text-[11px] text-text-muted">
+                      <span className="font-mono tabular-nums">
+                        {lead.subscriberCount ? lead.subscriberCount.toLocaleString() : "0"} subscribers
+                      </span>
+                      {lead.sourceKeyword && (
+                        <>
+                          <span>•</span>
+                          <span className="truncate max-w-[130px]">kw: {lead.sourceKeyword}</span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
-                {getQualBadge(lead.qualificationStatus, lead.suppressionStatus)}
+                <div className="shrink-0 pt-0.5">
+                  {getQualBadge(lead.qualificationStatus, lead.suppressionStatus)}
+                </div>
               </div>
 
-              {/* Multi-Contact Stack */}
-              <div className="p-2.5 rounded-lg bg-surface-200 text-xs space-y-2">
-                {/* Email Item */}
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center space-x-1.5 truncate">
-                    <Mail className="w-3.5 h-3.5 text-text-muted shrink-0" />
-                    {lead.email ? (
-                      <span className="font-mono text-text-main text-[11px] truncate">
+              {/* Contact Area (Recessed Layer 2) */}
+              <div className="p-3 rounded-lg bg-surface-200/70 border border-border/40 space-y-2 text-xs">
+                {lead.email ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center space-x-2 truncate">
+                      <Mail className="w-3.5 h-3.5 text-text-muted shrink-0" />
+                      <span className="font-mono text-text-main text-[11px] font-medium truncate">
                         {lead.email}
                       </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleReprocess(lead.id)}
-                        disabled={actionLoadingId === lead.id}
-                        className="text-[11px] text-primary hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
-                      >
-                        <RefreshCw className={`w-3 h-3 ${actionLoadingId === lead.id ? "animate-spin" : ""}`} />
-                        <span>No email found yet → Reprocess</span>
-                      </button>
-                    )}
+                    </div>
+                    <div className="shrink-0">
+                      {getEmailBadge(lead.emailStatus)}
+                    </div>
                   </div>
-                  {lead.email && getEmailBadge(lead.emailStatus)}
-                </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleReprocess(lead.id)}
+                    disabled={actionLoadingId === lead.id}
+                    className="w-full min-h-[44px] px-3 py-2 rounded-lg bg-primary/10 border border-primary/25 hover:bg-primary/20 active:scale-[0.98] text-primary font-medium text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${actionLoadingId === lead.id ? "animate-spin" : ""}`} />
+                    <span>No email found yet → Tap to Reprocess</span>
+                  </button>
+                )}
 
                 {/* Additional Contacts Row: Website, Phone */}
                 {(lead.website || lead.phone || lead.contactPageUrl) && (
-                  <div className="flex items-center gap-3 pt-1 border-t border-border/50 text-[11px]">
+                  <div className="flex items-center gap-3 pt-1.5 border-t border-border/40 text-[11px]">
                     {(lead.website || lead.contactPageUrl) && (
                       <a
                         href={lead.contactPageUrl || lead.website || "#"}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-primary hover:underline truncate max-w-[150px]"
+                        className="inline-flex items-center gap-1.5 text-primary hover:underline truncate max-w-[160px] font-medium"
                       >
-                        <Globe className="w-3 h-3 shrink-0" />
+                        <Globe className="w-3.5 h-3.5 shrink-0" />
                         <span className="truncate">{lead.contactPageUrl ? "Contact Page" : "Website"}</span>
                       </a>
                     )}
 
                     {lead.phone && (
-                      <div className="inline-flex items-center gap-1 text-text-secondary font-mono text-[10px]">
+                      <div className="inline-flex items-center gap-1.5 text-text-secondary font-mono text-[11px]">
                         <Phone className="w-3 h-3 shrink-0 text-text-muted" />
                         <span>{lead.phone}</span>
                       </div>
@@ -611,11 +642,11 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
 
               {/* Social links */}
               {lead.socialLinks && lead.socialLinks.length > 0 && (
-                <div className="flex flex-wrap gap-1 text-[10px]">
+                <div className="flex flex-wrap gap-1.5 pt-0.5">
                   {lead.socialLinks.map((s, idx) => (
                     <span
                       key={idx}
-                      className="px-1.5 py-0.5 rounded bg-surface-200 border border-border/50 text-text-secondary text-[10px]"
+                      className="px-2 py-0.5 rounded-md bg-surface-200 border border-border/50 text-text-secondary text-[10px]"
                     >
                       {s.type.replace("_X", "")}: <span className="font-mono text-text-main">{s.value}</span>
                     </span>
@@ -623,69 +654,91 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                 </div>
               )}
 
-              {/* Row Actions */}
-              <div className="flex items-center justify-between pt-2 border-t border-border/50">
-                <div className="text-[11px] text-text-muted">
+              {/* Mobile Action Bar */}
+              <div className="flex items-center justify-between pt-2 border-t border-border/50 gap-2">
+                <div className="text-[11px] text-text-muted shrink-0">
                   {getOutreachBadge(lead.outreachStatus)}
                 </div>
 
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1.5">
                   <Button
                     size="sm"
-                    variant="ghost"
+                    variant="outline"
                     disabled={actionLoadingId === lead.id}
                     onClick={() => handleReprocess(lead.id)}
-                    className="h-7 px-2 text-[11px] gap-1"
+                    className="min-h-[40px] px-3 text-xs gap-1.5 active:scale-95 transition-transform"
                   >
-                    <RefreshCw className={`w-3 h-3 ${actionLoadingId === lead.id ? "animate-spin" : ""}`} />
+                    <RefreshCw className={`w-3.5 h-3.5 ${actionLoadingId === lead.id ? "animate-spin" : ""}`} />
                     <span>Reprocess</span>
                   </Button>
 
                   {lead.email && (
                     <Button
                       size="sm"
-                      variant="ghost"
+                      variant="outline"
                       disabled={actionLoadingId === lead.id}
                       onClick={() => handleVerify(lead.id)}
-                      className="h-7 px-2 text-[11px] gap-1"
+                      className="min-h-[40px] px-2.5 text-xs gap-1 active:scale-95 transition-transform"
                     >
-                      <CheckCircle2 className="w-3 h-3" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-primary" />
                       <span>Verify</span>
                     </Button>
                   )}
 
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setEditLead(lead);
-                      setEditEmail(lead.email || "");
-                      setEditPhone(lead.phone || "");
-                      setEditWebsite(lead.website || "");
-                    }}
-                    className="h-7 w-7 p-0 text-text-muted hover:text-text-main"
-                  >
-                    <Edit3 className="w-3 h-3" />
-                  </Button>
+                  <div className="relative inline-block text-left" data-lead-menu="true">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setMenuOpenId(menuOpenId === lead.id ? null : lead.id)}
+                      className="min-h-[40px] min-w-[40px] p-0 active:scale-95"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </Button>
 
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleSuppress(lead.id)}
-                    className={`h-7 w-7 p-0 ${lead.suppressionStatus ? "text-danger" : "text-text-muted"}`}
-                    title={lead.suppressionStatus ? "Unsuppress lead" : "Suppress lead"}
-                  >
-                    <Ban className="w-3 h-3" />
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleDelete(lead.id)}
-                    className="h-7 w-7 p-0 text-danger hover:bg-danger/10"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </Button>
+                    {menuOpenId === lead.id && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-30 cursor-default"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMenuOpenId(null);
+                          }}
+                        />
+                        <div className="absolute right-0 bottom-full mb-1 sm:bottom-auto sm:top-full sm:mt-1 w-40 bg-surface-100 border border-border rounded-xl shadow-xl py-1 z-40 text-xs animate-in fade-in zoom-in-95">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMenuOpenId(null);
+                              setEditLead(lead);
+                              setEditEmail(lead.email || "");
+                              setEditPhone(lead.phone || "");
+                              setEditWebsite(lead.website || "");
+                            }}
+                            className="w-full text-left px-3.5 py-2.5 flex items-center gap-2.5 hover:bg-surface-200 text-text-main cursor-pointer min-h-[40px]"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span>Edit Contacts</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSuppress(lead.id)}
+                            className="w-full text-left px-3.5 py-2.5 flex items-center gap-2.5 hover:bg-surface-200 text-text-main cursor-pointer min-h-[40px]"
+                          >
+                            <Ban className="w-3.5 h-3.5" />
+                            <span>{lead.suppressionStatus ? "Unsuppress" : "Suppress Lead"}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(lead.id)}
+                            className="w-full text-left px-3.5 py-2.5 flex items-center gap-2.5 hover:bg-danger/10 text-danger cursor-pointer min-h-[40px]"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete Lead</span>
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -693,11 +746,11 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
         )}
       </div>
 
-      {/* Desktop Table */}
-      <Card className="hidden md:block overflow-hidden">
-        <div onScroll={handleContainerScroll} className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+      {/* Desktop Table (Takes Remaining Screen Height and Scrolls Internally) */}
+      <Card className="hidden md:flex flex-1 min-h-0 flex-col overflow-hidden border-border">
+        <div onScroll={handleContainerScroll} className="flex-1 min-h-0 overflow-y-auto overflow-x-auto relative pb-16">
           <Table>
-            <TableHeader className="sticky top-0 z-10 bg-surface-200">
+            <TableHeader className="sticky top-0 z-10 bg-surface-200 shadow-sm">
               <TableRow>
                 <TableHead className="w-10">
                   <button
@@ -876,8 +929,8 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                           </Button>
                         )}
 
-                        {/* More menu */}
-                        <div className="relative inline-block text-left">
+                        {/* More menu with Backdrop Dismiss */}
+                        <div className="relative inline-block text-left" data-lead-menu="true">
                           <Button
                             size="sm"
                             variant="ghost"
@@ -888,38 +941,47 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                           </Button>
 
                           {menuOpenId === lead.id && (
-                            <div className="absolute right-0 mt-1 w-36 bg-surface-100 border border-border rounded-md shadow-lg py-1 z-20 text-xs">
-                              <button
-                                type="button"
-                                onClick={() => {
+                            <>
+                              <div
+                                className="fixed inset-0 z-30 cursor-default"
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   setMenuOpenId(null);
-                                  setEditLead(lead);
-                                  setEditEmail(lead.email || "");
-                                  setEditPhone(lead.phone || "");
-                                  setEditWebsite(lead.website || "");
                                 }}
-                                className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-surface-200 text-text-main cursor-pointer"
-                              >
-                                <Edit3 className="w-3 h-3" />
-                                <span>Edit Contacts</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleSuppress(lead.id)}
-                                className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-surface-200 text-text-main cursor-pointer"
-                              >
-                                <Ban className="w-3 h-3" />
-                                <span>{lead.suppressionStatus ? "Unsuppress" : "Suppress"}</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(lead.id)}
-                                className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-danger/10 text-danger cursor-pointer"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                                <span>Delete</span>
-                              </button>
-                            </div>
+                              />
+                              <div className="absolute right-0 mt-1 w-36 bg-surface-100 border border-border rounded-md shadow-lg py-1 z-40 text-xs">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setMenuOpenId(null);
+                                    setEditLead(lead);
+                                    setEditEmail(lead.email || "");
+                                    setEditPhone(lead.phone || "");
+                                    setEditWebsite(lead.website || "");
+                                  }}
+                                  className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-surface-200 text-text-main cursor-pointer"
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                  <span>Edit Contacts</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSuppress(lead.id)}
+                                  className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-surface-200 text-text-main cursor-pointer"
+                                >
+                                  <Ban className="w-3 h-3" />
+                                  <span>{lead.suppressionStatus ? "Unsuppress" : "Suppress"}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDelete(lead.id)}
+                                  className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-danger/10 text-danger cursor-pointer"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>Delete</span>
+                                </button>
+                              </div>
+                            </>
                           )}
                         </div>
                       </div>
@@ -932,8 +994,8 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
         </div>
       </Card>
 
-      {/* Footer controls & counters */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-1 py-1 text-[11px] text-text-muted">
+      {/* Footer controls & counters (Pinned at bottom of list) */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-1 py-1 text-[11px] text-text-muted shrink-0">
         <span>
           Showing <span className="font-mono text-text-main">{items.length.toLocaleString()}</span> of{" "}
           <span className="font-mono text-text-main">{totalCount.toLocaleString()}</span> leads
@@ -984,7 +1046,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
               <button
                 type="button"
                 onClick={() => setEditLead(null)}
-                className="text-text-muted hover:text-text-main cursor-pointer"
+                className="text-text-muted hover:text-text-main cursor-pointer p-1 min-h-[36px] min-w-[36px] flex items-center justify-center"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -998,7 +1060,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                   placeholder="creator@domain.com"
                   value={editEmail}
                   onChange={(e) => setEditEmail(e.target.value)}
-                  className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main focus:outline-none focus:ring-1 focus:ring-primary min-h-[38px]"
                 />
                 <span className="text-[10px] text-text-muted mt-0.5 block">
                   Entering an email will automatically trigger deliverability verification.
@@ -1012,7 +1074,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                   placeholder="+1 (555) 123-4567"
                   value={editPhone}
                   onChange={(e) => setEditPhone(e.target.value)}
-                  className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main focus:outline-none focus:ring-1 focus:ring-primary min-h-[38px]"
                 />
               </div>
 
@@ -1023,7 +1085,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                   placeholder="https://creatorportfolio.com"
                   value={editWebsite}
                   onChange={(e) => setEditWebsite(e.target.value)}
-                  className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full bg-surface-200 border border-border rounded-md px-3 py-2 text-text-main focus:outline-none focus:ring-1 focus:ring-primary min-h-[38px]"
                 />
               </div>
 
@@ -1033,10 +1095,11 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                   variant="outline"
                   size="sm"
                   onClick={() => setEditLead(null)}
+                  className="min-h-[38px]"
                 >
                   Cancel
                 </Button>
-                <Button type="submit" size="sm" disabled={isSubmittingEdit} className="gap-1.5">
+                <Button type="submit" size="sm" disabled={isSubmittingEdit} className="gap-1.5 min-h-[38px]">
                   {isSubmittingEdit && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>Save Changes</span>
                 </Button>

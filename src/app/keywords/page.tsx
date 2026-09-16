@@ -50,8 +50,8 @@ export default async function KeywordsPage() {
   const { list, counts } = await getData();
 
   return (
-    <div className="space-y-5 max-w-7xl mx-auto">
-      <Card className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-border">
+    <div className="flex flex-col md:h-full flex-1 min-h-0 space-y-3.5 max-w-7xl mx-auto w-full md:overflow-hidden">
+      <Card className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-border shrink-0">
         <div>
           <div className="flex items-center space-x-2">
             <Layers className="w-5 h-5 text-primary" />
@@ -71,7 +71,7 @@ export default async function KeywordsPage() {
         </form>
       </Card>
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 shrink-0">
         <Card className="p-3.5">
           <span className="text-[11px] text-text-muted block font-medium">Total</span>
           <span className="text-lg font-bold text-text-main font-mono tabular-nums">{counts.total.toLocaleString()}</span>
@@ -94,7 +94,9 @@ export default async function KeywordsPage() {
         </Card>
       </div>
 
-      <KeywordsInfiniteList initialData={list} total={counts.total} />
+      <div className="flex-1 min-h-0 flex flex-col">
+        <KeywordsInfiniteList initialData={list} total={counts.total} />
+      </div>
     </div>
   );
 }
