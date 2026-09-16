@@ -505,6 +505,10 @@ export class GmailSendingService {
 
       // Post-Send Live Verification: Confirm message exists in Gmail Sent history (multi-attempt)
       let verifiedInGmail = false;
+      let verificationFailureReason: string | null = null;
+      let verifiedFrom: string | null | undefined;
+      let verifiedTo: string | null | undefined;
+
       for (let vAttempt = 1; vAttempt <= 3; vAttempt++) {
         try {
           const verifiedMsg = await gmail.users.messages.get({
@@ -514,18 +518,44 @@ export class GmailSendingService {
             metadataHeaders: ['From', 'To', 'Subject'],
           });
 
+          if (!verifiedMsg?.data?.id) {
+            verificationFailureReason = `Message ID ${liveMessageId} not found in Gmail metadata response`;
+            throw new Error(verificationFailureReason);
+          }
+
           const labels = verifiedMsg.data.labelIds || [];
           const hasSentLabel = labels.includes('SENT');
+          if (!hasSentLabel) {
+            verificationFailureReason = `Message ${liveMessageId} missing SENT label (labels: ${labels.join(', ')})`;
+            throw new Error(verificationFailureReason);
+          }
+
           const headers = verifiedMsg.data.payload?.headers || [];
-          const fromVal = headers.find((h) => h.name?.toLowerCase() === 'from')?.value || account.email;
-          const toVal = headers.find((h) => h.name?.toLowerCase() === 'to')?.value || params.recipientEmail;
+          verifiedFrom = headers.find((h) => h.name?.toLowerCase() === 'from')?.value;
+          verifiedTo = headers.find((h) => h.name?.toLowerCase() === 'to')?.value;
+
+          const cleanFrom = (verifiedFrom || '').toLowerCase();
+          const cleanExpectedFrom = account.email.toLowerCase();
+          if (!cleanFrom.includes(cleanExpectedFrom)) {
+            verificationFailureReason = `From header mismatch: expected ${cleanExpectedFrom}, got ${verifiedFrom}`;
+            throw new Error(verificationFailureReason);
+          }
+
+          const cleanTo = (verifiedTo || '').toLowerCase();
+          const cleanExpectedTo = params.recipientEmail.toLowerCase();
+          if (!cleanTo.includes(cleanExpectedTo)) {
+            verificationFailureReason = `To header mismatch: expected ${cleanExpectedTo}, got ${verifiedTo}`;
+            throw new Error(verificationFailureReason);
+          }
 
           console.log(
-            `🔍 [Gmail Verification Confirmed] Attempt ${vAttempt}: ID=${liveMessageId} | SENT_label=${hasSentLabel} | From: ${fromVal} | To: ${toVal}`
+            `🔍 [Gmail Verification Confirmed] Attempt ${vAttempt}: ID=${liveMessageId} | SENT_label=true | From: ${verifiedFrom} | To: ${verifiedTo}`
           );
           verifiedInGmail = true;
+          verificationFailureReason = null;
           break;
         } catch (verifyErr: any) {
+          verificationFailureReason = verifyErr.message;
           console.warn(`⚠️ [Gmail Verification Attempt ${vAttempt}/3]: ${verifyErr.message}`);
           if (vAttempt < 3) {
             await new Promise((resolve) => setTimeout(resolve, 200 * vAttempt));
@@ -533,7 +563,53 @@ export class GmailSendingService {
         }
       }
 
-      // Phase 2: Update message record to 'SENT' and lead to 'CONTACTED' with retry backoff
+      // Strict enforcement: If Gmail verification failed, lock in UNCONFIRMED non-retryable state
+      if (!verifiedInGmail) {
+        console.error(
+          `⛔ [Gmail Post-Send Verification Failed] Message ${liveMessageId} could not be verified in Gmail SENT mailbox: ${verificationFailureReason}. Locking in UNCONFIRMED non-retryable state to prevent duplicates!`
+        );
+
+        if (messageRecordId) {
+          try {
+            await db
+              .update(messages)
+              .set({
+                sendStatus: 'UNCONFIRMED',
+                messageId: liveMessageId,
+                threadId: liveThreadId,
+                error: `Gmail post-send verification failed: ${verificationFailureReason}`,
+                updatedAt: new Date(),
+              })
+              .where(eq(messages.id, messageRecordId));
+          } catch (e: any) {
+            console.error('[Failed to update unconfirmed message status]:', e.message);
+          }
+        }
+
+        // Lock lead in CONTACTED status so LeadMiner can NEVER accidentally send a duplicate
+        try {
+          await db
+            .update(leads)
+            .set({ outreachStatus: 'CONTACTED', updatedAt: new Date() })
+            .where(eq(leads.id, params.leadId));
+        } catch (e: any) {
+          console.error('[Failed to lock lead outreach status]:', e.message);
+        }
+
+        // Quota is NOT refunded because the API send call was already dispatched
+        return {
+          success: false,
+          messageId: liveMessageId,
+          threadId: liveThreadId,
+          accountId: account.id,
+          senderEmail: account.email,
+          verified: false,
+          skippedReason: 'POST_SEND_VERIFICATION_FAILED',
+          error: `Gmail post-send verification failed: ${verificationFailureReason}`,
+        };
+      }
+
+      // Phase 2: ONLY executed when Gmail confirms message exists, has SENT label, From matches, and To matches!
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
           if (messageRecordId) {
@@ -569,7 +645,7 @@ export class GmailSendingService {
         threadId: liveThreadId,
         accountId: account.id,
         senderEmail: account.email,
-        verified: verifiedInGmail,
+        verified: true,
       };
     } catch (error: any) {
       console.error(`[Gmail Send Error] Account ${account.email}:`, error);

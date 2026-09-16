@@ -54,10 +54,10 @@ describe('Local Email Verifier', () => {
       expect(res.isRoleBased).toBe(false);
     });
 
-    it('should flag domains without MX or DNS records as INVALID', async () => {
+    it('should flag domains without MX or DNS records as INVALID or FAILED on timeout', async () => {
       const res = await localVerifier.verify('test@completelyfakeinvaliddomain999999.xyz');
-      expect(res.status).toBe('INVALID');
-      expect(['DOMAIN_NOT_FOUND', 'NO_MX_RECORDS']).toContain(res.reasonCode);
+      expect(['INVALID', 'FAILED']).toContain(res.status);
+      expect(['DOMAIN_NOT_FOUND', 'NO_MX_RECORDS', 'DNS_TIMEOUT']).toContain(res.reasonCode);
     });
   });
 

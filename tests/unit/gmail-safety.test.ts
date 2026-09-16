@@ -190,7 +190,7 @@ describe('Gmail Safety & Edge-Case Protection Suite', () => {
     releaseSpy.mockRestore();
   });
 
-  it('5. Crash Safety / Two-Phase Outreach: should preserve SENT status if DB update fails after Gmail 200', async () => {
+  it('5. Crash Safety / Two-Phase Outreach: should preserve SENT status if DB update fails after Gmail 200 and verified', async () => {
     (env as any).DRY_RUN = false;
 
     vi.spyOn(gmailSendingService, 'reserveSendingAccount').mockResolvedValue({
@@ -212,18 +212,22 @@ describe('Gmail Safety & Edge-Case Protection Suite', () => {
 
     mockMessagesGet.mockResolvedValue({
       data: {
+        id: 'live_gmail_msg_99999',
         labelIds: ['SENT'],
-        payload: { headers: [] },
+        payload: {
+          headers: [
+            { name: 'From', value: 'verified-sender@agency.com' },
+            { name: 'To', value: 'creator@domain.com' },
+          ],
+        },
       },
     });
 
-    // Make Phase 2 update throw to simulate crash
     let updateCount = 0;
     mockDbUpdate.mockImplementation(() => ({
       set: vi.fn().mockReturnValue({
         where: vi.fn().mockImplementation(() => {
           updateCount++;
-          // When updating leads to CONTACTED or messages to SENT, simulate DB failure
           if (updateCount >= 1) {
             return Promise.reject(new Error('Postgres connection lost during Phase 2'));
           }
@@ -247,5 +251,204 @@ describe('Gmail Safety & Edge-Case Protection Suite', () => {
     expect(releaseSpy).not.toHaveBeenCalled();
 
     releaseSpy.mockRestore();
+  });
+
+  it('6. Strict Post-Send Verification Failure: missing SENT label must lock message in UNCONFIRMED state and never mark SENT', async () => {
+    (env as any).DRY_RUN = false;
+
+    vi.spyOn(gmailSendingService, 'reserveSendingAccount').mockResolvedValue({
+      id: 11,
+      email: 'verified-sender@agency.com',
+      status: 'ACTIVE',
+      encryptedRefreshToken: 'enc_token_123',
+    } as any);
+
+    const releaseSpy = vi.spyOn(gmailSendingService, 'releaseAccountReservation').mockResolvedValue();
+
+    mockGetProfile.mockResolvedValue({
+      data: { emailAddress: 'verified-sender@agency.com' },
+    });
+
+    mockMessagesSend.mockResolvedValue({
+      data: { id: 'live_gmail_msg_unconfirmed_1', threadId: 'thread_1' },
+    });
+
+    // Mock Gmail returning message without SENT label (e.g. DRAFT or rejected)
+    mockMessagesGet.mockResolvedValue({
+      data: {
+        id: 'live_gmail_msg_unconfirmed_1',
+        labelIds: ['DRAFT'],
+        payload: {
+          headers: [
+            { name: 'From', value: 'verified-sender@agency.com' },
+            { name: 'To', value: 'target@creator.com' },
+          ],
+        },
+      },
+    });
+
+    const setCalls: any[] = [];
+    mockDbUpdate.mockImplementation(() => ({
+      set: vi.fn().mockImplementation((val) => {
+        setCalls.push(val);
+        return {
+          where: vi.fn().mockResolvedValue([]),
+        };
+      }),
+    }));
+
+    const result = await gmailSendingService.sendEmail({
+      leadId: 6,
+      campaignId: 1,
+      recipientEmail: 'target@creator.com',
+      subject: 'Pitch',
+      body: 'Body',
+      idempotencyKey: 'camp_1_lead_6',
+    });
+
+    // Must NOT return success: true
+    expect(result.success).toBe(false);
+    expect(result.skippedReason).toBe('POST_SEND_VERIFICATION_FAILED');
+    expect(result.verified).toBe(false);
+
+    // Message must be set to UNCONFIRMED
+    const messageUpdate = setCalls.find((c) => c.sendStatus === 'UNCONFIRMED');
+    expect(messageUpdate).toBeDefined();
+    expect(messageUpdate.error).toContain('missing SENT label');
+
+    // Lead must be locked in CONTACTED status to prevent duplicate sending
+    const leadUpdate = setCalls.find((c) => c.outreachStatus === 'CONTACTED');
+    expect(leadUpdate).toBeDefined();
+
+    // Quota must NOT be refunded because dispatch was already attempted
+    expect(releaseSpy).not.toHaveBeenCalled();
+
+    releaseSpy.mockRestore();
+  });
+
+  it('7. Strict Post-Send Verification Failure: recipient To mismatch must lock in UNCONFIRMED state', async () => {
+    (env as any).DRY_RUN = false;
+
+    vi.spyOn(gmailSendingService, 'reserveSendingAccount').mockResolvedValue({
+      id: 12,
+      email: 'verified-sender@agency.com',
+      status: 'ACTIVE',
+      encryptedRefreshToken: 'enc_token_123',
+    } as any);
+
+    mockGetProfile.mockResolvedValue({
+      data: { emailAddress: 'verified-sender@agency.com' },
+    });
+
+    mockMessagesSend.mockResolvedValue({
+      data: { id: 'live_gmail_msg_mismatch_to', threadId: 'thread_2' },
+    });
+
+    // Mock Gmail returning message with DIFFERENT To recipient
+    mockMessagesGet.mockResolvedValue({
+      data: {
+        id: 'live_gmail_msg_mismatch_to',
+        labelIds: ['SENT'],
+        payload: {
+          headers: [
+            { name: 'From', value: 'verified-sender@agency.com' },
+            { name: 'To', value: 'wrong-recipient@other.com' },
+          ],
+        },
+      },
+    });
+
+    const setCalls: any[] = [];
+    mockDbUpdate.mockImplementation(() => ({
+      set: vi.fn().mockImplementation((val) => {
+        setCalls.push(val);
+        return {
+          where: vi.fn().mockResolvedValue([]),
+        };
+      }),
+    }));
+
+    const result = await gmailSendingService.sendEmail({
+      leadId: 7,
+      campaignId: 1,
+      recipientEmail: 'expected-creator@domain.com',
+      subject: 'Pitch',
+      body: 'Body',
+      idempotencyKey: 'camp_1_lead_7',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.skippedReason).toBe('POST_SEND_VERIFICATION_FAILED');
+    expect(result.error).toContain('To header mismatch');
+
+    const messageUpdate = setCalls.find((c) => c.sendStatus === 'UNCONFIRMED');
+    expect(messageUpdate).toBeDefined();
+
+    const leadUpdate = setCalls.find((c) => c.outreachStatus === 'CONTACTED');
+    expect(leadUpdate).toBeDefined();
+  });
+
+  it('8. Strict Post-Send Verification Success: confirms message exists, has SENT label, From matches, and To matches', async () => {
+    (env as any).DRY_RUN = false;
+
+    vi.spyOn(gmailSendingService, 'reserveSendingAccount').mockResolvedValue({
+      id: 13,
+      email: 'verified-sender@agency.com',
+      status: 'ACTIVE',
+      encryptedRefreshToken: 'enc_token_123',
+    } as any);
+
+    mockGetProfile.mockResolvedValue({
+      data: { emailAddress: 'verified-sender@agency.com' },
+    });
+
+    mockMessagesSend.mockResolvedValue({
+      data: { id: 'live_gmail_msg_perfect_match', threadId: 'thread_3' },
+    });
+
+    mockMessagesGet.mockResolvedValue({
+      data: {
+        id: 'live_gmail_msg_perfect_match',
+        labelIds: ['SENT'],
+        payload: {
+          headers: [
+            { name: 'From', value: 'verified-sender@agency.com' },
+            { name: 'To', value: 'creator@verified.com' },
+          ],
+        },
+      },
+    });
+
+    const setCalls: any[] = [];
+    mockDbUpdate.mockImplementation(() => ({
+      set: vi.fn().mockImplementation((val) => {
+        setCalls.push(val);
+        return {
+          where: vi.fn().mockResolvedValue([]),
+        };
+      }),
+    }));
+
+    const result = await gmailSendingService.sendEmail({
+      leadId: 8,
+      campaignId: 1,
+      recipientEmail: 'creator@verified.com',
+      subject: 'Valid Pitch',
+      body: 'Body',
+      idempotencyKey: 'camp_1_lead_8',
+    });
+
+    // Confirmed live send
+    expect(result.success).toBe(true);
+    expect(result.verified).toBe(true);
+    expect(result.messageId).toBe('live_gmail_msg_perfect_match');
+
+    // Message row marked SENT
+    const messageUpdate = setCalls.find((c) => c.sendStatus === 'SENT');
+    expect(messageUpdate).toBeDefined();
+
+    // Lead row marked CONTACTED
+    const leadUpdate = setCalls.find((c) => c.outreachStatus === 'CONTACTED');
+    expect(leadUpdate).toBeDefined();
   });
 });

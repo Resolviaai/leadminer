@@ -96,7 +96,7 @@ export async function runOutreachBatch(batchLimit?: number): Promise<{ sent: num
       .where(
         and(
           eq(messages.campaignId, campaign.id),
-          inArray(messages.sendStatus, ['SENT', 'SENDING'])
+          inArray(messages.sendStatus, ['SENT', 'SENDING', 'UNCONFIRMED'])
         )
       );
 
@@ -344,6 +344,9 @@ export async function runOutreachBatch(batchLimit?: number): Promise<{ sent: num
             .update(leads)
             .set({ outreachStatus: 'UNSUBSCRIBED', suppressionStatus: true, updatedAt: new Date() })
             .where(eq(leads.id, lead.leadId));
+        } else if (sendResult.skippedReason === 'POST_SEND_VERIFICATION_FAILED') {
+          // Terminal unconfirmed state: lead is already locked as CONTACTED in gmail service to prevent duplicates
+          console.warn(`  [Unconfirmed State] Lead ${lead.leadId} held in non-retryable unconfirmed state.`);
         } else if (sendResult.skippedReason === 'IN_FLIGHT_SENDING') {
           // Leave lead in current state; active worker is currently dispatching
           console.log(`  [In-Flight] Lead ${lead.leadId} is already being dispatched by an active worker.`);
