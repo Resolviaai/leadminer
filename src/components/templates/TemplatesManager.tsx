@@ -1,15 +1,11 @@
 "use client";
 
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   FileText,
   Info,
   Plus,
-  CheckSquare,
-  Square,
-  Power,
-  Trash2,
   X,
   Check,
   Loader2,
@@ -70,15 +66,6 @@ export function TemplatesManager({
 }) {
   const router = useRouter();
 
-  // Multi-select state
-  const [multiSelectMode, setMultiSelectMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [batchLoading, setBatchLoading] = useState(false);
-  const [batchMsg, setBatchMsg] = useState<{
-    type: "success" | "error";
-    text: string;
-  } | null>(null);
-
   // New Template Modal state
   const [isCreating, setIsCreating] = useState(false);
   const [name, setName] = useState("");
@@ -98,94 +85,6 @@ export function TemplatesManager({
   const abortRef = useRef<AbortController | null>(null);
 
   const activeCount = initialTemplates.filter((t) => t.isActive).length;
-
-  // ── Multi-select Handlers ──
-  const toggleSelect = useCallback((id: number) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }, []);
-
-  const selectAll = () => {
-    if (selectedIds.size === initialTemplates.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(initialTemplates.map((t) => t.id)));
-    }
-  };
-
-  const handleBatchAction = async (
-    action: "activate" | "deactivate" | "delete"
-  ) => {
-    if (selectedIds.size === 0 || batchLoading) return;
-
-    if (
-      action === "delete" &&
-      !window.confirm(
-        `Are you sure you want to delete ${selectedIds.size} template(s)?`
-      )
-    ) {
-      return;
-    }
-
-    setBatchLoading(true);
-    setBatchMsg(null);
-
-    try {
-      const res = await fetch("/api/templates/batch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action,
-          ids: Array.from(selectedIds),
-        }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        throw new Error(data.error ?? "Failed to perform bulk action");
-      }
-
-      if (action === "delete" && data.blockedCount > 0) {
-        setBatchMsg({
-          type: "error",
-          text: `Deleted ${data.deletedCount} template(s). ${data.blockedCount} could not be deleted because they are assigned to active campaigns.`,
-        });
-      } else {
-        setBatchMsg({
-          type: "success",
-          text: `Successfully ${
-            action === "delete"
-              ? "deleted"
-              : action === "activate"
-              ? "activated"
-              : "deactivated"
-          } ${selectedIds.size} template(s).`,
-        });
-      }
-
-      setSelectedIds(new Set());
-      if (action === "delete") {
-        setMultiSelectMode(false);
-      }
-      router.refresh();
-      setTimeout(() => setBatchMsg(null), 4000);
-    } catch (err: unknown) {
-      setBatchMsg({
-        type: "error",
-        text: err instanceof Error ? err.message : "Batch operation failed",
-      });
-    } finally {
-      setBatchLoading(false);
-    }
-  };
 
   // ── New Template Creation ──
   const insertVariableIntoNew = (token: string, targetField?: "subject" | "body") => {
@@ -398,22 +297,6 @@ export function TemplatesManager({
               </span>
             </div>
 
-            {/* Multi-Select Toggle Button */}
-            <button
-              onClick={() => {
-                setMultiSelectMode((v) => !v);
-                setSelectedIds(new Set());
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all active:scale-95 min-h-[36px] ${
-                multiSelectMode
-                  ? "bg-primary/15 border-primary/40 text-primary font-semibold"
-                  : "bg-surface-200 border-border text-text-secondary hover:text-text-main hover:bg-surface-300"
-              }`}
-            >
-              <CheckSquare className="w-3.5 h-3.5" />
-              <span>{multiSelectMode ? "Cancel Selection" : "Multi-select"}</span>
-            </button>
-
             {/* + New Template Button (Sleek solid primary button — NO dashed box) */}
             <button
               onClick={() => setIsCreating(true)}
@@ -450,84 +333,6 @@ export function TemplatesManager({
           channel activity.
         </p>
       </Card>
-
-      {/* ── Batch Notification Message ── */}
-      {batchMsg && (
-        <div
-          className={`flex items-center gap-2 text-xs rounded-lg px-3.5 py-2.5 border ${
-            batchMsg.type === "success"
-              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-              : "bg-rose-500/10 border-rose-500/20 text-rose-400"
-          }`}
-        >
-          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-          <span>{batchMsg.text}</span>
-          <button
-            onClick={() => setBatchMsg(null)}
-            className="ml-auto text-text-muted hover:text-text-main"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
-
-      {/* ── Sticky Bulk Action Bar (Visible when templates selected) ── */}
-      {multiSelectMode && (
-        <div className="sticky top-16 z-30 p-3 rounded-xl bg-surface-100/95 backdrop-blur border border-primary/30 shadow-xl flex items-center justify-between gap-3 flex-wrap animate-in fade-in slide-in-from-top-2">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={selectAll}
-              className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-text-main font-medium"
-            >
-              {selectedIds.size === initialTemplates.length ? (
-                <CheckSquare className="w-4 h-4 text-primary" />
-              ) : (
-                <Square className="w-4 h-4 text-text-muted" />
-              )}
-              <span>
-                {selectedIds.size === initialTemplates.length
-                  ? "Deselect All"
-                  : "Select All"}
-              </span>
-            </button>
-
-            <span className="text-xs text-text-muted">|</span>
-
-            <span className="text-xs font-semibold text-text-main">
-              {selectedIds.size} of {initialTemplates.length} selected
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => handleBatchAction("activate")}
-              disabled={selectedIds.size === 0 || batchLoading}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-surface-200 border border-border text-emerald-400 text-xs font-medium hover:bg-surface-300 disabled:opacity-40 transition-colors"
-            >
-              <Power className="w-3.5 h-3.5" />
-              <span>Activate</span>
-            </button>
-
-            <button
-              onClick={() => handleBatchAction("deactivate")}
-              disabled={selectedIds.size === 0 || batchLoading}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-surface-200 border border-border text-warning text-xs font-medium hover:bg-surface-300 disabled:opacity-40 transition-colors"
-            >
-              <Power className="w-3.5 h-3.5" />
-              <span>Deactivate</span>
-            </button>
-
-            <button
-              onClick={() => handleBatchAction("delete")}
-              disabled={selectedIds.size === 0 || batchLoading}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-destructive/15 border border-destructive/30 text-danger text-xs font-semibold hover:bg-destructive/25 disabled:opacity-40 transition-colors"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Delete</span>
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* ── New Template Modal Dialog ── */}
       {isCreating && (
@@ -841,18 +646,9 @@ export function TemplatesManager({
           initialTemplates.map((tmpl) => (
             <Card
               key={tmpl.id}
-              className={`p-4 sm:p-5 transition-colors ${
-                selectedIds.has(tmpl.id)
-                  ? "border-primary/50 bg-surface-100/90 shadow-sm"
-                  : ""
-              }`}
+              className="p-4 sm:p-5 transition-colors hover:border-border/80"
             >
-              <TemplateEditor
-                template={tmpl}
-                selectable={multiSelectMode}
-                selected={selectedIds.has(tmpl.id)}
-                onToggleSelect={toggleSelect}
-              />
+              <TemplateEditor template={tmpl} />
             </Card>
           ))
         )}

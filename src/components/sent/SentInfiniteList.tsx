@@ -12,13 +12,12 @@ import {
   Copy,
   Sparkles,
   Search,
-  Filter,
   RefreshCw,
   Star,
-  CheckSquare,
   Square,
-  User,
-  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -345,36 +344,58 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
   // ══════════════════════════════════════════════════════════════════════════════
   return (
     <div className="space-y-3">
-      {/* Top Toolbar: Filter by Inbox, Search, and Pagination info */}
-      <Card className="p-3 border-border">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          {/* Left: Account Filter & Search Input */}
-          <div className="flex items-center gap-2.5 flex-1 flex-wrap">
+      {/* Top Toolbar: Filter by Inbox, Search, and Gmail-styled Pagination */}
+      <Card className="p-2.5 sm:p-3 border-border bg-surface-100/90 backdrop-blur-sm">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          {/* Left: Select, Refresh, Account Filter & Search */}
+          <div className="flex items-center gap-2 flex-1 min-w-[240px] flex-wrap sm:flex-nowrap">
+            {/* Select toggle icon button */}
+            <button
+              type="button"
+              className="p-1.5 rounded-md hover:bg-surface-200 text-text-muted hover:text-text-main transition-colors flex items-center gap-0.5"
+              title="Select"
+            >
+              <Square className="w-4 h-4" />
+              <ChevronDown className="w-2.5 h-2.5 opacity-60" />
+            </button>
+
+            {/* Refresh button (Gmail-style placement right beside selection) */}
+            <button
+              type="button"
+              onClick={() => handleAccountChange(selectedAccountId)}
+              title="Refresh outbox"
+              className="p-1.5 rounded-md hover:bg-surface-200 text-text-muted hover:text-text-main transition-colors"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-primary" : ""}`} />
+            </button>
+
+            <div className="h-4 w-px bg-border/80 mx-1 hidden sm:block" />
+
             {/* Account Selector */}
-            <div className="flex items-center gap-1.5">
-              <Mail className="w-3.5 h-3.5 text-primary shrink-0" />
+            <div className="relative shrink-0">
               <select
                 value={selectedAccountId}
                 onChange={(e) => handleAccountChange(e.target.value)}
-                className="bg-surface-200 border border-border rounded-lg px-2.5 py-1.5 text-xs text-text-main focus:outline-none focus:ring-1 focus:ring-primary"
+                className="bg-surface-200/80 border border-border/80 rounded-lg pl-2.5 pr-7 py-1.5 text-xs text-text-main font-medium focus:outline-none focus:ring-1 focus:ring-primary appearance-none cursor-pointer"
               >
                 <option value="ALL">All Connected Accounts ({inboxes.length})</option>
                 {inboxes.map((acc) => (
                   <option key={acc.id} value={acc.id.toString()}>
-                    {acc.email} ({acc.sentToday}/{acc.dailyLimit} today)
+                    {acc.email} ({acc.sentToday}/{acc.dailyLimit})
                   </option>
                 ))}
               </select>
+              <ChevronDown className="w-3.5 h-3.5 text-text-muted absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
 
             {/* Search bar */}
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="w-3.5 h-3.5 text-text-muted absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <div className="relative flex-1 min-w-[180px]">
+              <Search className="w-3.5 h-3.5 text-text-muted absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search recipient, channel, or subject..."
-                className="w-full bg-surface-200 border border-border rounded-lg pl-8 pr-3 py-1.5 text-xs text-text-main focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-text-muted"
+                className="w-full bg-surface-200/80 border border-border/80 rounded-lg pl-8 pr-7 py-1.5 text-xs text-text-main focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-text-muted"
               />
               {searchQuery && (
                 <button
@@ -387,20 +408,39 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
             </div>
           </div>
 
-          {/* Right: Counter & Refresh */}
-          <div className="flex items-center gap-3 text-xs text-text-muted shrink-0 self-end md:self-auto">
-            <span>
-              Showing <span className="font-mono text-text-main font-semibold">{filteredItems.length}</span> of{" "}
-              <span className="font-mono text-text-main font-semibold">{total.toLocaleString()}</span>
+          {/* Right: Gmail-Style Pagination Counter with Chevrons (matches 1-40 of 40 < >) */}
+          <div className="flex items-center gap-1 text-xs text-text-muted font-mono select-none shrink-0">
+            <span className="px-1 text-[11px] sm:text-xs text-text-secondary">
+              {filteredItems.length > 0
+                ? `1–${filteredItems.length} of ${total.toLocaleString()}`
+                : "0 of 0"}
             </span>
-            <button
-              type="button"
-              onClick={() => handleAccountChange(selectedAccountId)}
-              title="Refresh"
-              className="p-1.5 rounded-lg bg-surface-200 border border-border text-text-muted hover:text-text-main hover:bg-surface-300 transition-colors"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-primary" : ""}`} />
-            </button>
+            <div className="flex items-center">
+              <button
+                type="button"
+                disabled={true}
+                className="p-1 rounded text-text-muted/30 cursor-default"
+                aria-label="Previous page"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (hasMore && !loading) loadMore();
+                }}
+                disabled={!hasMore || loading}
+                className={`p-1 rounded transition-colors ${
+                  hasMore && !loading
+                    ? "text-text-secondary hover:text-text-main hover:bg-surface-200 cursor-pointer"
+                    : "text-text-muted/30 cursor-default"
+                }`}
+                aria-label="Next page"
+                title={hasMore ? "Load next batch" : "All records loaded"}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       </Card>
@@ -424,7 +464,7 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
               <div
                 key={m.id}
                 onClick={() => setActiveEmail(m)}
-                className="group flex items-center gap-3 px-3.5 py-2.5 sm:py-3 hover:bg-surface-200/80 cursor-pointer transition-colors text-xs select-none"
+                className="group flex items-center gap-3 px-3.5 py-2.5 sm:py-3 hover:bg-surface-200/70 cursor-pointer transition-colors text-xs select-none min-h-[44px]"
               >
                 {/* Checkbox / Star indicators (Gmail style) */}
                 <div className="flex items-center gap-2 text-text-muted group-hover:text-text-secondary shrink-0">
@@ -432,29 +472,19 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
                   <Star className="w-3.5 h-3.5 opacity-40 hover:opacity-100 transition-opacity" />
                 </div>
 
-                {/* Sender inbox pill (shows which account sent it) */}
-                <div className="hidden lg:flex items-center shrink-0">
-                  <span className="font-mono text-[10px] text-text-secondary bg-surface-300 border border-border/80 px-2 py-0.5 rounded-md truncate max-w-[140px]">
-                    {m.senderEmail?.split("@")[0] || "resolvia"}
-                  </span>
-                </div>
-
-                {/* Recipient / Channel */}
+                {/* Recipient — clean single line, identical to Gmail */}
                 <div className="w-36 sm:w-44 md:w-52 shrink-0 truncate">
-                  <span className="font-semibold text-text-main truncate block">
+                  <span className="font-medium text-text-main truncate block">
                     To: {m.channelTitle || m.recipientEmail.split("@")[0]}
                   </span>
-                  <span className="font-mono text-[10px] text-text-muted truncate block">
-                    {m.recipientEmail}
-                  </span>
                 </div>
 
-                {/* Subject & Preview snippet (Contiguous line with truncation, identical to Gmail) */}
-                <div className="flex-1 min-w-0 truncate">
-                  <span className="font-medium text-text-main">
+                {/* Subject & Preview snippet (Contiguous single line with truncation, identical to Gmail) */}
+                <div className="flex-1 min-w-0 flex items-center truncate">
+                  <span className="font-semibold text-text-main shrink-0">
                     {m.subject}
                   </span>
-                  <span className="text-text-muted mx-1.5">—</span>
+                  <span className="text-text-muted mx-1.5 shrink-0">—</span>
                   <span className="text-text-muted font-normal text-[11px] truncate">
                     {bodySnippet}
                   </span>

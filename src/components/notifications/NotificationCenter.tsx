@@ -139,7 +139,7 @@ export function NotificationCenter() {
   };
 
   return (
-    <div className="relative" ref={containerRef}>
+    <div className="relative z-50" ref={containerRef}>
       {/* ── Bell Trigger Button ── */}
       <button
         onClick={() => {
@@ -160,7 +160,7 @@ export function NotificationCenter() {
 
       {/* ── Popover Panel ── */}
       {open && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-surface-100 border border-border rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
+        <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-surface-100 border border-border rounded-xl shadow-2xl z-[100] overflow-hidden animate-in fade-in slide-in-from-top-2">
           {/* Header */}
           <div className="p-3.5 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-2">

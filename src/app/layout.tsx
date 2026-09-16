@@ -1,6 +1,5 @@
 import './globals.css';
 import React from 'react';
-import Link from 'next/link';
 import { Navigation } from '../components/navigation';
 import { NotificationCenter } from '../components/notifications/NotificationCenter';
 import { PwaRegister } from '../components/pwa/PwaRegister';
@@ -42,7 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Topbar (Desktop Only) */}
-          <header className="hidden md:flex h-14 border-b border-border bg-surface-100/90 backdrop-blur px-6 items-center justify-between shrink-0">
+          <header className="hidden md:flex h-14 border-b border-border bg-surface-100/90 backdrop-blur px-6 items-center justify-between shrink-0 relative z-40">
             <div className="flex items-center space-x-3">
               <div className="flex items-center space-x-2 text-xs text-primary font-medium">
                 <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
@@ -58,12 +57,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <Radio className="w-3.5 h-3.5 text-primary" />
                 <span>Search Quota: 100/day</span>
               </div>
-              <Link
-                href="/settings"
-                className="px-2.5 py-1 rounded-md bg-destructive/15 text-danger border border-destructive/30 hover:bg-destructive/25 font-medium transition-colors"
-              >
-                Kill Switch
-              </Link>
             </div>
           </header>
 
