@@ -20,6 +20,7 @@ export async function runMigrations() {
         name VARCHAR(255) NOT NULL UNIQUE,
         applied_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
+      ALTER TABLE "__app_migrations" ENABLE ROW LEVEL SECURITY;
     `);
 
     // 2. Fetch already applied migrations
