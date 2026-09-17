@@ -31,7 +31,7 @@ const envSchema = z.object({
   YOUTUBE_DAILY_SEARCH_LIMIT: z.coerce.number().default(100),
   YOUTUBE_DAILY_GENERAL_LIMIT: z.coerce.number().default(10000),
   YOUTUBE_BATCH_SIZE: z.coerce.number().default(10),
-  YOUTUBE_MAX_RESULTS_PER_SEARCH: z.coerce.number().default(15),
+  YOUTUBE_MAX_RESULTS_PER_SEARCH: z.coerce.number().default(50),
   YOUTUBE_TARGET_REGION: z.string().default('TIER_1'),
   YOUTUBE_TARGET_LANGUAGE: z.string().default('en'),
 
