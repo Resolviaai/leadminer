@@ -17,6 +17,14 @@ import {
   CheckSquare,
   Square,
   ShieldAlert,
+  SlidersHorizontal,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Instagram,
+  Twitter,
+  Linkedin,
+  Share2,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -29,13 +37,20 @@ import {
   TableRow,
   TableCell,
 } from "@/components/ui/table";
+import { LeadInspectorDrawer } from "./LeadInspectorDrawer";
 
 export type Lead = {
   id: number;
   channelId: string;
   channelTitle: string;
   channelUrl: string;
+  customUrl?: string | null;
+  description?: string | null;
+  thumbnailUrl?: string | null;
   subscriberCount: number | null;
+  videoCount?: number | null;
+  viewCount?: number | null;
+  publishedAt?: Date | string | null;
   qualificationStatus: string;
   outreachStatus: string;
   suppressionStatus?: boolean;
@@ -118,6 +133,43 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
   const [batchLoading, setBatchLoading] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<number | null>(null);
 
+  // Inspector Drawer & Sorting / Filtering State
+  const [selectedLeadForDetail, setSelectedLeadForDetail] = useState<Lead | null>(null);
+  const [sortBy, setSortBy] = useState<"id" | "subscribers" | "discoveredAt" | "title" | "videos">("id");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [filterWebsite, setFilterWebsite] = useState(false);
+  const [filterSocial, setFilterSocial] = useState(false);
+  const [filterPhone, setFilterPhone] = useState(false);
+  const [showFilterPopover, setShowFilterPopover] = useState(false);
+
+  const activeFilterCount = (filterWebsite ? 1 : 0) + (filterSocial ? 1 : 0) + (filterPhone ? 1 : 0);
+
+  const handleSort = (column: "id" | "subscribers" | "discoveredAt" | "title" | "videos") => {
+    if (sortBy === column) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(column);
+      setSortDir("desc");
+    }
+  };
+
+  const getSortIcon = (column: "id" | "subscribers" | "discoveredAt" | "title" | "videos") => {
+    if (sortBy === column) {
+      return sortDir === "asc" ? (
+        <ArrowUp className="w-3.5 h-3.5 text-primary" />
+      ) : (
+        <ArrowDown className="w-3.5 h-3.5 text-primary" />
+      );
+    }
+    return <ArrowUpDown className="w-3 h-3 text-text-muted/40 group-hover:text-text-muted transition-colors" />;
+  };
+
+  const resetSecondaryFilters = () => {
+    setFilterWebsite(false);
+    setFilterSocial(false);
+    setFilterPhone(false);
+  };
+
   // Edit Lead Modal
   const [editLead, setEditLead] = useState<Lead | null>(null);
   const [editEmail, setEditEmail] = useState("");
@@ -128,13 +180,15 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
   const isLoadingRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Close menu on outside click/tap
+  // Close menus on outside click/tap
   useEffect(() => {
-    if (menuOpenId === null) return;
     const handleGlobalClick = (e: MouseEvent | TouchEvent) => {
       const target = e.target as HTMLElement;
-      if (!target.closest('[data-lead-menu="true"]')) {
+      if (menuOpenId !== null && !target.closest('[data-lead-menu="true"]')) {
         setMenuOpenId(null);
+      }
+      if (showFilterPopover && !target.closest('[data-filter-popover="true"]')) {
+        setShowFilterPopover(false);
       }
     };
     document.addEventListener("mousedown", handleGlobalClick);
@@ -143,7 +197,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
       document.removeEventListener("mousedown", handleGlobalClick);
       document.removeEventListener("touchstart", handleGlobalClick);
     };
-  }, [menuOpenId]);
+  }, [menuOpenId, showFilterPopover]);
 
   const fetchLeads = useCallback(
     async (isReset = false) => {
@@ -155,12 +209,22 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
       abortControllerRef.current?.abort();
       abortControllerRef.current = new AbortController();
 
-      const lastId = isReset ? 0 : items.length > 0 ? items[items.length - 1].id : 0;
       const params = new URLSearchParams();
-      if (lastId > 0) params.set("lastId", lastId.toString());
+      if (sortBy === "id" && sortDir === "desc") {
+        const lastId = isReset ? 0 : items.length > 0 ? items[items.length - 1].id : 0;
+        if (lastId > 0) params.set("lastId", lastId.toString());
+      } else {
+        const offset = isReset ? 0 : items.length;
+        if (offset > 0) params.set("offset", offset.toString());
+      }
       params.set("limit", "50");
       if (activeTab !== "ALL") params.set("filter", activeTab);
       if (searchQuery.trim()) params.set("search", searchQuery.trim());
+      if (sortBy !== "id") params.set("sortBy", sortBy);
+      if (sortDir !== "desc") params.set("sortDir", sortDir);
+      if (filterWebsite) params.set("hasWebsite", "true");
+      if (filterSocial) params.set("hasSocial", "true");
+      if (filterPhone) params.set("hasPhone", "true");
 
       try {
         const res = await fetch(`/api/leads?${params.toString()}`, {
@@ -191,7 +255,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
         setLoading(false);
       }
     },
-    [items, activeTab, searchQuery]
+    [items, activeTab, searchQuery, sortBy, sortDir, filterWebsite, filterSocial, filterPhone]
   );
 
   const handleTabChange = (tab: FilterTab) => {
@@ -205,7 +269,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
       fetchLeads(true);
     }, 300);
     return () => clearTimeout(timer);
-  }, [searchQuery, activeTab]);
+  }, [searchQuery, activeTab, sortBy, sortDir, filterWebsite, filterSocial, filterPhone]);
 
   const handleContainerScroll = (e: React.UIEvent<HTMLDivElement>) => {
     if (!hasMore || loading || isLoadingRef.current) return;
@@ -435,25 +499,100 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
           ))}
         </div>
 
-        {/* Search */}
-        <div className="relative w-full md:w-64">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search channels or emails..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-surface-100 border border-border rounded-md pl-8 pr-8 text-xs text-text-main placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary h-9"
-          />
-          {searchQuery && (
-            <button
+        <div className="flex items-center gap-2">
+          {/* Search */}
+          <div className="relative flex-1 md:w-64">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search channels or emails..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-surface-100 border border-border rounded-md pl-8 pr-8 text-xs text-text-main placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary h-9"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main p-0.5 cursor-pointer flex items-center justify-center"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Filter Popover Button */}
+          <div className="relative" data-filter-popover="true">
+            <Button
               type="button"
-              onClick={() => setSearchQuery("")}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main p-0.5 cursor-pointer flex items-center justify-center"
+              variant={activeFilterCount > 0 ? "default" : "outline"}
+              onClick={() => setShowFilterPopover(!showFilterPopover)}
+              className="h-9 px-2.5 sm:px-3 text-xs gap-1.5 shrink-0 cursor-pointer active:scale-95 transition-transform"
             >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Filters</span>
+              {activeFilterCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-primary-foreground text-primary font-mono text-[10px] font-bold">
+                  {activeFilterCount}
+                </span>
+              )}
+            </Button>
+
+            {showFilterPopover && (
+              <>
+                <div
+                  className="fixed inset-0 z-30 cursor-default"
+                  onClick={() => setShowFilterPopover(false)}
+                />
+                <div className="absolute right-0 mt-1.5 w-60 bg-surface-100 border border-border rounded-xl shadow-xl p-3.5 z-40 text-xs space-y-3 animate-in fade-in zoom-in-95">
+                  <div className="flex items-center justify-between border-b border-border/60 pb-2">
+                    <span className="font-semibold text-text-main">Filter Leads</span>
+                    {activeFilterCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={resetSecondaryFilters}
+                        className="text-[11px] text-primary hover:underline cursor-pointer"
+                      >
+                        Reset All
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="space-y-2.5">
+                    <label className="flex items-center gap-2.5 cursor-pointer select-none text-text-secondary hover:text-text-main">
+                      <input
+                        type="checkbox"
+                        checked={filterWebsite}
+                        onChange={(e) => setFilterWebsite(e.target.checked)}
+                        className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5"
+                      />
+                      <span>Official Website</span>
+                    </label>
+
+                    <label className="flex items-center gap-2.5 cursor-pointer select-none text-text-secondary hover:text-text-main">
+                      <input
+                        type="checkbox"
+                        checked={filterSocial}
+                        onChange={(e) => setFilterSocial(e.target.checked)}
+                        className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5"
+                      />
+                      <span>Social Profiles</span>
+                    </label>
+
+                    <label className="flex items-center gap-2.5 cursor-pointer select-none text-text-secondary hover:text-text-main">
+                      <input
+                        type="checkbox"
+                        checked={filterPhone}
+                        onChange={(e) => setFilterPhone(e.target.checked)}
+                        className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5"
+                      />
+                      <span>Phone / WhatsApp</span>
+                    </label>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -532,16 +671,20 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
           items.map((lead) => (
             <div
               key={lead.id}
-              className={`bg-surface-100 border rounded-xl p-4 space-y-3 transition-all ${
+              onClick={() => setSelectedLeadForDetail(lead)}
+              className={`bg-surface-100 border rounded-xl p-4 space-y-3 transition-all cursor-pointer active:scale-[0.99] ${
                 selectedIds.has(lead.id) ? "border-primary/50 bg-primary/[0.02]" : "border-border shadow-sm"
               }`}
             >
               {/* Header */}
               <div className="flex items-start justify-between gap-2.5">
-                <div className="flex items-start gap-2 flex-1 min-w-0">
+                <div className="flex items-start gap-2.5 flex-1 min-w-0">
                   <button
                     type="button"
-                    onClick={() => toggleSelect(lead.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleSelect(lead.id);
+                    }}
                     className="text-text-muted hover:text-primary mt-0.5 cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center -ml-1.5"
                     aria-label={selectedIds.has(lead.id) ? "Deselect lead" : "Select lead"}
                   >
@@ -551,6 +694,19 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                       <Square className="w-4.5 h-4.5" />
                     )}
                   </button>
+
+                  {lead.thumbnailUrl ? (
+                    <img
+                      src={lead.thumbnailUrl}
+                      alt={lead.channelTitle}
+                      className="w-9 h-9 rounded-lg object-cover border border-border shrink-0 bg-surface-200 mt-0.5"
+                    />
+                  ) : (
+                    <div className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs shrink-0 mt-0.5">
+                      {lead.channelTitle.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-semibold text-sm text-text-main leading-tight truncate">
@@ -565,26 +721,25 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                         href={lead.channelUrl}
                         target="_blank"
                         rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
                         className="text-text-muted hover:text-text-main inline-flex items-center justify-center p-1 rounded min-w-[28px] min-h-[28px]"
                         aria-label={`Open ${lead.channelTitle} on YouTube`}
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
                       </a>
                     </div>
-                    <div className="flex items-center gap-2 mt-1 text-[11px] text-text-muted">
+                    <div className="flex items-center gap-2 mt-1 text-[11px] text-text-muted flex-wrap">
+                      {lead.customUrl && <span className="text-primary font-medium">{lead.customUrl}</span>}
                       <span className="font-mono tabular-nums">
-                        {lead.subscriberCount ? lead.subscriberCount.toLocaleString() : "0"} subscribers
+                        {lead.subscriberCount ? lead.subscriberCount.toLocaleString() : "0"} subs
                       </span>
-                      {lead.sourceKeyword && (
-                        <>
-                          <span>•</span>
-                          <span className="truncate max-w-[130px]">kw: {lead.sourceKeyword}</span>
-                        </>
+                      {lead.videoCount != null && lead.videoCount > 0 && (
+                        <span>• {lead.videoCount.toLocaleString()} vids</span>
                       )}
                     </div>
                   </div>
                 </div>
-                <div className="shrink-0 pt-0.5">
+                <div className="shrink-0 pt-0.5" onClick={(e) => e.stopPropagation()}>
                   {getQualBadge(lead.qualificationStatus, lead.suppressionStatus)}
                 </div>
               </div>
@@ -606,7 +761,10 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => handleReprocess(lead.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleReprocess(lead.id);
+                    }}
                     disabled={actionLoadingId === lead.id}
                     className="w-full min-h-[44px] px-3 py-2 rounded-lg bg-primary/10 border border-primary/25 hover:bg-primary/20 active:scale-[0.98] text-primary font-medium text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
                   >
@@ -615,47 +773,42 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                   </button>
                 )}
 
-                {/* Additional Contacts Row: Website, Phone */}
-                {(lead.website || lead.phone || lead.contactPageUrl) && (
-                  <div className="flex items-center gap-3 pt-1.5 border-t border-border/40 text-[11px]">
-                    {(lead.website || lead.contactPageUrl) && (
-                      <a
-                        href={lead.contactPageUrl || lead.website || "#"}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 text-primary hover:underline truncate max-w-[160px] font-medium"
-                      >
-                        <Globe className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">{lead.contactPageUrl ? "Contact Page" : "Website"}</span>
-                      </a>
-                    )}
+                {/* Additional Contacts Row: Website, Phone, Socials */}
+                <div className="flex items-center gap-2.5 pt-1.5 border-t border-border/40 text-[11px] flex-wrap">
+                  {(lead.website || lead.contactPageUrl) && (
+                    <a
+                      href={lead.contactPageUrl || lead.website || "#"}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center gap-1 text-primary hover:underline font-medium"
+                    >
+                      <Globe className="w-3 h-3 shrink-0" />
+                      <span>{lead.contactPageUrl ? "Contact Page" : "Website"}</span>
+                    </a>
+                  )}
 
-                    {lead.phone && (
-                      <div className="inline-flex items-center gap-1.5 text-text-secondary font-mono text-[11px]">
-                        <Phone className="w-3 h-3 shrink-0 text-text-muted" />
-                        <span>{lead.phone}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+                  {lead.phone && (
+                    <div className="inline-flex items-center gap-1 text-text-secondary font-mono">
+                      <Phone className="w-3 h-3 shrink-0 text-text-muted" />
+                      <span>{lead.phone}</span>
+                    </div>
+                  )}
 
-              {/* Social links */}
-              {lead.socialLinks && lead.socialLinks.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 pt-0.5">
-                  {lead.socialLinks.map((s, idx) => (
+                  {lead.socialLinks && lead.socialLinks.map((s, idx) => (
                     <span
                       key={idx}
-                      className="px-2 py-0.5 rounded-md bg-surface-200 border border-border/50 text-text-secondary text-[10px]"
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-surface-100 border border-border/50 text-[10px] text-text-secondary"
                     >
-                      {s.type.replace("_X", "")}: <span className="font-mono text-text-main">{s.value}</span>
+                      <Share2 className="w-2.5 h-2.5" />
+                      <span>{s.type.replace("_X", "")}</span>
                     </span>
                   ))}
                 </div>
-              )}
+              </div>
 
               {/* Mobile Action Bar */}
-              <div className="flex items-center justify-between pt-2 border-t border-border/50 gap-2">
+              <div className="flex items-center justify-between pt-2 border-t border-border/50 gap-2" onClick={(e) => e.stopPropagation()}>
                 <div className="text-[11px] text-text-muted shrink-0">
                   {getOutreachBadge(lead.outreachStatus)}
                 </div>
@@ -765,8 +918,26 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                     )}
                   </button>
                 </TableHead>
-                <TableHead>Channel</TableHead>
-                <TableHead className="text-right">Subscribers</TableHead>
+                <TableHead>
+                  <button
+                    type="button"
+                    onClick={() => handleSort("title")}
+                    className="group inline-flex items-center gap-1.5 hover:text-text-main font-semibold transition-colors cursor-pointer select-none"
+                  >
+                    <span>Channel</span>
+                    {getSortIcon("title")}
+                  </button>
+                </TableHead>
+                <TableHead className="text-right">
+                  <button
+                    type="button"
+                    onClick={() => handleSort("subscribers")}
+                    className="group inline-flex items-center gap-1.5 hover:text-text-main font-semibold transition-colors cursor-pointer select-none ml-auto"
+                  >
+                    <span>Subscribers</span>
+                    {getSortIcon("subscribers")}
+                  </button>
+                </TableHead>
                 <TableHead>Discovered Contacts</TableHead>
                 <TableHead>Deliverability</TableHead>
                 <TableHead>Qualification</TableHead>
@@ -791,9 +962,12 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                 items.map((lead) => (
                   <TableRow
                     key={lead.id}
-                    className={`transition-colors ${selectedIds.has(lead.id) ? "bg-primary/[0.03]" : ""}`}
+                    onClick={() => setSelectedLeadForDetail(lead)}
+                    className={`transition-colors cursor-pointer hover:bg-surface-200/50 ${
+                      selectedIds.has(lead.id) ? "bg-primary/[0.04]" : ""
+                    }`}
                   >
-                    <TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
                       <button
                         type="button"
                         onClick={() => toggleSelect(lead.id)}
@@ -807,79 +981,137 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                       </button>
                     </TableCell>
 
-                    {/* Channel Column */}
+                    {/* Channel Column with Avatar & Handle */}
                     <TableCell>
-                      <div className="flex items-center space-x-1.5 max-w-[220px]">
-                        <span className="font-medium text-text-main truncate" title={`${lead.channelTitle} (${lead.sourceKeyword ? `kw: ${lead.sourceKeyword}` : 'autonomous'})`}>
-                          {lead.channelTitle}
-                        </span>
-                        {lead.country && (
-                          <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 uppercase font-mono text-text-muted shrink-0">
-                            {lead.country}
-                          </Badge>
+                      <div className="flex items-center gap-2.5 max-w-[260px]">
+                        {lead.thumbnailUrl ? (
+                          <img
+                            src={lead.thumbnailUrl}
+                            alt={lead.channelTitle}
+                            className="w-7 h-7 rounded-md object-cover border border-border shrink-0 bg-surface-200"
+                          />
+                        ) : (
+                          <div className="w-7 h-7 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-[11px] shrink-0">
+                            {lead.channelTitle.charAt(0).toUpperCase()}
+                          </div>
                         )}
-                        <a
-                          href={lead.channelUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-text-muted hover:text-text-main shrink-0"
-                          title={`Open ${lead.channelTitle} on YouTube`}
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className="font-medium text-text-main truncate text-xs"
+                              title={`${lead.channelTitle} (${lead.sourceKeyword ? `kw: ${lead.sourceKeyword}` : 'autonomous'})`}
+                            >
+                              {lead.channelTitle}
+                            </span>
+                            {lead.country && (
+                              <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 uppercase font-mono text-text-muted shrink-0">
+                                {lead.country}
+                              </Badge>
+                            )}
+                            <a
+                              href={lead.channelUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-text-muted hover:text-text-main shrink-0 p-0.5"
+                              title={`Open ${lead.channelTitle} on YouTube`}
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          </div>
+                          {lead.customUrl && (
+                            <span className="text-[10px] text-text-muted block truncate font-mono">
+                              {lead.customUrl}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </TableCell>
 
-                    {/* Subscribers */}
-                    <TableCell className="text-right font-mono text-text-secondary tabular-nums">
-                      {lead.subscriberCount ? lead.subscriberCount.toLocaleString() : "0"}
+                    {/* Subscribers & Videos */}
+                    <TableCell className="text-right tabular-nums">
+                      <div className="font-mono text-xs font-semibold text-text-main">
+                        {lead.subscriberCount ? lead.subscriberCount.toLocaleString() : "0"}
+                      </div>
+                      {lead.videoCount != null && lead.videoCount > 0 && (
+                        <div className="text-[10px] text-text-muted font-mono">
+                          {lead.videoCount.toLocaleString()} vids
+                        </div>
+                      )}
                     </TableCell>
 
                     {/* Discovered Contacts Column */}
                     <TableCell>
-                      <div className="flex items-center space-x-2 max-w-[260px]">
+                      <div className="flex items-center gap-2 max-w-[280px]">
                         {lead.email ? (
-                          <span className="font-mono text-text-main text-[11px] truncate" title={lead.email}>
+                          <span className="font-mono text-text-main text-[11px] truncate font-medium" title={lead.email}>
                             {lead.email}
                           </span>
                         ) : (
                           <button
                             type="button"
-                            onClick={() => handleReprocess(lead.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleReprocess(lead.id);
+                            }}
                             disabled={actionLoadingId === lead.id}
-                            className="text-[11px] text-primary hover:underline font-medium inline-flex items-center gap-1 cursor-pointer bg-primary/10 px-1.5 py-0.5 rounded shrink-0"
+                            className="text-[10px] text-primary hover:underline font-medium inline-flex items-center gap-1 cursor-pointer bg-primary/10 px-1.5 py-0.5 rounded shrink-0"
                             title="No email found yet — tap to reprocess website & contact info"
                           >
                             <RefreshCw className={`w-2.5 h-2.5 ${actionLoadingId === lead.id ? "animate-spin" : ""}`} />
-                            <span>No email yet → Reprocess</span>
+                            <span>Reprocess</span>
                           </button>
                         )}
 
+                        {/* Website mini icon */}
                         {(lead.website || lead.contactPageUrl) && (
                           <a
                             href={lead.contactPageUrl || lead.website || "#"}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-text-secondary hover:text-primary transition-colors shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-text-muted hover:text-primary transition-colors shrink-0 p-1"
                             title={lead.contactPageUrl ? `Contact Page: ${lead.contactPageUrl}` : `Website: ${lead.website}`}
                           >
-                            <Globe className="w-3 h-3" />
+                            <Globe className="w-3.5 h-3.5" />
                           </a>
                         )}
 
+                        {/* Phone mini icon */}
                         {lead.phone && (
-                          <span className="text-text-muted shrink-0" title={`Phone: ${lead.phone}`}>
-                            <Phone className="w-2.5 h-2.5" />
+                          <span className="text-text-muted shrink-0 p-0.5" title={`Phone: ${lead.phone}`}>
+                            <Phone className="w-3 h-3" />
                           </span>
                         )}
 
+                        {/* Social link icons */}
                         {lead.socialLinks && lead.socialLinks.length > 0 && (
-                          <span
-                            className="text-[9px] px-1 py-0.2 rounded bg-surface-200 text-text-muted border border-border/50 shrink-0 font-mono"
-                            title={lead.socialLinks.map((s) => `${s.type}: ${s.value}`).join(", ")}
-                          >
-                            {lead.socialLinks.length}s
-                          </span>
+                          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                            {lead.socialLinks.slice(0, 3).map((s, idx) => {
+                              const type = s.type.toUpperCase();
+                              const isIg = type.includes("INSTA");
+                              const isTw = type.includes("TWITTER") || type.includes("X");
+                              const isLi = type.includes("LINKEDIN");
+                              const IconComp = isIg ? Instagram : isTw ? Twitter : isLi ? Linkedin : Share2;
+                              return (
+                                <a
+                                  key={idx}
+                                  href={s.value.startsWith("http") ? s.value : `https://${s.value}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-text-muted hover:text-primary p-0.5"
+                                  title={`${s.type}: ${s.value}`}
+                                >
+                                  <IconComp className="w-3 h-3" />
+                                </a>
+                              );
+                            })}
+                            {lead.socialLinks.length > 3 && (
+                              <span className="text-[9px] px-1 py-0.2 rounded bg-surface-200 text-text-muted border border-border/50 font-mono">
+                                +{lead.socialLinks.length - 3}
+                              </span>
+                            )}
+                          </div>
                         )}
                       </div>
                     </TableCell>
@@ -894,7 +1126,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                     <TableCell>{getOutreachBadge(lead.outreachStatus)}</TableCell>
 
                     {/* Actions */}
-                    <TableCell className="text-right">
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
                         <Button
                           size="sm"
@@ -1024,6 +1256,22 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
           </button>
         )}
       </div>
+
+      {/* Slide-over Lead Inspector Drawer */}
+      <LeadInspectorDrawer
+        lead={selectedLeadForDetail}
+        onClose={() => setSelectedLeadForDetail(null)}
+        onVerify={handleVerify}
+        onReprocess={handleReprocess}
+        onEdit={(l) => {
+          setEditLead(l as any);
+          setEditEmail(l.email || "");
+          setEditPhone(l.phone || "");
+          setEditWebsite(l.website || "");
+        }}
+        onSuppress={handleSuppress}
+        actionLoadingId={actionLoadingId}
+      />
 
       {/* Modal: Edit Lead Contacts */}
       {editLead && (

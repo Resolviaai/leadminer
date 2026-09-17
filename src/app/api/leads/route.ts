@@ -1,19 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "../../../db/client";
 import { leads, contacts, keywords } from "../../../db/schema";
-import { eq, desc, lt, inArray, and, ilike, or } from "drizzle-orm";
+import { eq, desc, asc, lt, inArray, and, ilike, or } from "drizzle-orm";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const lastId = parseInt(searchParams.get("lastId") ?? "0", 10);
+  const offset = parseInt(searchParams.get("offset") ?? "0", 10);
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "50", 10), 100);
   const filter = searchParams.get("filter") || "ALL";
   const search = searchParams.get("search")?.trim();
+  const sortBy = searchParams.get("sortBy") || "id";
+  const sortDir = searchParams.get("sortDir") === "asc" ? "asc" : "desc";
+  const hasWebsite = searchParams.get("hasWebsite") === "true";
+  const hasSocial = searchParams.get("hasSocial") === "true";
+  const hasPhone = searchParams.get("hasPhone") === "true";
+  const qualification = searchParams.get("qualification");
 
   try {
     const conditions = [];
 
-    if (lastId > 0) {
+    if (sortBy === "id" && sortDir === "desc" && lastId > 0 && offset === 0) {
       conditions.push(lt(leads.id, lastId));
     }
 
@@ -21,26 +28,59 @@ export async function GET(req: NextRequest) {
       conditions.push(eq(leads.outreachStatus, "CONTACTED"));
     }
 
+    if (qualification && (qualification === "QUALIFIED" || qualification === "UNQUALIFIED" || qualification === "DISQUALIFIED")) {
+      conditions.push(eq(leads.qualificationStatus, qualification));
+    }
+
     if (search) {
       conditions.push(
         or(
           ilike(leads.channelTitle, `%${search}%`),
-          ilike(leads.channelUrl, `%${search}%`)
+          ilike(leads.channelUrl, `%${search}%`),
+          ilike(leads.customUrl, `%${search}%`)
         )
       );
     }
 
-    const leadRows = await db
+    let orderExpr;
+    switch (sortBy) {
+      case "subscribers":
+        orderExpr = sortDir === "asc" ? asc(leads.subscriberCount) : desc(leads.subscriberCount);
+        break;
+      case "title":
+        orderExpr = sortDir === "asc" ? asc(leads.channelTitle) : desc(leads.channelTitle);
+        break;
+      case "videos":
+        orderExpr = sortDir === "asc" ? asc(leads.videoCount) : desc(leads.videoCount);
+        break;
+      case "views":
+        orderExpr = sortDir === "asc" ? asc(leads.viewCount) : desc(leads.viewCount);
+        break;
+      case "discoveredAt":
+        orderExpr = sortDir === "asc" ? asc(leads.discoveredAt) : desc(leads.discoveredAt);
+        break;
+      default:
+        orderExpr = sortDir === "asc" ? asc(leads.id) : desc(leads.id);
+        break;
+    }
+
+    let query = db
       .select({
         id: leads.id,
         channelId: leads.channelId,
         channelTitle: leads.channelTitle,
         channelUrl: leads.channelUrl,
+        customUrl: leads.customUrl,
+        description: leads.description,
+        website: leads.website,
+        thumbnailUrl: leads.thumbnailUrl,
         subscriberCount: leads.subscriberCount,
+        videoCount: leads.videoCount,
+        viewCount: leads.viewCount,
+        publishedAt: leads.publishedAt,
         qualificationStatus: leads.qualificationStatus,
         outreachStatus: leads.outreachStatus,
         suppressionStatus: leads.suppressionStatus,
-        website: leads.website,
         phone: leads.phone,
         contactPageUrl: leads.contactPageUrl,
         country: leads.country,
@@ -51,8 +91,14 @@ export async function GET(req: NextRequest) {
       .from(leads)
       .leftJoin(keywords, eq(leads.sourceKeywordId, keywords.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(leads.id))
+      .orderBy(orderExpr)
       .limit(limit);
+
+    if (offset > 0) {
+      query = query.offset(offset) as any;
+    }
+
+    const leadRows = await query;
 
     if (leadRows.length === 0) {
       return NextResponse.json([]);
@@ -123,6 +169,16 @@ export async function GET(req: NextRequest) {
       data = data.filter((d) => d.emailStatus === "VALID" || d.emailStatus === "DOMAIN_VALID" || d.emailStatus === "MAILBOX_VERIFIED");
     } else if (filter === "FAILED") {
       data = data.filter((d) => d.emailStatus === "INVALID" || d.emailStatus === "FAILED" || d.emailStatus === "DISPOSABLE");
+    }
+
+    if (hasWebsite) {
+      data = data.filter((d) => Boolean(d.website || d.contactPageUrl));
+    }
+    if (hasSocial) {
+      data = data.filter((d) => Boolean(d.socialLinks && d.socialLinks.length > 0));
+    }
+    if (hasPhone) {
+      data = data.filter((d) => Boolean(d.phone));
     }
 
     return NextResponse.json(data);
