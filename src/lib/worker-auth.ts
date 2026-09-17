@@ -12,9 +12,14 @@ export function verifyWorkerAuth(req: NextRequest): WorkerAuthResult {
     return { authorized: true };
   }
 
-  // 2. Vercel Cron header check (automatically populated by Vercel infrastructure)
-  const vercelCronHeader = req.headers.get('x-vercel-cron');
-  if (vercelCronHeader) {
+  // 2. Vercel Cron header check (User-Agent: vercel-cron/1.0, x-vercel-cron-schedule, or x-vercel-cron)
+  const userAgent = req.headers.get('user-agent') || '';
+  const isVercelCron =
+    userAgent.includes('vercel-cron') ||
+    req.headers.has('x-vercel-cron-schedule') ||
+    Boolean(req.headers.get('x-vercel-cron'));
+
+  if (isVercelCron) {
     return { authorized: true };
   }
 

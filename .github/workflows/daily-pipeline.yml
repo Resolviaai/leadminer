@@ -2,87 +2,32 @@ name: Daily LeadMiner Cloud Pipeline
 
 on:
   schedule:
-    # Runs daily at 08:00 UTC (midnight Pacific Time)
+    # Runs daily at 08:00 UTC (1:30 PM IST / 4:00 AM EDT)
     - cron: '0 8 * * *'
-  workflow_dispatch: # Allows manual trigger from GitHub UI
+  workflow_dispatch: # Allows manual trigger from GitHub UI anytime
 
 jobs:
-  run-pipeline:
+  trigger-pipeline:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 5
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: Trigger Live LeadMiner Autonomous Pipeline
+        run: |
+          echo "Triggering autonomous pipeline on https://leadminer-app.vercel.app/api/workers/pipeline..."
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://leadminer-app.vercel.app/api/workers/pipeline" \
+            -H "Authorization: Bearer 7d3a8f1e5c2b9a4d6f8e0b1c3a5d7e9f" \
+            -H "User-Agent: vercel-cron/1.0" \
+            -H "Content-Type: application/json")
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
+          HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
 
-      - name: Install Dependencies
-        run: npm ci
+          echo "HTTP Status: $HTTP_STATUS"
+          echo "Pipeline Response: $BODY"
 
-      - name: Check Creator Replies & Sync
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          GOOGLE_REDIRECT_URI: ${{ secrets.GOOGLE_REDIRECT_URI }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
-          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
-          DRY_RUN: 'true'
-        run: npm run worker:replies
-
-      - name: Run YouTube Discovery Batch
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
-          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
-          DRY_RUN: 'true'
-        run: npm run worker:discovery
-
-      - name: Run Email Verification & Qualification
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
-          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
-          DRY_RUN: 'true'
-        run: npm run worker:verification
-
-      - name: Run Personalized Outreach Sending
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          GOOGLE_REDIRECT_URI: ${{ secrets.GOOGLE_REDIRECT_URI }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
-          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
-          DRY_RUN: 'true'
-        run: npm run worker:outreach
-
-      - name: Run Cleanup & Watchdog
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
-          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
-        run: npm run worker:cleanup
+          if [ "$HTTP_STATUS" -ne 200 ]; then
+            echo "Pipeline failed with status $HTTP_STATUS"
+            exit 1
+          fi
+          echo "Autonomous pipeline completed successfully!"
