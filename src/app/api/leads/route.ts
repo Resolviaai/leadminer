@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "../../../db/client";
 import { leads, contacts, keywords } from "../../../db/schema";
-import { eq, desc, asc, lt, inArray, and, ilike, or } from "drizzle-orm";
+import { eq, desc, asc, lt, gte, inArray, notInArray, and, ilike, or } from "drizzle-orm";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -12,6 +12,10 @@ export async function GET(req: NextRequest) {
   const search = searchParams.get("search")?.trim();
   const sortBy = searchParams.get("sortBy") || "id";
   const sortDir = searchParams.get("sortDir") === "asc" ? "asc" : "desc";
+  const minSubs = parseInt(searchParams.get("minSubs") ?? "0", 10);
+  const country = searchParams.get("country");
+  const uncontactedOnly = searchParams.get("uncontactedOnly") === "true";
+  const deliverableOnly = searchParams.get("deliverableOnly") === "true";
   const hasWebsite = searchParams.get("hasWebsite") === "true";
   const hasSocial = searchParams.get("hasSocial") === "true";
   const hasPhone = searchParams.get("hasPhone") === "true";
@@ -30,6 +34,18 @@ export async function GET(req: NextRequest) {
 
     if (qualification && (qualification === "QUALIFIED" || qualification === "UNQUALIFIED" || qualification === "DISQUALIFIED")) {
       conditions.push(eq(leads.qualificationStatus, qualification));
+    }
+
+    if (minSubs > 0) {
+      conditions.push(gte(leads.subscriberCount, minSubs));
+    }
+
+    if (country) {
+      conditions.push(eq(leads.country, country));
+    }
+
+    if (uncontactedOnly) {
+      conditions.push(notInArray(leads.outreachStatus, ["CONTACTED", "REPLIED"]));
     }
 
     if (search) {
@@ -169,6 +185,10 @@ export async function GET(req: NextRequest) {
       data = data.filter((d) => d.emailStatus === "VALID" || d.emailStatus === "DOMAIN_VALID" || d.emailStatus === "MAILBOX_VERIFIED");
     } else if (filter === "FAILED") {
       data = data.filter((d) => d.emailStatus === "INVALID" || d.emailStatus === "FAILED" || d.emailStatus === "DISPOSABLE");
+    }
+
+    if (deliverableOnly) {
+      data = data.filter((d) => Boolean(d.email) && (d.emailStatus === "VALID" || d.emailStatus === "DOMAIN_VALID" || d.emailStatus === "MAILBOX_VERIFIED"));
     }
 
     if (hasWebsite) {

@@ -21,6 +21,8 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  ChevronDown,
+  Check,
   Instagram,
   Twitter,
   Linkedin,
@@ -137,12 +139,24 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
   const [selectedLeadForDetail, setSelectedLeadForDetail] = useState<Lead | null>(null);
   const [sortBy, setSortBy] = useState<"id" | "subscribers" | "discoveredAt" | "title" | "videos">("id");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [showSortPopover, setShowSortPopover] = useState(false);
+
+  // Pareto 80/20 Filtering State
+  const [filterMinSubs, setFilterMinSubs] = useState<number>(0);
+  const [filterCountryUs, setFilterCountryUs] = useState(false);
+  const [filterDeliverableOnly, setFilterDeliverableOnly] = useState(false);
+  const [filterUncontactedOnly, setFilterUncontactedOnly] = useState(false);
   const [filterWebsite, setFilterWebsite] = useState(false);
-  const [filterSocial, setFilterSocial] = useState(false);
   const [filterPhone, setFilterPhone] = useState(false);
   const [showFilterPopover, setShowFilterPopover] = useState(false);
 
-  const activeFilterCount = (filterWebsite ? 1 : 0) + (filterSocial ? 1 : 0) + (filterPhone ? 1 : 0);
+  const activeFilterCount =
+    (filterMinSubs > 0 ? 1 : 0) +
+    (filterCountryUs ? 1 : 0) +
+    (filterDeliverableOnly ? 1 : 0) +
+    (filterUncontactedOnly ? 1 : 0) +
+    (filterWebsite ? 1 : 0) +
+    (filterPhone ? 1 : 0);
 
   const handleSort = (column: "id" | "subscribers" | "discoveredAt" | "title" | "videos") => {
     if (sortBy === column) {
@@ -164,9 +178,20 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
     return <ArrowUpDown className="w-3 h-3 text-text-muted/40 group-hover:text-text-muted transition-colors" />;
   };
 
-  const resetSecondaryFilters = () => {
+  const getSortLabel = () => {
+    if (sortBy === "subscribers") return sortDir === "asc" ? "Least Subs" : "Most Subs";
+    if (sortBy === "discoveredAt") return "Newest";
+    if (sortBy === "title") return sortDir === "asc" ? "Name (A-Z)" : "Name (Z-A)";
+    if (sortBy === "videos") return "Most Videos";
+    return "Default";
+  };
+
+  const resetAllFilters = () => {
+    setFilterMinSubs(0);
+    setFilterCountryUs(false);
+    setFilterDeliverableOnly(false);
+    setFilterUncontactedOnly(false);
     setFilterWebsite(false);
-    setFilterSocial(false);
     setFilterPhone(false);
   };
 
@@ -187,6 +212,9 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
       if (menuOpenId !== null && !target.closest('[data-lead-menu="true"]')) {
         setMenuOpenId(null);
       }
+      if (showSortPopover && !target.closest('[data-sort-popover="true"]')) {
+        setShowSortPopover(false);
+      }
       if (showFilterPopover && !target.closest('[data-filter-popover="true"]')) {
         setShowFilterPopover(false);
       }
@@ -197,7 +225,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
       document.removeEventListener("mousedown", handleGlobalClick);
       document.removeEventListener("touchstart", handleGlobalClick);
     };
-  }, [menuOpenId, showFilterPopover]);
+  }, [menuOpenId, showSortPopover, showFilterPopover]);
 
   const fetchLeads = useCallback(
     async (isReset = false) => {
@@ -222,8 +250,11 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
       if (searchQuery.trim()) params.set("search", searchQuery.trim());
       if (sortBy !== "id") params.set("sortBy", sortBy);
       if (sortDir !== "desc") params.set("sortDir", sortDir);
+      if (filterMinSubs > 0) params.set("minSubs", filterMinSubs.toString());
+      if (filterCountryUs) params.set("country", "US");
+      if (filterDeliverableOnly) params.set("deliverableOnly", "true");
+      if (filterUncontactedOnly) params.set("uncontactedOnly", "true");
       if (filterWebsite) params.set("hasWebsite", "true");
-      if (filterSocial) params.set("hasSocial", "true");
       if (filterPhone) params.set("hasPhone", "true");
 
       try {
@@ -255,7 +286,19 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
         setLoading(false);
       }
     },
-    [items, activeTab, searchQuery, sortBy, sortDir, filterWebsite, filterSocial, filterPhone]
+    [
+      items,
+      activeTab,
+      searchQuery,
+      sortBy,
+      sortDir,
+      filterMinSubs,
+      filterCountryUs,
+      filterDeliverableOnly,
+      filterUncontactedOnly,
+      filterWebsite,
+      filterPhone,
+    ]
   );
 
   const handleTabChange = (tab: FilterTab) => {
@@ -269,7 +312,18 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
       fetchLeads(true);
     }, 300);
     return () => clearTimeout(timer);
-  }, [searchQuery, activeTab, sortBy, sortDir, filterWebsite, filterSocial, filterPhone]);
+  }, [
+    searchQuery,
+    activeTab,
+    sortBy,
+    sortDir,
+    filterMinSubs,
+    filterCountryUs,
+    filterDeliverableOnly,
+    filterUncontactedOnly,
+    filterWebsite,
+    filterPhone,
+  ]);
 
   const handleContainerScroll = (e: React.UIEvent<HTMLDivElement>) => {
     if (!hasMore || loading || isLoadingRef.current) return;
@@ -501,7 +555,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
 
         <div className="flex items-center gap-2">
           {/* Search */}
-          <div className="relative flex-1 md:w-64">
+          <div className="relative flex-1 md:w-56">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
             <input
               type="text"
@@ -521,7 +575,62 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
             )}
           </div>
 
-          {/* Filter Popover Button */}
+          {/* Pareto Sort Dropdown */}
+          <div className="relative" data-sort-popover="true">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowSortPopover(!showSortPopover)}
+              className="h-9 px-2.5 sm:px-3 text-xs gap-1.5 shrink-0 cursor-pointer active:scale-95 transition-transform border-border bg-surface-100"
+            >
+              <ArrowUpDown className="w-3.5 h-3.5 text-text-muted" />
+              <span className="hidden sm:inline text-text-secondary">Sort:</span>
+              <span className="font-medium text-text-main truncate max-w-[95px]">{getSortLabel()}</span>
+              <ChevronDown className="w-3 h-3 text-text-muted opacity-60 ml-0.5" />
+            </Button>
+
+            {showSortPopover && (
+              <>
+                <div
+                  className="fixed inset-0 z-30 cursor-default"
+                  onClick={() => setShowSortPopover(false)}
+                />
+                <div className="absolute right-0 mt-1.5 w-56 bg-surface-100 border border-border rounded-xl shadow-xl p-1.5 z-40 text-xs space-y-0.5 animate-in fade-in zoom-in-95">
+                  {[
+                    { label: "Default (Discovered)", col: "id" as const, dir: "desc" as const },
+                    { label: "Most Subscribers", col: "subscribers" as const, dir: "desc" as const },
+                    { label: "Least Subscribers", col: "subscribers" as const, dir: "asc" as const },
+                    { label: "Newest Discovered", col: "discoveredAt" as const, dir: "desc" as const },
+                    { label: "Channel Name (A → Z)", col: "title" as const, dir: "asc" as const },
+                    { label: "Most Videos", col: "videos" as const, dir: "desc" as const },
+                  ].map((opt) => {
+                    const isSelected = sortBy === opt.col && sortDir === opt.dir;
+                    return (
+                      <button
+                        key={`${opt.col}_${opt.dir}`}
+                        type="button"
+                        onClick={() => {
+                          setSortBy(opt.col);
+                          setSortDir(opt.dir);
+                          setShowSortPopover(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
+                          isSelected
+                            ? "bg-primary/10 text-primary font-semibold"
+                            : "text-text-main hover:bg-surface-200"
+                        }`}
+                      >
+                        <span>{opt.label}</span>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-primary" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Pareto Filter Popover Button */}
           <div className="relative" data-filter-popover="true">
             <Button
               type="button"
@@ -544,50 +653,129 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                   className="fixed inset-0 z-30 cursor-default"
                   onClick={() => setShowFilterPopover(false)}
                 />
-                <div className="absolute right-0 mt-1.5 w-60 bg-surface-100 border border-border rounded-xl shadow-xl p-3.5 z-40 text-xs space-y-3 animate-in fade-in zoom-in-95">
-                  <div className="flex items-center justify-between border-b border-border/60 pb-2">
-                    <span className="font-semibold text-text-main">Filter Leads</span>
+                <div className="absolute right-0 mt-1.5 w-72 sm:w-80 bg-surface-100 border border-border rounded-xl shadow-2xl p-4 z-40 text-xs space-y-3.5 animate-in fade-in zoom-in-95">
+                  <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
+                    <div className="flex items-center gap-1.5">
+                      <SlidersHorizontal className="w-3.5 h-3.5 text-primary" />
+                      <span className="font-semibold text-text-main text-sm">Filter Leads</span>
+                    </div>
                     {activeFilterCount > 0 && (
                       <button
                         type="button"
-                        onClick={resetSecondaryFilters}
-                        className="text-[11px] text-primary hover:underline cursor-pointer"
+                        onClick={resetAllFilters}
+                        className="text-[11px] text-primary hover:underline cursor-pointer font-medium"
                       >
                         Reset All
                       </button>
                     )}
                   </div>
 
-                  <div className="space-y-2.5">
+                  {/* 1. Audience Size (Pareto Preset Pills) */}
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                      Audience Size (Subscribers)
+                    </span>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {[
+                        { label: "Any", val: 0 },
+                        { label: "10K+", val: 10000 },
+                        { label: "50K+", val: 50000 },
+                        { label: "100K+", val: 100000 },
+                      ].map((tier) => (
+                        <button
+                          key={tier.val}
+                          type="button"
+                          onClick={() => setFilterMinSubs(tier.val)}
+                          className={`py-1.5 px-2 rounded-lg text-xs font-medium border text-center transition-all cursor-pointer ${
+                            filterMinSubs === tier.val
+                              ? "bg-primary text-primary-foreground border-primary shadow-xs font-semibold"
+                              : "bg-surface-200/80 border-border text-text-secondary hover:text-text-main hover:bg-surface-300"
+                          }`}
+                        >
+                          {tier.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 2. Target Location */}
+                  <div className="space-y-1.5 pt-2 border-t border-border/60">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                      Location / Targeting
+                    </span>
                     <label className="flex items-center gap-2.5 cursor-pointer select-none text-text-secondary hover:text-text-main">
                       <input
                         type="checkbox"
-                        checked={filterWebsite}
-                        onChange={(e) => setFilterWebsite(e.target.checked)}
+                        checked={filterCountryUs}
+                        onChange={(e) => setFilterCountryUs(e.target.checked)}
                         className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5"
                       />
-                      <span>Official Website</span>
+                      <span>US Creators Only</span>
+                    </label>
+                  </div>
+
+                  {/* 3. Contact & Outreach Status (Pareto Vital Few) */}
+                  <div className="space-y-2 pt-2 border-t border-border/60">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                      Contact & Outreach
+                    </span>
+                    <label className="flex items-center gap-2.5 cursor-pointer select-none text-text-secondary hover:text-text-main">
+                      <input
+                        type="checkbox"
+                        checked={filterDeliverableOnly}
+                        onChange={(e) => setFilterDeliverableOnly(e.target.checked)}
+                        className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5"
+                      />
+                      <span>Deliverable Email Only</span>
                     </label>
 
                     <label className="flex items-center gap-2.5 cursor-pointer select-none text-text-secondary hover:text-text-main">
                       <input
                         type="checkbox"
-                        checked={filterSocial}
-                        onChange={(e) => setFilterSocial(e.target.checked)}
+                        checked={filterUncontactedOnly}
+                        onChange={(e) => setFilterUncontactedOnly(e.target.checked)}
                         className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5"
                       />
-                      <span>Social Profiles</span>
+                      <span>Uncontacted Leads Only</span>
                     </label>
+                  </div>
 
-                    <label className="flex items-center gap-2.5 cursor-pointer select-none text-text-secondary hover:text-text-main">
-                      <input
-                        type="checkbox"
-                        checked={filterPhone}
-                        onChange={(e) => setFilterPhone(e.target.checked)}
-                        className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5"
-                      />
-                      <span>Phone / WhatsApp</span>
-                    </label>
+                  {/* 4. Multi-Channel Enablers */}
+                  <div className="space-y-2 pt-2 border-t border-border/60">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                      Other Discovered Channels
+                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="flex items-center gap-2 cursor-pointer select-none text-text-secondary hover:text-text-main">
+                        <input
+                          type="checkbox"
+                          checked={filterPhone}
+                          onChange={(e) => setFilterPhone(e.target.checked)}
+                          className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5"
+                        />
+                        <span className="truncate">Phone / WhatsApp</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer select-none text-text-secondary hover:text-text-main">
+                        <input
+                          type="checkbox"
+                          checked={filterWebsite}
+                          onChange={(e) => setFilterWebsite(e.target.checked)}
+                          className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5"
+                        />
+                        <span className="truncate">Website</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-border/60 flex items-center justify-end">
+                    <Button
+                      size="sm"
+                      onClick={() => setShowFilterPopover(false)}
+                      className="w-full h-8 text-xs"
+                    >
+                      Done
+                    </Button>
                   </div>
                 </div>
               </>
@@ -595,6 +783,98 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
           </div>
         </div>
       </div>
+
+      {/* Active Filter Chips Bar (Pareto Instant Visibility & Dismissal) */}
+      {activeFilterCount > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap pt-0.5 animate-in fade-in slide-in-from-top-1 text-xs shrink-0">
+          <span className="text-[11px] text-text-muted">Active Filters:</span>
+          {filterMinSubs > 0 && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-medium">
+              {filterMinSubs >= 1000 ? `${filterMinSubs / 1000}K+ Subs` : `${filterMinSubs}+ Subs`}
+              <button
+                type="button"
+                onClick={() => setFilterMinSubs(0)}
+                className="hover:text-primary/70 cursor-pointer ml-0.5"
+                title="Remove filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+          {filterCountryUs && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-medium">
+              US Only
+              <button
+                type="button"
+                onClick={() => setFilterCountryUs(false)}
+                className="hover:text-primary/70 cursor-pointer ml-0.5"
+                title="Remove filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+          {filterDeliverableOnly && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-medium">
+              Deliverable Email
+              <button
+                type="button"
+                onClick={() => setFilterDeliverableOnly(false)}
+                className="hover:text-primary/70 cursor-pointer ml-0.5"
+                title="Remove filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+          {filterUncontactedOnly && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-medium">
+              Uncontacted
+              <button
+                type="button"
+                onClick={() => setFilterUncontactedOnly(false)}
+                className="hover:text-primary/70 cursor-pointer ml-0.5"
+                title="Remove filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+          {filterPhone && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-medium">
+              Phone / WhatsApp
+              <button
+                type="button"
+                onClick={() => setFilterPhone(false)}
+                className="hover:text-primary/70 cursor-pointer ml-0.5"
+                title="Remove filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+          {filterWebsite && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-medium">
+              Has Website
+              <button
+                type="button"
+                onClick={() => setFilterWebsite(false)}
+                className="hover:text-primary/70 cursor-pointer ml-0.5"
+                title="Remove filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={resetAllFilters}
+            className="text-[11px] text-text-muted hover:text-primary hover:underline ml-1 cursor-pointer font-medium"
+          >
+            Clear all
+          </button>
+        </div>
+      )}
 
       {/* Floating Bulk Action Toolbar */}
       {selectedIds.size > 0 && (
