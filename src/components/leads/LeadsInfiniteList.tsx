@@ -554,9 +554,9 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
           ))}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 w-full md:w-auto">
           {/* Search */}
-          <div className="relative flex-1 md:w-56">
+          <div className="relative w-full md:w-56">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
             <input
               type="text"
@@ -569,26 +569,29 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
               <button
                 type="button"
                 onClick={() => setSearchQuery("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main p-0.5 cursor-pointer flex items-center justify-center"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main p-0.5 cursor-pointer flex items-center justify-center min-w-[28px] min-h-[28px]"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
 
-          {/* Pareto Sort Dropdown */}
-          <div className="relative" data-sort-popover="true">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setShowSortPopover(!showSortPopover)}
-              className="h-9 px-2.5 sm:px-3 text-xs gap-1.5 shrink-0 cursor-pointer active:scale-95 transition-transform border-border bg-surface-100"
-            >
-              <ArrowUpDown className="w-3.5 h-3.5 text-text-muted" />
-              <span className="hidden sm:inline text-text-secondary">Sort:</span>
-              <span className="font-medium text-text-main truncate max-w-[95px]">{getSortLabel()}</span>
-              <ChevronDown className="w-3 h-3 text-text-muted opacity-60 ml-0.5" />
-            </Button>
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            {/* Pareto Sort Dropdown */}
+            <div className="relative flex-1 md:flex-initial" data-sort-popover="true">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowSortPopover(!showSortPopover)}
+                className="w-full md:w-auto h-9 px-2.5 sm:px-3 text-xs gap-1.5 shrink-0 cursor-pointer active:scale-95 transition-transform border-border bg-surface-100 justify-between md:justify-center"
+              >
+                <div className="flex items-center gap-1.5 truncate">
+                  <ArrowUpDown className="w-3.5 h-3.5 text-text-muted shrink-0" />
+                  <span className="hidden sm:inline text-text-secondary">Sort:</span>
+                  <span className="font-medium text-text-main truncate max-w-[95px]">{getSortLabel()}</span>
+                </div>
+                <ChevronDown className="w-3 h-3 text-text-muted opacity-60 ml-0.5 shrink-0" />
+              </Button>
 
             {showSortPopover && (
               <>
@@ -632,15 +635,17 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
           </div>
 
           {/* Pareto Filter Popover Button */}
-          <div className="relative" data-filter-popover="true">
+          <div className="relative flex-1 md:flex-initial" data-filter-popover="true">
             <Button
               type="button"
               variant={activeFilterCount > 0 ? "default" : "outline"}
               onClick={() => setShowFilterPopover(!showFilterPopover)}
-              className="h-9 px-2.5 sm:px-3 text-xs gap-1.5 shrink-0 cursor-pointer active:scale-95 transition-transform"
+              className="w-full md:w-auto h-9 px-2.5 sm:px-3 text-xs gap-1.5 shrink-0 cursor-pointer active:scale-95 transition-transform justify-between md:justify-center"
             >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Filters</span>
+              <div className="flex items-center gap-1.5">
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span className="inline sm:inline">Filters</span>
+              </div>
               {activeFilterCount > 0 && (
                 <span className="px-1.5 py-0.2 rounded-full bg-primary-foreground text-primary font-mono text-[10px] font-bold">
                   {activeFilterCount}
@@ -856,6 +861,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
             )}
           </div>
         </div>
+        </div>
       </div>
 
       {/* Active Filter Chips Bar (Pareto Instant Visibility & Dismissal) */}
@@ -1039,7 +1045,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                       e.stopPropagation();
                       toggleSelect(lead.id);
                     }}
-                    className="text-text-muted hover:text-primary mt-0.5 cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center -ml-1.5"
+                    className="text-text-muted hover:text-primary mt-0.5 cursor-pointer min-h-[40px] min-w-[40px] flex items-center justify-center -ml-1.5 active:scale-95 transition-transform"
                     aria-label={selectedIds.has(lead.id) ? "Deselect lead" : "Select lead"}
                   >
                     {selectedIds.has(lead.id) ? (
@@ -1080,7 +1086,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                         target="_blank"
                         rel="noreferrer"
                         onClick={(e) => e.stopPropagation()}
-                        className="text-text-muted hover:text-text-main inline-flex items-center justify-center p-1 rounded min-w-[28px] min-h-[28px]"
+                        className="text-text-muted hover:text-text-main active:scale-95 inline-flex items-center justify-center p-1.5 rounded-md min-w-[36px] min-h-[36px] hover:bg-surface-200 active:bg-surface-300 transition-all"
                         aria-label={`Open ${lead.channelTitle} on YouTube`}
                       >
                         <ExternalLink className="w-3.5 h-3.5" />

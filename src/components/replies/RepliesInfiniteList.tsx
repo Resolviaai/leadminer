@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { Loader2, ExternalLink } from "lucide-react";
+import { Loader2, ExternalLink, Inbox } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -133,8 +133,18 @@ export function RepliesInfiniteList({ initialData, total }: Props) {
         {showSkeletons ? (
           Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)
         ) : items.length === 0 ? (
-          <Card className="p-8 text-center text-xs text-text-muted">
-            No creator replies recorded yet.
+          <Card className="p-8 sm:p-10 text-center border-border/80 bg-surface-100/70">
+            <div className="w-12 h-12 rounded-2xl bg-surface-200 border border-border flex items-center justify-center text-text-muted mx-auto mb-3 shadow-inner">
+              <Inbox className="w-6 h-6 text-primary opacity-80" />
+            </div>
+            <h3 className="font-semibold text-sm text-text-main">No creator replies yet</h3>
+            <p className="text-xs text-text-muted max-w-sm mx-auto mt-1.5 leading-relaxed">
+              When contacted creators reply to your outreach emails, their messages will appear here and trigger instant alerts.
+            </p>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400 font-medium mt-4">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Inbox Monitoring Active</span>
+            </div>
           </Card>
         ) : (
           items.map((r) => (
@@ -160,7 +170,7 @@ export function RepliesInfiniteList({ initialData, total }: Props) {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1">
+                  <Button size="sm" variant="outline" className="min-h-[36px] px-3 text-xs gap-1.5 active:scale-95">
                     <span>Open in Gmail</span>
                     <ExternalLink className="w-3 h-3" />
                   </Button>
@@ -189,8 +199,16 @@ export function RepliesInfiniteList({ initialData, total }: Props) {
                 Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} />)
               ) : items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center text-text-muted">
-                    No creator replies recorded yet.
+                  <TableCell colSpan={5} className="h-44 text-center">
+                    <div className="flex flex-col items-center justify-center space-y-2 py-4">
+                      <div className="w-10 h-10 rounded-xl bg-surface-200 border border-border flex items-center justify-center text-text-muted">
+                        <Inbox className="w-5 h-5 text-primary opacity-80" />
+                      </div>
+                      <span className="font-medium text-xs text-text-main">No creator replies recorded yet</span>
+                      <span className="text-[11px] text-text-muted max-w-xs">
+                        Replies sync automatically every cycle with instant Telegram and web push dispatch.
+                      </span>
+                    </div>
                   </TableCell>
                 </TableRow>
               ) : (

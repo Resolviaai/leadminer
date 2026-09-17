@@ -160,7 +160,9 @@ export function JobsInfiniteList({ initialData, total }: Props) {
                 </div>
                 <div className="text-right">
                   <span className="text-text-muted block text-[10px]">Failed</span>
-                  <span className="font-mono text-danger">{j.itemsFailed}</span>
+                  <span className={`font-mono ${(j.itemsFailed ?? 0) > 0 ? "text-danger font-semibold" : "text-text-muted"}`}>
+                    {j.itemsFailed ?? 0}
+                  </span>
                 </div>
               </div>
               <div className="flex items-center justify-between text-[11px] text-text-muted pt-1">
@@ -203,7 +205,9 @@ export function JobsInfiniteList({ initialData, total }: Props) {
                     <TableCell className="font-medium text-text-main">{j.jobType}</TableCell>
                     <TableCell>{getStatusBadge(j.status)}</TableCell>
                     <TableCell className="text-right font-mono text-text-main">{j.itemsProcessed}</TableCell>
-                    <TableCell className="text-right font-mono text-danger">{j.itemsFailed}</TableCell>
+                    <TableCell className={`text-right font-mono ${(j.itemsFailed ?? 0) > 0 ? "text-danger font-semibold" : "text-text-muted"}`}>
+                      {j.itemsFailed ?? 0}
+                    </TableCell>
                     <TableCell className="text-text-secondary text-[11px]">
                       {j.startedAt ? new Date(j.startedAt).toLocaleTimeString() : "—"}
                     </TableCell>

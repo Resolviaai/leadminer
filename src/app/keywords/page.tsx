@@ -67,24 +67,24 @@ export default async function KeywordsPage() {
         <RunDiscoveryButton />
       </Card>
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 shrink-0">
-        <Card className="p-2 sm:px-3 sm:py-2">
+      <div className="flex gap-2 overflow-x-auto pb-1 sm:pb-0 sm:grid sm:grid-cols-5 sm:gap-2 shrink-0 scrollbar-none no-scrollbar -mx-1 px-1 sm:mx-0 sm:px-0">
+        <Card className="p-2 sm:px-3 sm:py-2 min-w-[110px] sm:min-w-0 flex-1 shrink-0">
           <span className="text-[10px] text-text-muted block font-medium">Total</span>
           <span className="text-base font-bold text-text-main font-mono tabular-nums">{counts.total.toLocaleString()}</span>
         </Card>
-        <Card className="p-2 sm:px-3 sm:py-2">
+        <Card className="p-2 sm:px-3 sm:py-2 min-w-[110px] sm:min-w-0 flex-1 shrink-0">
           <span className="text-[10px] text-warning block font-medium">Pending Queue</span>
           <span className="text-base font-bold text-warning font-mono tabular-nums">{counts.pending.toLocaleString()}</span>
         </Card>
-        <Card className="p-2 sm:px-3 sm:py-2">
+        <Card className="p-2 sm:px-3 sm:py-2 min-w-[110px] sm:min-w-0 flex-1 shrink-0">
           <span className="text-[10px] text-primary block font-medium">Searched</span>
           <span className="text-base font-bold text-primary font-mono tabular-nums">{counts.completed.toLocaleString()}</span>
         </Card>
-        <Card className="p-2 sm:px-3 sm:py-2">
+        <Card className="p-2 sm:px-3 sm:py-2 min-w-[110px] sm:min-w-0 flex-1 shrink-0">
           <span className="text-[10px] text-text-muted block font-medium">Paused</span>
           <span className="text-base font-bold text-text-muted font-mono tabular-nums">{counts.paused.toLocaleString()}</span>
         </Card>
-        <Card className="p-2 sm:px-3 sm:py-2 col-span-2 sm:col-span-1">
+        <Card className="p-2 sm:px-3 sm:py-2 min-w-[110px] sm:min-w-0 flex-1 shrink-0">
           <span className="text-[10px] text-danger block font-medium">Needs Retry</span>
           <span className="text-base font-bold text-danger font-mono tabular-nums">{counts.failed.toLocaleString()}</span>
         </Card>

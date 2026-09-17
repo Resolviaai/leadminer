@@ -121,7 +121,7 @@ export default async function OverviewPage() {
             </CardTitle>
             <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary shrink-0 ml-1" />
           </CardHeader>
-          <CardContent className="p-3 pt-0 sm:p-4 sm:pt-0 space-y-2 sm:space-y-3">
+          <CardContent className="p-3 pt-0 sm:p-4 sm:pt-0 space-y-2 sm:space-y-2.5">
             <div className="flex items-baseline justify-between gap-1 flex-wrap">
               <span className="text-lg sm:text-2xl font-bold text-text-main tracking-tight font-mono tabular-nums">
                 {stats.keywords.total.toLocaleString()}
@@ -146,23 +146,16 @@ export default async function OverviewPage() {
             </CardTitle>
             <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary shrink-0 ml-1" />
           </CardHeader>
-          <CardContent className="p-3 pt-0 sm:p-4 sm:pt-0 space-y-2 sm:space-y-3">
+          <CardContent className="p-3 pt-0 sm:p-4 sm:pt-0 space-y-2 sm:space-y-2.5">
             <div className="flex items-baseline justify-between gap-1 flex-wrap">
               <span className="text-lg sm:text-2xl font-bold text-text-main tracking-tight font-mono tabular-nums">
                 {stats.leads.total.toLocaleString()}
               </span>
-              <Badge variant="success" className="text-[9px] sm:text-[10px] px-1 py-0 h-4">
+              <span className="text-[10px] sm:text-xs text-emerald-400 font-mono tabular-nums font-medium">
                 {stats.leads.qualified} qualified
-              </Badge>
+              </span>
             </div>
-            <div className="h-1.5 sm:h-2 w-full rounded-full bg-surface-200 border border-border/40 overflow-hidden">
-              <div
-                className="h-full bg-primary rounded-full"
-                style={{
-                  width: `${stats.leads.total > 0 ? (stats.leads.qualified / stats.leads.total) * 100 : 0}%`,
-                }}
-              />
-            </div>
+            <Progress value={stats.leads.qualified} max={stats.leads.total || 1} className="h-1.5 sm:h-2" />
             <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-text-muted pt-0.5">
               <span>Verified emails</span>
               <span className="font-mono tabular-nums text-text-main font-semibold">{stats.contacts.verified}</span>
@@ -178,7 +171,7 @@ export default async function OverviewPage() {
             </CardTitle>
             <Send className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary shrink-0 ml-1" />
           </CardHeader>
-          <CardContent className="p-3 pt-0 sm:p-4 sm:pt-0 space-y-2 sm:space-y-3">
+          <CardContent className="p-3 pt-0 sm:p-4 sm:pt-0 space-y-2 sm:space-y-2.5">
             <div className="flex items-baseline justify-between gap-1 flex-wrap">
               <span className="text-lg sm:text-2xl font-bold text-text-main tracking-tight font-mono tabular-nums">
                 {stats.outreach.sentTotal.toLocaleString()}
@@ -187,14 +180,13 @@ export default async function OverviewPage() {
                 {stats.outreach.sentToday} today
               </span>
             </div>
-            <div className="h-1.5 sm:h-2 w-full rounded-full bg-surface-200 border border-border/40 overflow-hidden">
-              <div
-                className="h-full bg-primary rounded-full"
-                style={{ width: `${Math.min(100, stats.outreach.sentTotal > 0 ? 100 : 0)}%` }}
-              />
-            </div>
+            <Progress
+              value={stats.outreach.sentTotal}
+              max={Math.max(1, stats.outreach.sentTotal)}
+              className="h-1.5 sm:h-2"
+            />
             <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-text-muted pt-0.5">
-              <span>Active</span>
+              <span>Active campaigns</span>
               <span className="font-mono tabular-nums text-text-secondary">{stats.campaigns.active}</span>
             </div>
           </CardContent>
@@ -208,7 +200,7 @@ export default async function OverviewPage() {
             </CardTitle>
             <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary shrink-0 ml-1" />
           </CardHeader>
-          <CardContent className="p-3 pt-0 sm:p-4 sm:pt-0 space-y-2 sm:space-y-3">
+          <CardContent className="p-3 pt-0 sm:p-4 sm:pt-0 space-y-2 sm:space-y-2.5">
             <div className="flex items-baseline justify-between gap-1 flex-wrap">
               <span className="text-lg sm:text-2xl font-bold text-text-main tracking-tight font-mono tabular-nums">
                 {stats.replies.totalReplies.toLocaleString()}
@@ -217,15 +209,15 @@ export default async function OverviewPage() {
                 {replyRate}% rate
               </span>
             </div>
-            <div className="h-1.5 sm:h-2 w-full rounded-full bg-surface-200 border border-border/40 overflow-hidden">
-              <div
-                className="h-full bg-warning rounded-full"
-                style={{ width: `${Math.min(100, parseFloat(replyRate) * 5)}%` }}
-              />
-            </div>
+            <Progress
+              value={parseFloat(replyRate)}
+              max={20}
+              className="h-1.5 sm:h-2"
+              indicatorClassName="bg-warning"
+            />
             <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-text-muted pt-0.5">
-              <span>Status</span>
-              <span className="font-mono text-primary font-medium">Monitoring</span>
+              <span>Inbox status</span>
+              <span className="font-mono text-primary font-medium">Active</span>
             </div>
           </CardContent>
         </Card>

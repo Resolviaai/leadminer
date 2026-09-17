@@ -281,9 +281,9 @@ export function GmailAccountsClient({
                           <Button
                             size="sm"
                             variant="secondary"
-                            className="h-8 px-2.5 text-[11px] gap-1.5 active:scale-95"
+                            className="min-h-[38px] sm:h-8 px-3 text-xs gap-1.5 active:scale-95"
                           >
-                            <RotateCw className="w-3 h-3" />
+                            <RotateCw className="w-3.5 h-3.5" />
                             <span>Reconnect</span>
                           </Button>
                         </a>
@@ -291,7 +291,7 @@ export function GmailAccountsClient({
                           size="sm"
                           variant="ghost"
                           onClick={() => handleOpenDisconnectModal(acc, true)}
-                          className="h-8 px-2 text-[11px] text-danger hover:text-danger hover:bg-danger/10 active:scale-95"
+                          className="min-h-[38px] sm:h-8 px-2.5 text-xs text-danger hover:text-danger hover:bg-danger/10 active:scale-95"
                           title="Permanently remove record"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -302,7 +302,7 @@ export function GmailAccountsClient({
                         size="sm"
                         variant="ghost"
                         onClick={() => handleOpenDisconnectModal(acc, false)}
-                        className="h-8 px-2.5 text-[11px] gap-1.5 text-text-secondary hover:text-danger hover:bg-danger/10 active:scale-95 transition-colors"
+                        className="min-h-[38px] sm:h-8 px-3 text-xs gap-1.5 text-text-secondary hover:text-danger hover:bg-danger/10 active:scale-95 transition-all"
                       >
                         <Unlink className="w-3.5 h-3.5 text-danger" />
                         <span>Disconnect</span>

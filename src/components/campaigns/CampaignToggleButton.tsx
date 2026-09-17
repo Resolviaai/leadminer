@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -51,7 +51,7 @@ export function CampaignToggleButton({ campaignId, initialStatus }: Props) {
       size="sm"
       variant="outline"
       onClick={handleToggle}
-      className="gap-1.5 h-8 text-xs active:scale-[0.98] transition-all cursor-pointer select-none"
+      className="gap-1.5 min-h-[38px] sm:h-8 px-3 text-xs active:scale-[0.98] transition-all cursor-pointer select-none"
     >
       {isPending ? (
         <Loader2 className="w-3 h-3 animate-spin" />

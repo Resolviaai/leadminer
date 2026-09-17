@@ -94,3 +94,9 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #3E3E3E;
 }
+
+@layer utilities {
+  .active-tactile {
+    @apply active:scale-[0.98] transition-transform duration-75 ease-out;
+  }
+}

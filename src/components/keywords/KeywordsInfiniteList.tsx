@@ -476,9 +476,9 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
           ))}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 w-full md:w-auto">
           {/* Search Input */}
-          <div className="relative flex-1 md:w-56">
+          <div className="relative w-full md:w-56">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
             <input
               type="text"
@@ -491,26 +491,29 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
               <button
                 type="button"
                 onClick={() => setSearchQuery("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main p-0.5 cursor-pointer flex items-center justify-center"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main p-0.5 cursor-pointer flex items-center justify-center min-w-[28px] min-h-[28px]"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
 
-          {/* Pareto Sort Dropdown */}
-          <div className="relative" data-sort-popover="true">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setShowSortPopover(!showSortPopover)}
-              className="h-9 px-2.5 sm:px-3 text-xs gap-1.5 shrink-0 cursor-pointer active:scale-95 transition-transform border-border bg-surface-100"
-            >
-              <ArrowUpDown className="w-3.5 h-3.5 text-text-muted" />
-              <span className="hidden sm:inline text-text-secondary">Sort:</span>
-              <span className="font-medium text-text-main truncate max-w-[95px]">{getSortLabel()}</span>
-              <ChevronDown className="w-3 h-3 text-text-muted opacity-60 ml-0.5" />
-            </Button>
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            {/* Pareto Sort Dropdown */}
+            <div className="relative flex-1 md:flex-initial" data-sort-popover="true">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowSortPopover(!showSortPopover)}
+                className="w-full md:w-auto h-9 px-2.5 sm:px-3 text-xs gap-1.5 shrink-0 cursor-pointer active:scale-95 transition-transform border-border bg-surface-100 justify-between md:justify-center"
+              >
+                <div className="flex items-center gap-1.5 truncate">
+                  <ArrowUpDown className="w-3.5 h-3.5 text-text-muted shrink-0" />
+                  <span className="hidden sm:inline text-text-secondary">Sort:</span>
+                  <span className="font-medium text-text-main truncate max-w-[95px]">{getSortLabel()}</span>
+                </div>
+                <ChevronDown className="w-3 h-3 text-text-muted opacity-60 ml-0.5 shrink-0" />
+              </Button>
 
             {showSortPopover && (
               <>
@@ -555,15 +558,17 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
           </div>
 
           {/* Pareto Filter Popover Button */}
-          <div className="relative" data-filter-popover="true">
+          <div className="relative flex-1 md:flex-initial" data-filter-popover="true">
             <Button
               type="button"
               variant={activeFilterCount > 0 ? "default" : "outline"}
               onClick={() => setShowFilterPopover(!showFilterPopover)}
-              className="h-9 px-2.5 sm:px-3 text-xs gap-1.5 shrink-0 cursor-pointer active:scale-95 transition-transform"
+              className="w-full md:w-auto h-9 px-2.5 sm:px-3 text-xs gap-1.5 shrink-0 cursor-pointer active:scale-95 transition-transform justify-between md:justify-center"
             >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Filters</span>
+              <div className="flex items-center gap-1.5">
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span className="inline sm:inline">Filters</span>
+              </div>
               {activeFilterCount > 0 && (
                 <span className="px-1.5 py-0.2 rounded-full bg-primary-foreground text-primary font-mono text-[10px] font-bold">
                   {activeFilterCount}
@@ -748,12 +753,13 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
           {/* Add Keyword Button */}
           <Button
             onClick={() => setShowAddModal(true)}
-            className="gap-1.5 h-9 px-3.5 text-xs font-semibold shrink-0 active:scale-[0.98] shadow-sm cursor-pointer"
+            className="gap-1.5 h-9 px-3.5 text-xs font-semibold shrink-0 active:scale-[0.98] shadow-sm cursor-pointer flex-none"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
             <span className="hidden sm:inline">Add Keyword</span>
             <span className="sm:hidden">Add</span>
           </Button>
+        </div>
         </div>
       </div>
 

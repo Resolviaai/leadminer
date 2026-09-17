@@ -442,15 +442,18 @@ export function TemplatesManager({
             <span className="font-medium text-text-secondary">custom_line</span> is AI personalized with Gemini
           </span>
         </div>
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 sm:flex-wrap">
-          {VARIABLES.map((v) => (
-            <code
-              key={v.token}
-              className="text-[11px] font-mono px-2.5 py-1 rounded-md bg-brand-soft border border-primary/20 text-brand-accent shrink-0 select-all"
-            >
-              {v.token}
-            </code>
-          ))}
+        <div className="relative">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 sm:flex-wrap">
+            {VARIABLES.map((v) => (
+              <code
+                key={v.token}
+                className="text-[11px] font-mono px-2.5 py-1 rounded-md bg-brand-soft border border-primary/20 text-brand-accent shrink-0 select-all cursor-copy active:scale-95 transition-transform"
+              >
+                {v.token}
+              </code>
+            ))}
+          </div>
+          <div className="sm:hidden absolute right-0 top-0 bottom-1 w-6 bg-gradient-to-l from-surface-100 to-transparent pointer-events-none" />
         </div>
       </Card>
 
