@@ -653,29 +653,39 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                   className="fixed inset-0 z-30 cursor-default"
                   onClick={() => setShowFilterPopover(false)}
                 />
-                <div className="absolute right-0 mt-1.5 w-72 sm:w-80 bg-surface-100 border border-border rounded-xl shadow-2xl p-4 z-40 text-xs space-y-3.5 animate-in fade-in zoom-in-95">
-                  <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
+                <div className="absolute right-0 mt-1.5 w-64 sm:w-72 bg-surface-100 border border-border rounded-xl shadow-2xl p-3 z-40 text-xs space-y-2 animate-in fade-in zoom-in-95 max-h-[calc(100vh-180px)] overflow-y-auto">
+                  <div className="flex items-center justify-between border-b border-border/60 pb-2">
                     <div className="flex items-center gap-1.5">
                       <SlidersHorizontal className="w-3.5 h-3.5 text-primary" />
-                      <span className="font-semibold text-text-main text-sm">Filter Leads</span>
+                      <span className="font-semibold text-text-main text-xs">Filter Leads</span>
                     </div>
-                    {activeFilterCount > 0 && (
+                    <div className="flex items-center gap-2">
+                      {activeFilterCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={resetAllFilters}
+                          className="text-[10px] text-primary hover:underline cursor-pointer font-medium"
+                        >
+                          Reset
+                        </button>
+                      )}
                       <button
                         type="button"
-                        onClick={resetAllFilters}
-                        className="text-[11px] text-primary hover:underline cursor-pointer font-medium"
+                        onClick={() => setShowFilterPopover(false)}
+                        className="text-text-muted hover:text-text-main p-0.5 cursor-pointer rounded"
+                        title="Close"
                       >
-                        Reset All
+                        <X className="w-3.5 h-3.5" />
                       </button>
-                    )}
+                    </div>
                   </div>
 
                   {/* 1. Audience Size (Pareto Preset Pills) */}
-                  <div className="space-y-1.5">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-                      Audience Size (Subscribers)
+                  <div className="space-y-1">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-text-muted block">
+                      Audience Size
                     </span>
-                    <div className="grid grid-cols-4 gap-1.5">
+                    <div className="grid grid-cols-4 gap-1">
                       {[
                         { label: "Any", val: 0 },
                         { label: "10K+", val: 10000 },
@@ -686,10 +696,10 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                           key={tier.val}
                           type="button"
                           onClick={() => setFilterMinSubs(tier.val)}
-                          className={`py-1.5 px-2 rounded-lg text-xs font-medium border text-center transition-all cursor-pointer ${
+                          className={`py-1 px-1 rounded-md text-[11px] font-medium border text-center transition-all cursor-pointer ${
                             filterMinSubs === tier.val
                               ? "bg-primary text-primary-foreground border-primary shadow-xs font-semibold"
-                              : "bg-surface-200/80 border-border text-text-secondary hover:text-text-main hover:bg-surface-300"
+                              : "bg-surface-200/80 border-border/60 text-text-secondary hover:text-text-main hover:bg-surface-300"
                           }`}
                         >
                           {tier.label}
@@ -698,137 +708,126 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                     </div>
                   </div>
 
-                  {/* 2. Target Location */}
-                  <div className="space-y-1.5 pt-2 border-t border-border/60">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-                      Location / Targeting
+                  {/* 2. Core Filters (Slim Single-Line Rows) */}
+                  <div className="space-y-1 pt-1.5 border-t border-border/60">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-text-muted block">
+                      Targeting & Outreach
                     </span>
+
                     <div
                       onClick={() => setFilterCountryUs(!filterCountryUs)}
-                      className={`flex items-center justify-between p-2 rounded-lg border transition-all cursor-pointer select-none ${
+                      className={`flex items-center justify-between px-2.5 py-1.5 rounded-md border transition-all cursor-pointer select-none text-xs ${
                         filterCountryUs
-                          ? "bg-primary/[0.08] border-primary/40 text-text-main"
+                          ? "bg-primary/[0.08] border-primary/40 text-text-main font-medium"
                           : "bg-surface-200/50 border-border/60 text-text-secondary hover:bg-surface-200 hover:text-text-main"
                       }`}
                     >
-                      <span className="text-xs font-medium">US Creators Only</span>
+                      <span>US Creators Only</span>
                       <div
-                        className={`w-4 h-4 rounded-[4px] border flex items-center justify-center transition-all shrink-0 ${
+                        className={`w-3.5 h-3.5 rounded-[3px] border flex items-center justify-center transition-all shrink-0 ${
                           filterCountryUs
                             ? "bg-primary border-primary text-primary-foreground"
                             : "bg-surface-300 border-border/80"
                         }`}
                       >
-                        {filterCountryUs && <Check className="w-3 h-3 stroke-[2.5]" />}
+                        {filterCountryUs && <Check className="w-2.5 h-2.5 stroke-[2.5]" />}
                       </div>
                     </div>
-                  </div>
 
-                  {/* 3. Contact & Outreach Status (Pareto Vital Few) */}
-                  <div className="space-y-1.5 pt-2 border-t border-border/60">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-                      Contact & Outreach
-                    </span>
                     <div
                       onClick={() => setFilterDeliverableOnly(!filterDeliverableOnly)}
-                      className={`flex items-center justify-between p-2 rounded-lg border transition-all cursor-pointer select-none ${
+                      className={`flex items-center justify-between px-2.5 py-1.5 rounded-md border transition-all cursor-pointer select-none text-xs ${
                         filterDeliverableOnly
-                          ? "bg-primary/[0.08] border-primary/40 text-text-main"
+                          ? "bg-primary/[0.08] border-primary/40 text-text-main font-medium"
                           : "bg-surface-200/50 border-border/60 text-text-secondary hover:bg-surface-200 hover:text-text-main"
                       }`}
                     >
-                      <div className="flex flex-col">
-                        <span className="text-xs font-medium">Deliverable Email Only</span>
-                        <span className="text-[10px] text-text-muted">Verified deliverable mailboxes</span>
-                      </div>
+                      <span>Deliverable Email Only</span>
                       <div
-                        className={`w-4 h-4 rounded-[4px] border flex items-center justify-center transition-all shrink-0 ml-2 ${
+                        className={`w-3.5 h-3.5 rounded-[3px] border flex items-center justify-center transition-all shrink-0 ${
                           filterDeliverableOnly
                             ? "bg-primary border-primary text-primary-foreground"
                             : "bg-surface-300 border-border/80"
                         }`}
                       >
-                        {filterDeliverableOnly && <Check className="w-3 h-3 stroke-[2.5]" />}
+                        {filterDeliverableOnly && <Check className="w-2.5 h-2.5 stroke-[2.5]" />}
                       </div>
                     </div>
 
                     <div
                       onClick={() => setFilterUncontactedOnly(!filterUncontactedOnly)}
-                      className={`flex items-center justify-between p-2 rounded-lg border transition-all cursor-pointer select-none ${
+                      className={`flex items-center justify-between px-2.5 py-1.5 rounded-md border transition-all cursor-pointer select-none text-xs ${
                         filterUncontactedOnly
-                          ? "bg-primary/[0.08] border-primary/40 text-text-main"
+                          ? "bg-primary/[0.08] border-primary/40 text-text-main font-medium"
                           : "bg-surface-200/50 border-border/60 text-text-secondary hover:bg-surface-200 hover:text-text-main"
                       }`}
                     >
-                      <div className="flex flex-col">
-                        <span className="text-xs font-medium">Uncontacted Leads Only</span>
-                        <span className="text-[10px] text-text-muted">Exclude contacted or replied</span>
-                      </div>
+                      <span>Uncontacted Leads Only</span>
                       <div
-                        className={`w-4 h-4 rounded-[4px] border flex items-center justify-center transition-all shrink-0 ml-2 ${
+                        className={`w-3.5 h-3.5 rounded-[3px] border flex items-center justify-center transition-all shrink-0 ${
                           filterUncontactedOnly
                             ? "bg-primary border-primary text-primary-foreground"
                             : "bg-surface-300 border-border/80"
                         }`}
                       >
-                        {filterUncontactedOnly && <Check className="w-3 h-3 stroke-[2.5]" />}
+                        {filterUncontactedOnly && <Check className="w-2.5 h-2.5 stroke-[2.5]" />}
                       </div>
                     </div>
                   </div>
 
-                  {/* 4. Multi-Channel Enablers */}
-                  <div className="space-y-1.5 pt-2 border-t border-border/60">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
-                      Other Discovered Channels
+                  {/* 3. Multi-Channel Enablers (Compact 2-col) */}
+                  <div className="space-y-1 pt-1.5 border-t border-border/60">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-text-muted block">
+                      Other Channels
                     </span>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-1.5">
                       <div
                         onClick={() => setFilterPhone(!filterPhone)}
-                        className={`flex items-center justify-between p-2 rounded-lg border transition-all cursor-pointer select-none ${
+                        className={`flex items-center justify-between px-2 py-1 rounded-md border transition-all cursor-pointer select-none text-xs ${
                           filterPhone
-                            ? "bg-primary/[0.08] border-primary/40 text-text-main"
+                            ? "bg-primary/[0.08] border-primary/40 text-text-main font-medium"
                             : "bg-surface-200/50 border-border/60 text-text-secondary hover:bg-surface-200 hover:text-text-main"
                         }`}
                       >
-                        <span className="text-xs font-medium truncate">Phone / WA</span>
+                        <span className="truncate text-[11px]">Phone/WA</span>
                         <div
-                          className={`w-4 h-4 rounded-[4px] border flex items-center justify-center transition-all shrink-0 ml-1 ${
+                          className={`w-3.5 h-3.5 rounded-[3px] border flex items-center justify-center transition-all shrink-0 ml-1 ${
                             filterPhone
                               ? "bg-primary border-primary text-primary-foreground"
                               : "bg-surface-300 border-border/80"
                           }`}
                         >
-                          {filterPhone && <Check className="w-3 h-3 stroke-[2.5]" />}
+                          {filterPhone && <Check className="w-2.5 h-2.5 stroke-[2.5]" />}
                         </div>
                       </div>
 
                       <div
                         onClick={() => setFilterWebsite(!filterWebsite)}
-                        className={`flex items-center justify-between p-2 rounded-lg border transition-all cursor-pointer select-none ${
+                        className={`flex items-center justify-between px-2 py-1 rounded-md border transition-all cursor-pointer select-none text-xs ${
                           filterWebsite
-                            ? "bg-primary/[0.08] border-primary/40 text-text-main"
+                            ? "bg-primary/[0.08] border-primary/40 text-text-main font-medium"
                             : "bg-surface-200/50 border-border/60 text-text-secondary hover:bg-surface-200 hover:text-text-main"
                         }`}
                       >
-                        <span className="text-xs font-medium truncate">Website</span>
+                        <span className="truncate text-[11px]">Website</span>
                         <div
-                          className={`w-4 h-4 rounded-[4px] border flex items-center justify-center transition-all shrink-0 ml-1 ${
+                          className={`w-3.5 h-3.5 rounded-[3px] border flex items-center justify-center transition-all shrink-0 ml-1 ${
                             filterWebsite
                               ? "bg-primary border-primary text-primary-foreground"
                               : "bg-surface-300 border-border/80"
                           }`}
                         >
-                          {filterWebsite && <Check className="w-3 h-3 stroke-[2.5]" />}
+                          {filterWebsite && <Check className="w-2.5 h-2.5 stroke-[2.5]" />}
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-border/60 flex items-center justify-end">
+                  <div className="pt-1.5 border-t border-border/60">
                     <Button
                       size="sm"
                       onClick={() => setShowFilterPopover(false)}
-                      className="w-full h-8 text-xs"
+                      className="w-full h-7 text-xs"
                     >
                       Done
                     </Button>
