@@ -436,7 +436,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
         </div>
 
         {/* Search */}
-        <div className="relative flex-1 md:w-72">
+        <div className="relative w-full md:w-64">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
           <input
             type="text"
