@@ -264,7 +264,7 @@ export const campaigns = pgTable(
     dailyLimit: integer('daily_limit').notNull().default(50),
     minSubscribers: bigint('min_subscribers', { mode: 'number' }).default(10),
     maxSubscribers: bigint('max_subscribers', { mode: 'number' }),
-    targetCountry: varchar('target_country', { length: 10 }).default('US'),
+    targetCountry: varchar('target_country', { length: 10 }).default('TIER_1'),
     targetCategories: jsonb('target_categories').default([]),
     enableGeminiPersonalization: boolean('enable_gemini_personalization').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

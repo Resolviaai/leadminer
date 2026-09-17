@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "../../../db/client";
 import { leads, contacts, keywords } from "../../../db/schema";
 import { eq, desc, asc, lt, gte, inArray, notInArray, and, ilike, or } from "drizzle-orm";
+import { TIER_1_COUNTRIES } from "../../../config/countries";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -41,7 +42,11 @@ export async function GET(req: NextRequest) {
     }
 
     if (country) {
-      conditions.push(eq(leads.country, country));
+      if (country.toUpperCase() === "TIER_1") {
+        conditions.push(inArray(leads.country, TIER_1_COUNTRIES as any));
+      } else {
+        conditions.push(eq(leads.country, country));
+      }
     }
 
     if (uncontactedOnly) {

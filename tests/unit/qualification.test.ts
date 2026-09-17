@@ -197,4 +197,71 @@ describe('Lead Qualification Service', () => {
     });
     expect(res2.qualified).toBe(true);
   });
+
+  it('should qualify creators from all Tier 1 countries when targetCountry is TIER_1', () => {
+    const tier1Codes = [
+      'US', 'GB', 'CA', 'AU', 'NZ', 'IE',
+      'NL', 'SE', 'DE', 'NO', 'DK', 'FI',
+      'CH', 'AT', 'BE', 'SG', 'AE',
+    ];
+
+    for (const code of tier1Codes) {
+      const candidate = {
+        subscriberCount: 25000,
+        email: `creator_${code}@channel.com`,
+        emailStatus: 'VALID',
+        category: 'Top Podcasters',
+        country: code,
+        isSuppressed: false,
+        alreadyContacted: false,
+      };
+
+      const res = leadQualificationService.qualify(candidate, {
+        ...defaultCriteria,
+        targetCountry: 'TIER_1',
+      });
+      expect(res.qualified, `Expected ${code} to be qualified as Tier 1`).toBe(true);
+    }
+  });
+
+  it('should reject creators from non-Tier 1 countries when targetCountry is TIER_1', () => {
+    const nonTier1Codes = ['BR', 'IN', 'RU', 'MX', 'AR', 'VN'];
+
+    for (const code of nonTier1Codes) {
+      const candidate = {
+        subscriberCount: 25000,
+        email: `creator_${code}@channel.com`,
+        emailStatus: 'VALID',
+        category: 'Top Podcasters',
+        country: code,
+        isSuppressed: false,
+        alreadyContacted: false,
+      };
+
+      const res = leadQualificationService.qualify(candidate, {
+        ...defaultCriteria,
+        targetCountry: 'TIER_1',
+      });
+      expect(res.qualified, `Expected ${code} to be rejected`).toBe(false);
+      expect(res.reason).toContain('is not in Tier 1 target countries');
+    }
+  });
+
+  it('should allow creators with undefined country when targetCountry is TIER_1', () => {
+    const candidate = {
+      subscriberCount: 25000,
+      email: 'creator_global@channel.com',
+      emailStatus: 'VALID',
+      category: 'Top Podcasters',
+      country: undefined,
+      isSuppressed: false,
+      alreadyContacted: false,
+    };
+
+    const res = leadQualificationService.qualify(candidate, {
+      ...defaultCriteria,
+      targetCountry: 'TIER_1',
+    });
+    expect(res.qualified).toBe(true);
+  });
 });

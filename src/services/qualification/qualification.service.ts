@@ -1,4 +1,5 @@
 import { env } from '../../config/env';
+import { isTier1Country } from '../../config/countries';
 
 export interface QualificationCriteria {
   minSubscribers?: number;
@@ -75,11 +76,21 @@ export class LeadQualificationService {
 
     // 7. Country match check
     if (criteria.targetCountry && candidate.country) {
-      if (candidate.country.toUpperCase() !== criteria.targetCountry.toUpperCase()) {
-        return {
-          qualified: false,
-          reason: `Channel country (${candidate.country}) does not match target (${criteria.targetCountry})`,
-        };
+      const target = criteria.targetCountry.toUpperCase();
+      if (target === 'TIER_1' || target === 'TIER1') {
+        if (!isTier1Country(candidate.country)) {
+          return {
+            qualified: false,
+            reason: `Channel country (${candidate.country}) is not in Tier 1 target countries`,
+          };
+        }
+      } else if (target !== 'ALL') {
+        if (candidate.country.toUpperCase() !== target) {
+          return {
+            qualified: false,
+            reason: `Channel country (${candidate.country}) does not match target (${criteria.targetCountry})`,
+          };
+        }
       }
     }
 

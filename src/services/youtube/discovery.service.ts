@@ -68,8 +68,11 @@ export class YouTubeDiscoveryService {
           q: params.query,
           type: ['channel'],
           maxResults: params.maxResults || env.YOUTUBE_MAX_RESULTS_PER_SEARCH,
-          pageToken: params.pageToken,
-          regionCode: params.regionCode || env.YOUTUBE_TARGET_REGION || 'US',
+          regionCode:
+            params.regionCode ||
+            (env.YOUTUBE_TARGET_REGION === 'TIER_1' || env.YOUTUBE_TARGET_REGION === 'ALL'
+              ? undefined
+              : env.YOUTUBE_TARGET_REGION || 'US'),
           relevanceLanguage: params.relevanceLanguage || env.YOUTUBE_TARGET_LANGUAGE || 'en',
         });
       });

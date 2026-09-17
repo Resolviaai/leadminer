@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { getCountryDisplayName } from "@/config/countries";
 
 export interface SocialLink {
   type: string;
@@ -179,8 +180,8 @@ export function LeadInspectorDrawer({
                   {lead.channelTitle}
                 </h2>
                 {lead.country && (
-                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 uppercase font-mono text-text-muted">
-                    {lead.country}
+                  <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-5 font-mono text-text-muted gap-1">
+                    {getCountryDisplayName(lead.country)}
                   </Badge>
                 )}
               </div>
@@ -435,6 +436,12 @@ export function LeadInspectorDrawer({
               <div>
                 <span className="text-[10px] text-text-muted block">Pipeline Status</span>
                 <span className="font-medium text-text-main">{lead.qualificationStatus}</span>
+              </div>
+              <div className="col-span-2 pt-1 border-t border-border/40 flex items-center justify-between">
+                <span className="text-[10px] text-text-muted">Target Location / Country</span>
+                <span className="font-medium text-text-main text-[11px] font-mono">
+                  {lead.country ? getCountryDisplayName(lead.country) : "Global / Not Specified"}
+                </span>
               </div>
             </div>
           </div>

@@ -40,6 +40,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { LeadInspectorDrawer } from "./LeadInspectorDrawer";
+import { getCountryDisplayName, TIER_1_COUNTRY_FLAGS } from "@/config/countries";
 
 export type Lead = {
   id: number;
@@ -143,7 +144,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
 
   // Pareto 80/20 Filtering State
   const [filterMinSubs, setFilterMinSubs] = useState<number>(0);
-  const [filterCountryUs, setFilterCountryUs] = useState(false);
+  const [filterCountry, setFilterCountry] = useState<"ALL" | "TIER_1" | "US">("ALL");
   const [filterDeliverableOnly, setFilterDeliverableOnly] = useState(false);
   const [filterUncontactedOnly, setFilterUncontactedOnly] = useState(false);
   const [filterWebsite, setFilterWebsite] = useState(false);
@@ -152,7 +153,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
 
   const activeFilterCount =
     (filterMinSubs > 0 ? 1 : 0) +
-    (filterCountryUs ? 1 : 0) +
+    (filterCountry !== "ALL" ? 1 : 0) +
     (filterDeliverableOnly ? 1 : 0) +
     (filterUncontactedOnly ? 1 : 0) +
     (filterWebsite ? 1 : 0) +
@@ -188,7 +189,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
 
   const resetAllFilters = () => {
     setFilterMinSubs(0);
-    setFilterCountryUs(false);
+    setFilterCountry("ALL");
     setFilterDeliverableOnly(false);
     setFilterUncontactedOnly(false);
     setFilterWebsite(false);
@@ -251,7 +252,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
       if (sortBy !== "id") params.set("sortBy", sortBy);
       if (sortDir !== "desc") params.set("sortDir", sortDir);
       if (filterMinSubs > 0) params.set("minSubs", filterMinSubs.toString());
-      if (filterCountryUs) params.set("country", "US");
+      if (filterCountry !== "ALL") params.set("country", filterCountry);
       if (filterDeliverableOnly) params.set("deliverableOnly", "true");
       if (filterUncontactedOnly) params.set("uncontactedOnly", "true");
       if (filterWebsite) params.set("hasWebsite", "true");
@@ -293,7 +294,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
       sortBy,
       sortDir,
       filterMinSubs,
-      filterCountryUs,
+      filterCountry,
       filterDeliverableOnly,
       filterUncontactedOnly,
       filterWebsite,
@@ -318,7 +319,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
     sortBy,
     sortDir,
     filterMinSubs,
-    filterCountryUs,
+    filterCountry,
     filterDeliverableOnly,
     filterUncontactedOnly,
     filterWebsite,
@@ -708,31 +709,49 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                     </div>
                   </div>
 
-                  {/* 2. Core Filters (Slim Single-Line Rows) */}
+                  {/* 2. Core Filters (Country Targeting) */}
+                  <div className="space-y-1.5 pt-1.5 border-t border-border/60">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-text-muted block">
+                        Target Country
+                      </span>
+                      {filterCountry !== "ALL" && (
+                        <button
+                          type="button"
+                          onClick={() => setFilterCountry("ALL")}
+                          className="text-[10px] text-primary hover:underline cursor-pointer font-medium"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-3 gap-1">
+                      {[
+                        { label: "Any", val: "ALL" as const },
+                        { label: "Tier 1 (17)", val: "TIER_1" as const },
+                        { label: "US Only", val: "US" as const },
+                      ].map((c) => (
+                        <button
+                          key={c.val}
+                          type="button"
+                          onClick={() => setFilterCountry(c.val)}
+                          className={`py-1 px-1 rounded-md text-[11px] font-medium border text-center transition-all cursor-pointer ${
+                            filterCountry === c.val
+                              ? "bg-primary text-primary-foreground border-primary shadow-xs font-semibold"
+                              : "bg-surface-200/80 border-border/60 text-text-secondary hover:text-text-main hover:bg-surface-300"
+                          }`}
+                        >
+                          {c.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 3. Outreach & Quality */}
                   <div className="space-y-1 pt-1.5 border-t border-border/60">
                     <span className="text-[9px] font-bold uppercase tracking-wider text-text-muted block">
                       Targeting & Outreach
                     </span>
-
-                    <div
-                      onClick={() => setFilterCountryUs(!filterCountryUs)}
-                      className={`flex items-center justify-between px-2.5 py-1.5 rounded-md border transition-all cursor-pointer select-none text-xs ${
-                        filterCountryUs
-                          ? "bg-primary/[0.08] border-primary/40 text-text-main font-medium"
-                          : "bg-surface-200/50 border-border/60 text-text-secondary hover:bg-surface-200 hover:text-text-main"
-                      }`}
-                    >
-                      <span>US Creators Only</span>
-                      <div
-                        className={`w-3.5 h-3.5 rounded-[3px] border flex items-center justify-center transition-all shrink-0 ${
-                          filterCountryUs
-                            ? "bg-primary border-primary text-primary-foreground"
-                            : "bg-surface-300 border-border/80"
-                        }`}
-                      >
-                        {filterCountryUs && <Check className="w-2.5 h-2.5 stroke-[2.5]" />}
-                      </div>
-                    </div>
 
                     <div
                       onClick={() => setFilterDeliverableOnly(!filterDeliverableOnly)}
@@ -856,14 +875,14 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
               </button>
             </span>
           )}
-          {filterCountryUs && (
+          {filterCountry !== "ALL" && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-medium">
-              US Only
+              {filterCountry === "TIER_1" ? "Tier 1 (17 Nations)" : "US Only"}
               <button
                 type="button"
-                onClick={() => setFilterCountryUs(false)}
+                onClick={() => setFilterCountry("ALL")}
                 className="hover:text-primary/70 cursor-pointer ml-0.5"
-                title="Remove filter"
+                title="Remove country filter"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -1048,8 +1067,12 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                         {lead.channelTitle}
                       </span>
                       {lead.country && (
-                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 uppercase font-mono text-text-muted">
-                          {lead.country}
+                        <Badge
+                          variant="outline"
+                          className="text-[9px] px-1.5 py-0 h-4 font-mono text-text-muted cursor-default"
+                          title={getCountryDisplayName(lead.country)}
+                        >
+                          {TIER_1_COUNTRY_FLAGS[lead.country.toUpperCase()] ? `${TIER_1_COUNTRY_FLAGS[lead.country.toUpperCase()]} ${lead.country.toUpperCase()}` : lead.country.toUpperCase()}
                         </Badge>
                       )}
                       <a
@@ -1339,8 +1362,12 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                               {lead.channelTitle}
                             </span>
                             {lead.country && (
-                              <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 uppercase font-mono text-text-muted shrink-0">
-                                {lead.country}
+                              <Badge
+                                variant="outline"
+                                className="text-[9px] px-1 py-0 h-3.5 font-mono text-text-muted shrink-0 cursor-default"
+                                title={getCountryDisplayName(lead.country)}
+                              >
+                                {TIER_1_COUNTRY_FLAGS[lead.country.toUpperCase()] ? `${TIER_1_COUNTRY_FLAGS[lead.country.toUpperCase()]} ${lead.country.toUpperCase()}` : lead.country.toUpperCase()}
                               </Badge>
                             )}
                             <a
