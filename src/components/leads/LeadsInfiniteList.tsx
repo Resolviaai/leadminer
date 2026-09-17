@@ -703,68 +703,124 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                     <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
                       Location / Targeting
                     </span>
-                    <label className="flex items-center gap-2.5 cursor-pointer select-none text-text-secondary hover:text-text-main">
-                      <input
-                        type="checkbox"
-                        checked={filterCountryUs}
-                        onChange={(e) => setFilterCountryUs(e.target.checked)}
-                        className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5"
-                      />
-                      <span>US Creators Only</span>
-                    </label>
+                    <div
+                      onClick={() => setFilterCountryUs(!filterCountryUs)}
+                      className={`flex items-center justify-between p-2 rounded-lg border transition-all cursor-pointer select-none ${
+                        filterCountryUs
+                          ? "bg-primary/[0.08] border-primary/40 text-text-main"
+                          : "bg-surface-200/50 border-border/60 text-text-secondary hover:bg-surface-200 hover:text-text-main"
+                      }`}
+                    >
+                      <span className="text-xs font-medium">US Creators Only</span>
+                      <div
+                        className={`w-4 h-4 rounded-[4px] border flex items-center justify-center transition-all shrink-0 ${
+                          filterCountryUs
+                            ? "bg-primary border-primary text-primary-foreground"
+                            : "bg-surface-300 border-border/80"
+                        }`}
+                      >
+                        {filterCountryUs && <Check className="w-3 h-3 stroke-[2.5]" />}
+                      </div>
+                    </div>
                   </div>
 
                   {/* 3. Contact & Outreach Status (Pareto Vital Few) */}
-                  <div className="space-y-2 pt-2 border-t border-border/60">
+                  <div className="space-y-1.5 pt-2 border-t border-border/60">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
                       Contact & Outreach
                     </span>
-                    <label className="flex items-center gap-2.5 cursor-pointer select-none text-text-secondary hover:text-text-main">
-                      <input
-                        type="checkbox"
-                        checked={filterDeliverableOnly}
-                        onChange={(e) => setFilterDeliverableOnly(e.target.checked)}
-                        className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5"
-                      />
-                      <span>Deliverable Email Only</span>
-                    </label>
+                    <div
+                      onClick={() => setFilterDeliverableOnly(!filterDeliverableOnly)}
+                      className={`flex items-center justify-between p-2 rounded-lg border transition-all cursor-pointer select-none ${
+                        filterDeliverableOnly
+                          ? "bg-primary/[0.08] border-primary/40 text-text-main"
+                          : "bg-surface-200/50 border-border/60 text-text-secondary hover:bg-surface-200 hover:text-text-main"
+                      }`}
+                    >
+                      <div className="flex flex-col">
+                        <span className="text-xs font-medium">Deliverable Email Only</span>
+                        <span className="text-[10px] text-text-muted">Verified deliverable mailboxes</span>
+                      </div>
+                      <div
+                        className={`w-4 h-4 rounded-[4px] border flex items-center justify-center transition-all shrink-0 ml-2 ${
+                          filterDeliverableOnly
+                            ? "bg-primary border-primary text-primary-foreground"
+                            : "bg-surface-300 border-border/80"
+                        }`}
+                      >
+                        {filterDeliverableOnly && <Check className="w-3 h-3 stroke-[2.5]" />}
+                      </div>
+                    </div>
 
-                    <label className="flex items-center gap-2.5 cursor-pointer select-none text-text-secondary hover:text-text-main">
-                      <input
-                        type="checkbox"
-                        checked={filterUncontactedOnly}
-                        onChange={(e) => setFilterUncontactedOnly(e.target.checked)}
-                        className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5"
-                      />
-                      <span>Uncontacted Leads Only</span>
-                    </label>
+                    <div
+                      onClick={() => setFilterUncontactedOnly(!filterUncontactedOnly)}
+                      className={`flex items-center justify-between p-2 rounded-lg border transition-all cursor-pointer select-none ${
+                        filterUncontactedOnly
+                          ? "bg-primary/[0.08] border-primary/40 text-text-main"
+                          : "bg-surface-200/50 border-border/60 text-text-secondary hover:bg-surface-200 hover:text-text-main"
+                      }`}
+                    >
+                      <div className="flex flex-col">
+                        <span className="text-xs font-medium">Uncontacted Leads Only</span>
+                        <span className="text-[10px] text-text-muted">Exclude contacted or replied</span>
+                      </div>
+                      <div
+                        className={`w-4 h-4 rounded-[4px] border flex items-center justify-center transition-all shrink-0 ml-2 ${
+                          filterUncontactedOnly
+                            ? "bg-primary border-primary text-primary-foreground"
+                            : "bg-surface-300 border-border/80"
+                        }`}
+                      >
+                        {filterUncontactedOnly && <Check className="w-3 h-3 stroke-[2.5]" />}
+                      </div>
+                    </div>
                   </div>
 
                   {/* 4. Multi-Channel Enablers */}
-                  <div className="space-y-2 pt-2 border-t border-border/60">
+                  <div className="space-y-1.5 pt-2 border-t border-border/60">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
                       Other Discovered Channels
                     </span>
                     <div className="grid grid-cols-2 gap-2">
-                      <label className="flex items-center gap-2 cursor-pointer select-none text-text-secondary hover:text-text-main">
-                        <input
-                          type="checkbox"
-                          checked={filterPhone}
-                          onChange={(e) => setFilterPhone(e.target.checked)}
-                          className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5"
-                        />
-                        <span className="truncate">Phone / WhatsApp</span>
-                      </label>
+                      <div
+                        onClick={() => setFilterPhone(!filterPhone)}
+                        className={`flex items-center justify-between p-2 rounded-lg border transition-all cursor-pointer select-none ${
+                          filterPhone
+                            ? "bg-primary/[0.08] border-primary/40 text-text-main"
+                            : "bg-surface-200/50 border-border/60 text-text-secondary hover:bg-surface-200 hover:text-text-main"
+                        }`}
+                      >
+                        <span className="text-xs font-medium truncate">Phone / WA</span>
+                        <div
+                          className={`w-4 h-4 rounded-[4px] border flex items-center justify-center transition-all shrink-0 ml-1 ${
+                            filterPhone
+                              ? "bg-primary border-primary text-primary-foreground"
+                              : "bg-surface-300 border-border/80"
+                          }`}
+                        >
+                          {filterPhone && <Check className="w-3 h-3 stroke-[2.5]" />}
+                        </div>
+                      </div>
 
-                      <label className="flex items-center gap-2 cursor-pointer select-none text-text-secondary hover:text-text-main">
-                        <input
-                          type="checkbox"
-                          checked={filterWebsite}
-                          onChange={(e) => setFilterWebsite(e.target.checked)}
-                          className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5"
-                        />
-                        <span className="truncate">Website</span>
-                      </label>
+                      <div
+                        onClick={() => setFilterWebsite(!filterWebsite)}
+                        className={`flex items-center justify-between p-2 rounded-lg border transition-all cursor-pointer select-none ${
+                          filterWebsite
+                            ? "bg-primary/[0.08] border-primary/40 text-text-main"
+                            : "bg-surface-200/50 border-border/60 text-text-secondary hover:bg-surface-200 hover:text-text-main"
+                        }`}
+                      >
+                        <span className="text-xs font-medium truncate">Website</span>
+                        <div
+                          className={`w-4 h-4 rounded-[4px] border flex items-center justify-center transition-all shrink-0 ml-1 ${
+                            filterWebsite
+                              ? "bg-primary border-primary text-primary-foreground"
+                              : "bg-surface-300 border-border/80"
+                          }`}
+                        >
+                          {filterWebsite && <Check className="w-3 h-3 stroke-[2.5]" />}
+                        </div>
+                      </div>
                     </div>
                   </div>
 
