@@ -771,7 +771,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                 <TableHead>Deliverability</TableHead>
                 <TableHead>Qualification</TableHead>
                 <TableHead>Outreach</TableHead>
-                <TableHead className="text-right w-44">Actions</TableHead>
+                <TableHead className="text-right w-36">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -902,10 +902,9 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                           title="Reprocess website & contacts"
                           disabled={actionLoadingId === lead.id}
                           onClick={() => handleReprocess(lead.id)}
-                          className="h-7 px-2 text-[11px] gap-1"
+                          className="h-7 w-7 p-0"
                         >
-                          <RefreshCw className={`w-3 h-3 ${actionLoadingId === lead.id ? "animate-spin" : ""}`} />
-                          <span>Reprocess</span>
+                          <RefreshCw className={`w-3.5 h-3.5 ${actionLoadingId === lead.id ? "animate-spin" : ""}`} />
                         </Button>
 
                         {lead.email && (
@@ -1019,7 +1018,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
           <button
             type="button"
             onClick={() => fetchLeads(false)}
-            className="text-primary hover:underline font-medium cursor-pointer min-h-[44px] px-3 flex items-center active:scale-95 transition-transform"
+            className="text-primary hover:underline font-medium cursor-pointer"
           >
             Load 50 more ↓
           </button>
