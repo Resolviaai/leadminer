@@ -22,6 +22,7 @@ async function getCampaignsData() {
         minSubscribers: campaigns.minSubscribers,
         maxSubscribers: campaigns.maxSubscribers,
         enableGemini: campaigns.enableGeminiPersonalization,
+        targetCountry: campaigns.targetCountry,
         templateName: templates.name,
       })
       .from(campaigns)
@@ -38,7 +39,7 @@ export default async function CampaignsPage() {
   const list = await getCampaignsData();
 
   return (
-    <div className="space-y-5 max-w-7xl mx-auto">
+    <div className="space-y-5 max-w-7xl mx-auto w-full">
       {/* Header */}
       <Card className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-border">
         <div>
@@ -90,6 +91,12 @@ export default async function CampaignsPage() {
                       {camp.maxSubscribers
                         ? `${camp.minSubscribers?.toLocaleString()} - ${camp.maxSubscribers?.toLocaleString()} subs`
                         : `Min ${(camp.minSubscribers || 10).toLocaleString()} subs`}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-text-muted">Target Geography</span>
+                    <span className="font-mono text-text-main">
+                      {camp.targetCountry ? (camp.targetCountry === 'TIER1' ? 'Tier 1 (17 Nations)' : camp.targetCountry) : 'Tier 1 (17 Nations)'}
                     </span>
                   </div>
                   <div className="flex justify-between items-center pt-1 border-t border-border/40">

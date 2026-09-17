@@ -77,7 +77,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </header>
 
           {/* Page Content with safe mobile padding */}
-          <main className="flex-1 px-3.5 py-3 sm:p-4 md:px-6 md:py-3.5 pb-[calc(5.25rem+env(safe-area-inset-bottom,0px))] md:pb-3.5 overflow-y-auto overflow-x-hidden min-h-0 flex flex-col">
+          <main className="flex-1 w-full px-3.5 py-3 sm:p-4 md:px-6 md:py-3.5 pb-[calc(5.25rem+env(safe-area-inset-bottom,0px))] md:pb-3.5 overflow-y-auto overflow-x-hidden min-h-0 flex flex-col items-stretch">
             {children}
           </main>
         </div>

@@ -26,7 +26,7 @@ export default async function LogsPage() {
   const { list, total } = await getData();
 
   return (
-    <div className="space-y-5 max-w-7xl mx-auto">
+    <div className="space-y-5 max-w-7xl mx-auto w-full">
       <Card className="p-4 sm:p-5 border-border">
         <div className="flex items-center space-x-2">
           <Terminal className="w-5 h-5 text-primary" />

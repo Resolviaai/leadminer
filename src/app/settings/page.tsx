@@ -47,7 +47,7 @@ export default async function SettingsPage() {
   const { health, isKillSwitchActive } = await getSettingsAndHealth();
 
   return (
-    <div className="space-y-5 max-w-7xl mx-auto">
+    <div className="space-y-5 max-w-7xl mx-auto w-full">
       {/* Header */}
       <Card className="p-4 sm:p-5 border-border">
         <div className="flex items-center space-x-2">

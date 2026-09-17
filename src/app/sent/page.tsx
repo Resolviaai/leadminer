@@ -81,7 +81,7 @@ export default async function SentPage() {
   const { list, counts, inboxes } = await getData();
 
   return (
-    <div className="space-y-5 max-w-7xl mx-auto">
+    <div className="space-y-5 max-w-7xl mx-auto w-full">
       {/* Top Header Card */}
       <Card className="p-4 sm:p-5 border-border">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">

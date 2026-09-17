@@ -367,7 +367,7 @@ export function TemplatesManager({
   };
 
   return (
-    <div className="space-y-5 max-w-7xl mx-auto">
+    <div className="space-y-5 max-w-7xl mx-auto w-full">
       {/* ── Page Header Card ── */}
       <Card className="p-4 sm:p-5 border-border">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

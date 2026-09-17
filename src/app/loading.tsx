@@ -1,9 +1,9 @@
-﻿import React from 'react';
+import React from 'react';
 import { Card } from '@/components/ui/card';
 
 export default function Loading() {
   return (
-    <div className="space-y-5 max-w-7xl mx-auto animate-pulse">
+    <div className="space-y-5 max-w-7xl mx-auto w-full animate-pulse">
       {/* Header Skeleton */}
       <Card className="p-4 sm:p-5 border-border bg-surface-100/60">
         <div className="flex items-center space-x-3">

@@ -110,7 +110,7 @@ export default async function OverviewPage() {
     : 0;
 
   return (
-    <div className="space-y-5 max-w-7xl mx-auto">
+    <div className="space-y-5 max-w-7xl mx-auto w-full">
       {/* Grid: 4 Metric Cards (2x2 on mobile, 4-col on desktop) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
         {/* Keywords */}

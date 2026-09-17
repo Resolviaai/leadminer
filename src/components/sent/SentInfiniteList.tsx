@@ -204,7 +204,7 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
   if (activeEmail) {
     const senderLetter = (activeEmail.senderEmail?.[0] || "R").toUpperCase();
     return (
-      <div className="space-y-4 max-w-5xl mx-auto">
+      <div className="space-y-4 max-w-5xl mx-auto w-full">
         {/* Top Action Bar */}
         <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-surface-100 border border-border flex-wrap">
           <button
@@ -652,12 +652,12 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
                   </div>
 
                   {/* Subject & Preview snippet */}
-                  <div className="flex-1 min-w-0 flex items-center truncate">
-                    <span className="font-semibold text-text-main shrink-0">
+                  <div className="flex-1 min-w-0 flex items-center overflow-hidden">
+                    <span className="font-semibold text-text-main truncate shrink-0 max-w-[45%]">
                       {m.subject}
                     </span>
                     <span className="text-text-muted mx-1.5 shrink-0">—</span>
-                    <span className="text-text-muted font-normal text-[11px] truncate">
+                    <span className="text-text-muted font-normal text-[11px] truncate flex-1 min-w-0">
                       {bodySnippet}
                     </span>
                   </div>
