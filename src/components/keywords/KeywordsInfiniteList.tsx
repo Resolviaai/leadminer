@@ -13,6 +13,12 @@ import {
   CheckSquare,
   Square,
   X,
+  SlidersHorizontal,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  ChevronDown,
+  Check,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -76,6 +82,65 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
   const [batchLoading, setBatchLoading] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<number | null>(null);
 
+  // Sorting & Filtering State
+  const [sortBy, setSortBy] = useState<"id" | "channels" | "priority" | "keyword" | "attempts" | "lastAttempt" | "category">("id");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [showSortPopover, setShowSortPopover] = useState(false);
+
+  // Pareto Filtering State
+  const [filterMinChannels, setFilterMinChannels] = useState<number>(0);
+  const [filterCategory, setFilterCategory] = useState<string>("ALL");
+  const [filterUnexecutedOnly, setFilterUnexecutedOnly] = useState(false);
+  const [filterHasQualified, setFilterHasQualified] = useState(false);
+  const [filterHasEmails, setFilterHasEmails] = useState(false);
+  const [showFilterPopover, setShowFilterPopover] = useState(false);
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+
+  const activeFilterCount =
+    (filterMinChannels > 0 ? 1 : 0) +
+    (filterCategory !== "ALL" ? 1 : 0) +
+    (filterUnexecutedOnly ? 1 : 0) +
+    (filterHasQualified ? 1 : 0) +
+    (filterHasEmails ? 1 : 0);
+
+  const handleSort = (column: "id" | "channels" | "priority" | "keyword" | "attempts" | "lastAttempt" | "category") => {
+    if (sortBy === column) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(column);
+      setSortDir("desc");
+    }
+  };
+
+  const getSortIcon = (column: "id" | "channels" | "priority" | "keyword" | "attempts" | "lastAttempt" | "category") => {
+    if (sortBy === column) {
+      return sortDir === "asc" ? (
+        <ArrowUp className="w-3.5 h-3.5 text-primary" />
+      ) : (
+        <ArrowDown className="w-3.5 h-3.5 text-primary" />
+      );
+    }
+    return <ArrowUpDown className="w-3 h-3 text-text-muted/40 group-hover:text-text-muted transition-colors" />;
+  };
+
+  const getSortLabel = () => {
+    if (sortBy === "channels") return sortDir === "asc" ? "Least Channels" : "Most Channels";
+    if (sortBy === "priority") return "Highest Priority";
+    if (sortBy === "keyword") return sortDir === "asc" ? "Name (A-Z)" : "Name (Z-A)";
+    if (sortBy === "attempts") return "Most Attempts";
+    if (sortBy === "lastAttempt") return "Recently Executed";
+    if (sortBy === "category") return "Category";
+    return "Default";
+  };
+
+  const resetAllFilters = () => {
+    setFilterMinChannels(0);
+    setFilterCategory("ALL");
+    setFilterUnexecutedOnly(false);
+    setFilterHasQualified(false);
+    setFilterHasEmails(false);
+  };
+
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
   const [addKeywordText, setAddKeywordText] = useState("");
@@ -91,13 +156,28 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
   const isLoadingRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Fetch available categories on mount
+  useEffect(() => {
+    fetch("/api/keywords?categoriesOnly=true")
+      .then((res) => res.json())
+      .then((cats) => {
+        if (Array.isArray(cats)) setAvailableCategories(cats);
+      })
+      .catch(() => {});
+  }, []);
+
   // Close dropdown on outside click or tap
   useEffect(() => {
-    if (menuOpenId === null) return;
     const handleGlobalClick = (e: MouseEvent | TouchEvent) => {
       const target = e.target as HTMLElement;
-      if (!target.closest('[data-keyword-menu="true"]')) {
+      if (menuOpenId !== null && !target.closest('[data-keyword-menu="true"]')) {
         setMenuOpenId(null);
+      }
+      if (showSortPopover && !target.closest('[data-sort-popover="true"]')) {
+        setShowSortPopover(false);
+      }
+      if (showFilterPopover && !target.closest('[data-filter-popover="true"]')) {
+        setShowFilterPopover(false);
       }
     };
     document.addEventListener("mousedown", handleGlobalClick);
@@ -106,9 +186,9 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
       document.removeEventListener("mousedown", handleGlobalClick);
       document.removeEventListener("touchstart", handleGlobalClick);
     };
-  }, [menuOpenId]);
+  }, [menuOpenId, showSortPopover, showFilterPopover]);
 
-  // Refetch when tab or search changes
+  // Refetch when tab, search, sort, or filters change
   const fetchKeywords = useCallback(async (isReset = false) => {
     if (isLoadingRef.current) return;
     isLoadingRef.current = true;
@@ -118,12 +198,24 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
     abortControllerRef.current?.abort();
     abortControllerRef.current = new AbortController();
 
-    const lastId = isReset ? 0 : (items.length > 0 ? items[items.length - 1].id : 0);
     const params = new URLSearchParams();
-    if (lastId > 0) params.set("lastId", lastId.toString());
+    if (sortBy === "id" && sortDir === "desc") {
+      const lastId = isReset ? 0 : (items.length > 0 ? items[items.length - 1].id : 0);
+      if (lastId > 0) params.set("lastId", lastId.toString());
+    } else {
+      const offset = isReset ? 0 : items.length;
+      if (offset > 0) params.set("offset", offset.toString());
+    }
     params.set("limit", "50");
     if (activeTab !== "ALL") params.set("status", activeTab);
     if (searchQuery.trim()) params.set("search", searchQuery.trim());
+    if (sortBy !== "id") params.set("sortBy", sortBy);
+    if (sortDir !== "desc") params.set("sortDir", sortDir);
+    if (filterMinChannels > 0) params.set("minChannels", filterMinChannels.toString());
+    if (filterCategory !== "ALL") params.set("category", filterCategory);
+    if (filterUnexecutedOnly) params.set("unexecutedOnly", "true");
+    if (filterHasQualified) params.set("hasQualified", "true");
+    if (filterHasEmails) params.set("hasEmails", "true");
 
     try {
       const res = await fetch(`/api/keywords?${params.toString()}`, {
@@ -153,7 +245,18 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
       isLoadingRef.current = false;
       setLoading(false);
     }
-  }, [items, activeTab, searchQuery]);
+  }, [
+    items,
+    activeTab,
+    searchQuery,
+    sortBy,
+    sortDir,
+    filterMinChannels,
+    filterCategory,
+    filterUnexecutedOnly,
+    filterHasQualified,
+    filterHasEmails,
+  ]);
 
   const handleTabChange = (tab: FilterTab) => {
     setActiveTab(tab);
@@ -168,7 +271,17 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
       fetchKeywords(true);
     }, 300);
     return () => clearTimeout(timer);
-  }, [searchQuery, activeTab]);
+  }, [
+    searchQuery,
+    activeTab,
+    sortBy,
+    sortDir,
+    filterMinChannels,
+    filterCategory,
+    filterUnexecutedOnly,
+    filterHasQualified,
+    filterHasEmails,
+  ]);
 
   const handleContainerScroll = (e: React.UIEvent<HTMLDivElement>) => {
     if (!hasMore || loading || isLoadingRef.current) return;
@@ -365,11 +478,11 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
 
         <div className="flex items-center gap-2">
           {/* Search Input */}
-          <div className="relative flex-1 md:w-64">
+          <div className="relative flex-1 md:w-56">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
             <input
               type="text"
-              placeholder="Filter keywords..."
+              placeholder="Search keywords or category..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-surface-100 border border-border rounded-md pl-8 pr-8 text-xs text-text-main placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary h-9"
@@ -385,16 +498,336 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
             )}
           </div>
 
+          {/* Pareto Sort Dropdown */}
+          <div className="relative" data-sort-popover="true">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowSortPopover(!showSortPopover)}
+              className="h-9 px-2.5 sm:px-3 text-xs gap-1.5 shrink-0 cursor-pointer active:scale-95 transition-transform border-border bg-surface-100"
+            >
+              <ArrowUpDown className="w-3.5 h-3.5 text-text-muted" />
+              <span className="hidden sm:inline text-text-secondary">Sort:</span>
+              <span className="font-medium text-text-main truncate max-w-[95px]">{getSortLabel()}</span>
+              <ChevronDown className="w-3 h-3 text-text-muted opacity-60 ml-0.5" />
+            </Button>
+
+            {showSortPopover && (
+              <>
+                <div
+                  className="fixed inset-0 z-30 cursor-default"
+                  onClick={() => setShowSortPopover(false)}
+                />
+                <div className="absolute right-0 mt-1.5 w-56 bg-surface-100 border border-border rounded-xl shadow-xl p-1.5 z-40 text-xs space-y-0.5 animate-in fade-in zoom-in-95">
+                  {[
+                    { label: "Default (Newest)", col: "id" as const, dir: "desc" as const },
+                    { label: "Most Channels Found", col: "channels" as const, dir: "desc" as const },
+                    { label: "Least Channels Found", col: "channels" as const, dir: "asc" as const },
+                    { label: "Highest Priority", col: "priority" as const, dir: "desc" as const },
+                    { label: "Keyword (A → Z)", col: "keyword" as const, dir: "asc" as const },
+                    { label: "Most Attempts", col: "attempts" as const, dir: "desc" as const },
+                    { label: "Recently Executed", col: "lastAttempt" as const, dir: "desc" as const },
+                  ].map((opt) => {
+                    const isSelected = sortBy === opt.col && sortDir === opt.dir;
+                    return (
+                      <button
+                        key={`${opt.col}_${opt.dir}`}
+                        type="button"
+                        onClick={() => {
+                          setSortBy(opt.col);
+                          setSortDir(opt.dir);
+                          setShowSortPopover(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
+                          isSelected
+                            ? "bg-primary/10 text-primary font-semibold"
+                            : "text-text-main hover:bg-surface-200"
+                        }`}
+                      >
+                        <span>{opt.label}</span>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-primary" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Pareto Filter Popover Button */}
+          <div className="relative" data-filter-popover="true">
+            <Button
+              type="button"
+              variant={activeFilterCount > 0 ? "default" : "outline"}
+              onClick={() => setShowFilterPopover(!showFilterPopover)}
+              className="h-9 px-2.5 sm:px-3 text-xs gap-1.5 shrink-0 cursor-pointer active:scale-95 transition-transform"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Filters</span>
+              {activeFilterCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-primary-foreground text-primary font-mono text-[10px] font-bold">
+                  {activeFilterCount}
+                </span>
+              )}
+            </Button>
+
+            {showFilterPopover && (
+              <>
+                <div
+                  className="fixed inset-0 z-30 cursor-default"
+                  onClick={() => setShowFilterPopover(false)}
+                />
+                <div className="absolute right-0 mt-1.5 w-64 sm:w-72 bg-surface-100 border border-border rounded-xl shadow-2xl p-3 z-40 text-xs space-y-2 animate-in fade-in zoom-in-95 max-h-[calc(100vh-180px)] overflow-y-auto">
+                  <div className="flex items-center justify-between border-b border-border/60 pb-2">
+                    <div className="flex items-center gap-1.5">
+                      <SlidersHorizontal className="w-3.5 h-3.5 text-primary" />
+                      <span className="font-semibold text-text-main text-xs">Filter Keywords</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {activeFilterCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={resetAllFilters}
+                          className="text-[10px] text-primary hover:underline cursor-pointer font-medium"
+                        >
+                          Reset
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setShowFilterPopover(false)}
+                        className="text-text-muted hover:text-text-main p-0.5 cursor-pointer rounded"
+                        title="Close"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 1. Channels Discovered (Pareto Preset Pills) */}
+                  <div className="space-y-1">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-text-muted block">
+                      Channels Yield
+                    </span>
+                    <div className="grid grid-cols-4 gap-1">
+                      {[
+                        { label: "Any", val: 0 },
+                        { label: "1+", val: 1 },
+                        { label: "10+", val: 10 },
+                        { label: "25+", val: 25 },
+                      ].map((tier) => (
+                        <button
+                          key={tier.val}
+                          type="button"
+                          onClick={() => setFilterMinChannels(tier.val)}
+                          className={`py-1 px-1 rounded-md text-[11px] font-medium border text-center transition-all cursor-pointer ${
+                            filterMinChannels === tier.val
+                              ? "bg-primary text-primary-foreground border-primary shadow-xs font-semibold"
+                              : "bg-surface-200/80 border-border/60 text-text-secondary hover:text-text-main hover:bg-surface-300"
+                          }`}
+                        >
+                          {tier.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 2. Category Filter */}
+                  {availableCategories.length > 0 && (
+                    <div className="space-y-1 pt-1.5 border-t border-border/60">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-text-muted block">
+                          Category
+                        </span>
+                        {filterCategory !== "ALL" && (
+                          <button
+                            type="button"
+                            onClick={() => setFilterCategory("ALL")}
+                            className="text-[10px] text-primary hover:underline cursor-pointer font-medium"
+                          >
+                            Reset
+                          </button>
+                        )}
+                      </div>
+                      <select
+                        value={filterCategory}
+                        onChange={(e) => setFilterCategory(e.target.value)}
+                        className="w-full bg-surface-200/80 border border-border/60 rounded-md py-1.5 px-2 text-xs text-text-main focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                      >
+                        <option value="ALL">All Categories</option>
+                        {availableCategories.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* 3. Output & Execution Quality */}
+                  <div className="space-y-1 pt-1.5 border-t border-border/60">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-text-muted block">
+                      Execution & Yield
+                    </span>
+
+                    <div
+                      onClick={() => setFilterUnexecutedOnly(!filterUnexecutedOnly)}
+                      className={`flex items-center justify-between px-2.5 py-1.5 rounded-md border transition-all cursor-pointer select-none text-xs ${
+                        filterUnexecutedOnly
+                          ? "bg-primary/[0.08] border-primary/40 text-text-main font-medium"
+                          : "bg-surface-200/50 border-border/60 text-text-secondary hover:bg-surface-200 hover:text-text-main"
+                      }`}
+                    >
+                      <span>Unexecuted (0 Attempts)</span>
+                      <div
+                        className={`w-3.5 h-3.5 rounded-[3px] border flex items-center justify-center transition-all shrink-0 ${
+                          filterUnexecutedOnly
+                            ? "bg-primary border-primary text-primary-foreground"
+                            : "bg-surface-300 border-border/80"
+                        }`}
+                      >
+                        {filterUnexecutedOnly && <Check className="w-2.5 h-2.5 stroke-[2.5]" />}
+                      </div>
+                    </div>
+
+                    <div
+                      onClick={() => setFilterHasQualified(!filterHasQualified)}
+                      className={`flex items-center justify-between px-2.5 py-1.5 rounded-md border transition-all cursor-pointer select-none text-xs ${
+                        filterHasQualified
+                          ? "bg-primary/[0.08] border-primary/40 text-text-main font-medium"
+                          : "bg-surface-200/50 border-border/60 text-text-secondary hover:bg-surface-200 hover:text-text-main"
+                      }`}
+                    >
+                      <span>Has Qualified Leads</span>
+                      <div
+                        className={`w-3.5 h-3.5 rounded-[3px] border flex items-center justify-center transition-all shrink-0 ${
+                          filterHasQualified
+                            ? "bg-primary border-primary text-primary-foreground"
+                            : "bg-surface-300 border-border/80"
+                        }`}
+                      >
+                        {filterHasQualified && <Check className="w-2.5 h-2.5 stroke-[2.5]" />}
+                      </div>
+                    </div>
+
+                    <div
+                      onClick={() => setFilterHasEmails(!filterHasEmails)}
+                      className={`flex items-center justify-between px-2.5 py-1.5 rounded-md border transition-all cursor-pointer select-none text-xs ${
+                        filterHasEmails
+                          ? "bg-primary/[0.08] border-primary/40 text-text-main font-medium"
+                          : "bg-surface-200/50 border-border/60 text-text-secondary hover:bg-surface-200 hover:text-text-main"
+                      }`}
+                    >
+                      <span>Has Emails Discovered</span>
+                      <div
+                        className={`w-3.5 h-3.5 rounded-[3px] border flex items-center justify-center transition-all shrink-0 ${
+                          filterHasEmails
+                            ? "bg-primary border-primary text-primary-foreground"
+                            : "bg-surface-300 border-border/80"
+                        }`}
+                      >
+                        {filterHasEmails && <Check className="w-2.5 h-2.5 stroke-[2.5]" />}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-1.5 border-t border-border/60">
+                    <Button
+                      size="sm"
+                      onClick={() => setShowFilterPopover(false)}
+                      className="w-full h-7 text-xs"
+                    >
+                      Done
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
           {/* Add Keyword Button */}
           <Button
             onClick={() => setShowAddModal(true)}
             className="gap-1.5 h-9 px-3.5 text-xs font-semibold shrink-0 active:scale-[0.98] shadow-sm cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Add Keyword</span>
+            <span className="hidden sm:inline">Add Keyword</span>
+            <span className="sm:hidden">Add</span>
           </Button>
         </div>
       </div>
+
+      {/* Active Filter Chips Bar (Instant Visibility & Dismissal) */}
+      {activeFilterCount > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap pt-0.5 animate-in fade-in slide-in-from-top-1 text-xs shrink-0">
+          <span className="text-[11px] text-text-muted">Active Filters:</span>
+          {filterMinChannels > 0 && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-medium">
+              {filterMinChannels}+ Channels
+              <button
+                type="button"
+                onClick={() => setFilterMinChannels(0)}
+                className="hover:text-primary/70 cursor-pointer ml-0.5"
+                title="Remove filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+          {filterCategory !== "ALL" && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-medium">
+              {filterCategory}
+              <button
+                type="button"
+                onClick={() => setFilterCategory("ALL")}
+                className="hover:text-primary/70 cursor-pointer ml-0.5"
+                title="Remove category filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+          {filterUnexecutedOnly && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-medium">
+              Unexecuted Only
+              <button
+                type="button"
+                onClick={() => setFilterUnexecutedOnly(false)}
+                className="hover:text-primary/70 cursor-pointer ml-0.5"
+                title="Remove filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+          {filterHasQualified && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-medium">
+              Has Qualified Leads
+              <button
+                type="button"
+                onClick={() => setFilterHasQualified(false)}
+                className="hover:text-primary/70 cursor-pointer ml-0.5"
+                title="Remove filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+          {filterHasEmails && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-medium">
+              Has Emails
+              <button
+                type="button"
+                onClick={() => setFilterHasEmails(false)}
+                className="hover:text-primary/70 cursor-pointer ml-0.5"
+                title="Remove filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Floating/Docked Bulk Action Toolbar */}
       {selectedIds.size > 0 && (
@@ -628,13 +1061,58 @@ export function KeywordsInfiniteList({ initialData, total: initialTotal }: Props
                     )}
                   </button>
                 </TableHead>
-                <TableHead>Keyword</TableHead>
-                <TableHead>Category</TableHead>
+                <TableHead>
+                  <button
+                    type="button"
+                    onClick={() => handleSort("keyword")}
+                    className="group inline-flex items-center gap-1.5 hover:text-text-main font-semibold transition-colors cursor-pointer select-none"
+                  >
+                    <span>Keyword</span>
+                    {getSortIcon("keyword")}
+                  </button>
+                </TableHead>
+                <TableHead>
+                  <button
+                    type="button"
+                    onClick={() => handleSort("category")}
+                    className="group inline-flex items-center gap-1.5 hover:text-text-main font-semibold transition-colors cursor-pointer select-none"
+                  >
+                    <span>Category</span>
+                    {getSortIcon("category")}
+                  </button>
+                </TableHead>
                 <TableHead>Entity</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Channels</TableHead>
-                <TableHead className="text-right">Attempts</TableHead>
-                <TableHead>Last Execution</TableHead>
+                <TableHead className="text-right">
+                  <button
+                    type="button"
+                    onClick={() => handleSort("channels")}
+                    className="group inline-flex items-center gap-1.5 hover:text-text-main font-semibold transition-colors cursor-pointer select-none ml-auto"
+                  >
+                    <span>Channels</span>
+                    {getSortIcon("channels")}
+                  </button>
+                </TableHead>
+                <TableHead className="text-right">
+                  <button
+                    type="button"
+                    onClick={() => handleSort("attempts")}
+                    className="group inline-flex items-center gap-1.5 hover:text-text-main font-semibold transition-colors cursor-pointer select-none ml-auto"
+                  >
+                    <span>Attempts</span>
+                    {getSortIcon("attempts")}
+                  </button>
+                </TableHead>
+                <TableHead>
+                  <button
+                    type="button"
+                    onClick={() => handleSort("lastAttempt")}
+                    className="group inline-flex items-center gap-1.5 hover:text-text-main font-semibold transition-colors cursor-pointer select-none"
+                  >
+                    <span>Last Execution</span>
+                    {getSortIcon("lastAttempt")}
+                  </button>
+                </TableHead>
                 <TableHead className="text-right w-36">Actions</TableHead>
               </TableRow>
             </TableHeader>
