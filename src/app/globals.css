@@ -62,6 +62,7 @@
   }
 
   html {
+    font-size: 14px; /* Scale to match 90% zoom — 16px × 0.875 ≈ 14px */
     overscroll-behavior-y: none;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
