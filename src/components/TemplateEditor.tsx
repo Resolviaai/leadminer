@@ -19,17 +19,24 @@ import {
   AlertCircle,
   Trash2,
   Power,
-  GripVertical,
-  Tag,
   CheckSquare,
   Square,
   Sparkles,
   Shuffle,
+  Eye,
+  Code2,
+  Mail,
+  User,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { TemplateInsertMenu } from "@/components/templates/TemplateInsertMenu";
+import {
+  renderTemplatePreview,
+  spinText,
+} from "@/components/templates/spintax-presets";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-interface Template {
+export interface Template {
   id: number;
   name: string;
   subject: string;
@@ -39,73 +46,23 @@ interface Template {
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-const VARIABLES = [
-  { label: "first_name", token: "{{first_name}}" },
-  { label: "channel_name", token: "{{channel_name}}" },
-  { label: "channel_url", token: "{{channel_url}}" },
-  { label: "subscriber_count", token: "{{subscriber_count}}" },
-  { label: "custom_line", token: "{{custom_line}}" },
-];
-
-const SPINTAX_BLOCKS = [
-  { label: "Greetings", token: "{Hey|Hi|Hello}" },
-  { label: "Subjects", token: "{Quick question|Thoughts on your channel|Hey {{first_name}}}" },
-  { label: "Compliments", token: "{Loved your latest upload|Big fan of your content|Really enjoyed your recent video}" },
-  { label: "Sign-offs", token: "{Best,|Cheers,|Talk soon,}" },
-];
-
-const SAMPLE: Record<string, string> = {
-  "{{first_name}}": "Joe",
-  "{{channel_name}}": "The Rogan Clips",
-  "{{channel_url}}": "https://youtube.com/c/theroganclips",
-  "{{subscriber_count}}": "850,000",
-  "{{custom_line}}":
-    "Loved your recent breakdown, the pacing was spot-on.",
-};
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-function spinText(text: string): string {
-  if (!text) return "";
-  const spintaxRegex = /\{([^{}]+?\|[^{}]+?)\}/g;
-  let spun = text;
-  let iteration = 0;
-  while (spintaxRegex.test(spun) && iteration < 5) {
-    spun = spun.replace(spintaxRegex, (_, optionsStr) => {
-      const options = optionsStr.split("|");
-      const chosen = options[Math.floor(Math.random() * options.length)];
-      return chosen.trim();
-    });
-    iteration++;
-  }
-  return spun;
-}
-
-function renderPreview(text: string) {
-  const substituted = Object.entries(SAMPLE).reduce(
-    (acc, [token, val]) => acc.replaceAll(token, val),
-    text
-  );
-  return spinText(substituted);
-}
-
 function countWords(text: string) {
   return text.trim() ? text.trim().split(/\s+/).length : 0;
 }
 
 function subjectLengthColor(len: number) {
   if (len <= 50) return "text-emerald-400";
-  if (len <= 70) return "text-warning";
-  return "text-danger";
+  if (len <= 70) return "text-amber-400";
+  return "text-rose-400";
 }
 
-// ─── Auto-resize textarea hook ────────────────────────────────────────────────
+// Auto-resize textarea hook
 function useAutoResize(ref: React.RefObject<HTMLTextAreaElement>, value: string) {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
+    el.style.height = `${Math.max(160, el.scrollHeight)}px`;
   }, [ref, value]);
 }
 
@@ -116,7 +73,6 @@ interface TemplateEditorProps {
   onToggleSelect?: (id: number) => void;
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
 export function TemplateEditor({
   template,
   selectable = false,
@@ -136,26 +92,25 @@ export function TemplateEditor({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [previewSeed, setPreviewSeed] = useState(0);
+  const [viewTab, setViewTab] = useState<"preview" | "source">("preview");
 
   // Delete state
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  // Deferred preview — doesn't block typing
+  // Deferred preview for performance
   const deferredSubject = useDeferredValue(subject);
   const deferredBody = useDeferredValue(body);
 
-  // ── Refs ──
+  // Refs
   const subjectRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const lastFocusedField = useRef<"subject" | "body">("body");
-  const [draggingToken, setDraggingToken] = useState<string | null>(null);
-  const [isSubjectOver, setIsSubjectOver] = useState(false);
-  const [isBodyOver, setIsBodyOver] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+
   useAutoResize(bodyRef, body);
 
-  // ── Mark dirty whenever editing fields change ──
+  // Mark dirty
   useEffect(() => {
     if (editing) {
       const dirty =
@@ -167,7 +122,7 @@ export function TemplateEditor({
     }
   }, [name, subject, body, isActive, editing, template]);
 
-  // ── Unsaved changes warning on tab/window close ──
+  // Unsaved changes warning
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       if (isDirty) {
@@ -179,7 +134,7 @@ export function TemplateEditor({
     return () => window.removeEventListener("beforeunload", handler);
   }, [isDirty]);
 
-  // ── Keyboard shortcut Ctrl/Cmd + S ──
+  // Keyboard shortcut Ctrl/Cmd + S
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "s" && editing) {
@@ -189,137 +144,49 @@ export function TemplateEditor({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing, name, subject, body, isActive]);
 
-  // ── Cancel in-flight request on unmount ──
   useEffect(() => {
     return () => abortRef.current?.abort();
   }, []);
 
-  // ── Insert variable at cursor ──
-  const insertVariable = useCallback((token: string, targetField?: "subject" | "body") => {
-    const field = targetField ?? lastFocusedField.current;
-    if (field === "subject") {
-      const el = subjectRef.current;
-      if (!el) {
-        setSubject((prev) => prev + token);
-        return;
-      }
-      const start = el.selectionStart ?? subject.length;
-      const end = el.selectionEnd ?? subject.length;
-      const updated = subject.slice(0, start) + token + subject.slice(end);
-      setSubject(updated);
-      requestAnimationFrame(() => {
-        el.focus();
-        el.selectionStart = el.selectionEnd = start + token.length;
-      });
-    } else {
-      const el = bodyRef.current;
-      if (!el) {
-        setBody((prev) => prev + token);
-        return;
-      }
-      const start = el.selectionStart ?? body.length;
-      const end = el.selectionEnd ?? body.length;
-      const updated = body.slice(0, start) + token + body.slice(end);
-      setBody(updated);
-      requestAnimationFrame(() => {
-        el.focus();
-        el.selectionStart = el.selectionEnd = start + token.length;
-      });
-    }
-  }, [body, subject]);
-
-  const handleSubjectDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsSubjectOver(false);
-    setDraggingToken(null);
-
-    const token =
-      e.dataTransfer.getData("application/x-mergetag") ||
-      e.dataTransfer.getData("text/plain") ||
-      e.dataTransfer.getData("text");
-    if (!token) return;
-
-    const input = subjectRef.current;
-    if (!input) {
-      setSubject((prev) => prev + token);
-      return;
-    }
-
-    let insertPos = input.selectionStart ?? input.value.length;
-    try {
-      if (typeof (document as any).caretPositionFromPoint === "function") {
-        const pos = (document as any).caretPositionFromPoint(e.clientX, e.clientY);
-        if (pos && typeof pos.offset === "number" && (pos.offsetNode === input || input.contains(pos.offsetNode))) {
-          insertPos = pos.offset;
+  // Insert variable or spintax at cursor
+  const insertVariable = useCallback(
+    (token: string, targetField?: "subject" | "body") => {
+      const field = targetField ?? lastFocusedField.current;
+      if (field === "subject") {
+        const el = subjectRef.current;
+        if (!el) {
+          setSubject((prev) => prev + token);
+          return;
         }
-      } else if (typeof document.caretRangeFromPoint === "function") {
-        const range = document.caretRangeFromPoint(e.clientX, e.clientY);
-        if (range && typeof range.startOffset === "number" && (range.startContainer === input || input.contains(range.startContainer))) {
-          insertPos = range.startOffset;
+        const start = el.selectionStart ?? subject.length;
+        const end = el.selectionEnd ?? subject.length;
+        const updated = subject.slice(0, start) + token + subject.slice(end);
+        setSubject(updated);
+        requestAnimationFrame(() => {
+          el.focus();
+          el.selectionStart = el.selectionEnd = start + token.length;
+        });
+      } else {
+        const el = bodyRef.current;
+        if (!el) {
+          setBody((prev) => prev + token);
+          return;
         }
+        const start = el.selectionStart ?? body.length;
+        const end = el.selectionEnd ?? body.length;
+        const updated = body.slice(0, start) + token + body.slice(end);
+        setBody(updated);
+        requestAnimationFrame(() => {
+          el.focus();
+          el.selectionStart = el.selectionEnd = start + token.length;
+        });
       }
-    } catch {}
-
-    insertPos = Math.max(0, Math.min(insertPos, input.value.length));
-    const nextVal = input.value.slice(0, insertPos) + token + input.value.slice(insertPos);
-    setSubject(nextVal);
-    lastFocusedField.current = "subject";
-
-    requestAnimationFrame(() => {
-      input.focus();
-      try {
-        input.setSelectionRange(insertPos + token.length, insertPos + token.length);
-      } catch {}
-    });
-  };
-
-  const handleBodyDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsBodyOver(false);
-    setDraggingToken(null);
-
-    const token =
-      e.dataTransfer.getData("application/x-mergetag") ||
-      e.dataTransfer.getData("text/plain") ||
-      e.dataTransfer.getData("text");
-    if (!token) return;
-
-    const textarea = bodyRef.current;
-    if (!textarea) {
-      setBody((prev) => prev + token);
-      return;
-    }
-
-    let insertPos = textarea.selectionStart ?? textarea.value.length;
-    try {
-      if (typeof (document as any).caretPositionFromPoint === "function") {
-        const pos = (document as any).caretPositionFromPoint(e.clientX, e.clientY);
-        if (pos && typeof pos.offset === "number" && (pos.offsetNode === textarea || textarea.contains(pos.offsetNode))) {
-          insertPos = pos.offset;
-        }
-      } else if (typeof document.caretRangeFromPoint === "function") {
-        const range = document.caretRangeFromPoint(e.clientX, e.clientY);
-        if (range && typeof range.startOffset === "number" && (range.startContainer === textarea || textarea.contains(range.startContainer))) {
-          insertPos = range.startOffset;
-        }
-      }
-    } catch {}
-
-    insertPos = Math.max(0, Math.min(insertPos, textarea.value.length));
-    const nextVal = textarea.value.slice(0, insertPos) + token + textarea.value.slice(insertPos);
-    setBody(nextVal);
-    lastFocusedField.current = "body";
-
-    requestAnimationFrame(() => {
-      textarea.focus();
-      try {
-        textarea.setSelectionRange(insertPos + token.length, insertPos + token.length);
-      } catch {}
-    });
-  };
+    },
+    [body, subject]
+  );
 
   // ── Save ──
   const handleSave = useCallback(async () => {
@@ -373,7 +240,7 @@ export function TemplateEditor({
       if (!res.ok) throw new Error();
       router.refresh();
     } catch {
-      setIsActive(!nextState); // rollback
+      setIsActive(!nextState);
     }
   };
 
@@ -415,598 +282,471 @@ export function TemplateEditor({
   // ── Computed ──
   const subjectLen = subject.length;
   const wordCount = countWords(body);
-  const previewSubject = React.useMemo(() => renderPreview(deferredSubject), [deferredSubject, previewSeed]);
-  const previewBody = React.useMemo(() => renderPreview(deferredBody), [deferredBody, previewSeed]);
-  const hasSpintax = /\{([^{}]+?\|[^{}]+?)\}/.test(subject) || /\{([^{}]+?\|[^{}]+?)\}/.test(body);
+  const previewSubject = React.useMemo(
+    () => renderTemplatePreview(deferredSubject, previewSeed),
+    [deferredSubject, previewSeed]
+  );
+  const previewBody = React.useMemo(
+    () => renderTemplatePreview(deferredBody, previewSeed),
+    [deferredBody, previewSeed]
+  );
+  const hasSpintax =
+    /\{([^{}]*?\|[^{}]*?)\}/.test(subject) ||
+    /\{([^{}]*?\|[^{}]*?)\}/.test(body);
 
   return (
-    <div className="space-y-4">
-      {/* ── Top Bar with ID, Status badge, and Controls ── */}
-      <div
-        className={`transition-colors ${
-          editing || expanded ? "border-b border-border/50 pb-3" : ""
-        }`}
-      >
-        {/* ── MOBILE HEADER LAYOUT (< sm) ── */}
-        <div className="sm:hidden space-y-2.5">
-          {!editing ? (
-            <>
-              {/* Mobile Row 1: Checkbox + Status + Title + Expand/Collapse */}
-              <div
-                className="flex items-center justify-between gap-2 cursor-pointer select-none"
-                onClick={() => setExpanded((v) => !v)}
-              >
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  {selectable && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onToggleSelect?.(template.id);
-                      }}
-                      className="p-1 -ml-1 text-text-muted hover:text-primary transition-colors shrink-0"
-                      aria-label={selected ? "Deselect template" : "Select template"}
-                    >
-                      {selected ? (
-                        <CheckSquare className="w-4 h-4 text-primary" />
-                      ) : (
-                        <Square className="w-4 h-4 text-text-muted" />
-                      )}
-                    </button>
-                  )}
-                  <Badge variant={isActive ? "success" : "secondary"} className="font-mono text-[10px] shrink-0">
-                    {isActive ? "Active" : "Inactive"}
-                  </Badge>
-                  <h2 className="text-xs font-semibold text-text-main truncate">
-                    {template.name}
-                  </h2>
-                </div>
+    <div className="space-y-3.5">
+      {/* ── Header Row (View Mode & Edit Mode) ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/40">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          {selectable && (
+            <button
+              type="button"
+              onClick={() => onToggleSelect?.(template.id)}
+              className="p-1 -ml-1 text-text-muted hover:text-primary transition-colors shrink-0"
+              aria-label={selected ? "Deselect template" : "Select template"}
+            >
+              {selected ? (
+                <CheckSquare className="w-4 h-4 text-primary" />
+              ) : (
+                <Square className="w-4 h-4 text-text-muted" />
+              )}
+            </button>
+          )}
 
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setExpanded((v) => !v);
-                  }}
-                  className="p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-200 transition-all min-h-[36px] min-w-[36px] flex items-center justify-center active:scale-95 shrink-0"
-                  aria-label={expanded ? "Collapse template" : "Expand template"}
-                >
-                  {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                </button>
-              </div>
+          {/* Status Badge */}
+          <span
+            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors shrink-0 ${
+              isActive
+                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                : "bg-surface-300 text-text-muted border border-border"
+            }`}
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                isActive ? "bg-emerald-400" : "bg-text-muted"
+              }`}
+            />
+            {isActive ? "Active" : "Inactive"}
+          </span>
 
-              {/* Mobile Row 2: ID + Save status (left), Actions (right) */}
-              <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/40">
-                <div className="flex items-center gap-1.5 text-[10px] font-mono text-text-muted">
-                  <span>ID #{template.id}</span>
-                  {saveState === "saved" && (
-                    <span className="text-emerald-400 font-sans font-medium flex items-center gap-0.5">
-                      <Check className="w-3 h-3" /> Saved
-                    </span>
-                  )}
-                  {isDirty && saveState === "idle" && (
-                    <span className="text-warning font-sans">(unsaved)</span>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={handleToggleActive}
-                    title={isActive ? "Deactivate template" : "Activate template"}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs transition-all min-h-[36px] active:scale-95 ${
-                      isActive
-                        ? "bg-surface-200 border-border text-text-secondary hover:text-warning"
-                        : "bg-surface-200 border-border text-text-muted hover:text-emerald-400"
-                    }`}
-                  >
-                    <Power className="w-3.5 h-3.5" />
-                    <span className="text-[11px]">{isActive ? "Pause" : "Activate"}</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setEditing(true);
-                      setExpanded(true);
-                    }}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/25 text-primary text-xs font-semibold hover:bg-primary/20 active:scale-95 transition-all min-h-[36px]"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                    <span className="text-[11px]">Edit</span>
-                  </button>
-
-                  {!confirmDelete ? (
-                    <button
-                      onClick={() => setConfirmDelete(true)}
-                      title="Delete template"
-                      className="p-2 rounded-lg bg-surface-200 border border-border text-text-muted hover:text-danger hover:bg-destructive/10 hover:border-destructive/30 transition-all min-h-[36px] min-w-[36px] flex items-center justify-center active:scale-95"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  ) : (
-                    <div className="flex items-center gap-1 bg-destructive/10 border border-destructive/30 rounded-lg p-0.5">
-                      <button
-                        onClick={handleDelete}
-                        disabled={deleting}
-                        className="px-2 py-1 text-xs font-semibold text-danger hover:bg-destructive/20 rounded min-h-[32px] transition-colors"
-                      >
-                        {deleting ? "…" : "Confirm"}
-                      </button>
-                      <button
-                        onClick={() => setConfirmDelete(false)}
-                        className="p-1 text-text-muted hover:text-text-main rounded min-h-[32px] min-w-[28px] flex items-center justify-center"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </>
+          {/* Name Display or Input */}
+          {editing ? (
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="bg-surface-200 border border-border rounded-lg px-2.5 py-1 text-sm font-semibold text-text-main focus:outline-none focus:ring-1 focus:ring-primary transition-all max-w-sm w-full"
+              placeholder="Template name…"
+              maxLength={100}
+            />
           ) : (
-            /* Mobile Edit Mode Header */
-            <div className="space-y-2">
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full bg-surface-300 border border-border rounded-lg px-3 py-1.5 text-sm font-semibold text-text-main focus:outline-none focus:ring-1 focus:ring-primary transition-shadow"
-                placeholder="Template name..."
-                maxLength={100}
-              />
-              <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/40">
-                <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={isActive}
-                    onChange={(e) => setIsActive(e.target.checked)}
-                    className="rounded border-border bg-surface-300 text-primary focus:ring-primary h-4 w-4"
-                  />
-                  <span>Active</span>
-                </label>
-
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={handleCancel}
-                    disabled={saveState === "saving"}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-surface-200 border border-border text-text-secondary text-xs font-medium hover:text-text-main active:scale-95 transition-all min-h-[36px]"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                    <span>Cancel</span>
-                  </button>
-
-                  <button
-                    onClick={handleSave}
-                    disabled={saveState === "saving" || !isDirty}
-                    className="flex items-center gap-1 px-3.5 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-brand-hover active:scale-95 transition-all min-h-[36px] disabled:opacity-50"
-                  >
-                    {saveState === "saving" ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <Check className="w-3.5 h-3.5" />
-                    )}
-                    <span>{saveState === "saving" ? "Saving…" : "Save"}</span>
-                  </button>
-                </div>
-              </div>
+            <div
+              className="min-w-0 cursor-pointer group select-none flex items-center gap-2"
+              onClick={() => setExpanded((v) => !v)}
+            >
+              <h2 className="text-sm font-semibold text-text-main group-hover:text-primary transition-colors truncate">
+                {template.name}
+              </h2>
+              <span className="text-[11px] text-text-muted font-normal hidden md:inline">
+                • {wordCount} words
+              </span>
             </div>
+          )}
+
+          {saveState === "saved" && (
+            <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-medium shrink-0 animate-in fade-in">
+              <Check className="w-3 h-3" /> Saved
+            </span>
+          )}
+          {isDirty && saveState === "idle" && (
+            <span className="text-[10px] text-amber-400 font-medium shrink-0">
+              Unsaved
+            </span>
           )}
         </div>
 
-        {/* ── DESKTOP HEADER LAYOUT (sm+) ── */}
-        <div
-          className={`hidden sm:flex items-center justify-between gap-3 flex-wrap ${
-            !editing ? "cursor-pointer group select-none" : ""
-          }`}
-          onClick={() => {
-            if (!editing) setExpanded((v) => !v);
-          }}
-        >
-          <div className="flex items-center gap-2 min-w-0">
-            {selectable && (
+        {/* ── Action Buttons ── */}
+        <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+          {!editing ? (
+            <>
+              {/* Edit Button */}
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleSelect?.(template.id);
+                onClick={() => {
+                  setEditing(true);
+                  setExpanded(true);
                 }}
-                className="p-1 -ml-1 text-text-muted hover:text-primary transition-colors shrink-0"
-                aria-label={selected ? "Deselect template" : "Select template"}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-200 border border-border text-xs font-medium text-text-secondary hover:text-text-main hover:bg-surface-300 transition-all active:scale-95"
               >
-                {selected ? (
-                  <CheckSquare className="w-4 h-4 text-primary" />
+                <Pencil className="w-3 h-3" />
+                <span>Edit</span>
+              </button>
+
+              {/* Toggle Active Quick Action */}
+              <button
+                type="button"
+                onClick={handleToggleActive}
+                className={`p-1.5 rounded-lg border transition-all active:scale-95 ${
+                  isActive
+                    ? "text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 border-emerald-500/20"
+                    : "text-text-muted hover:text-text-main bg-surface-200 border-border hover:bg-surface-300"
+                }`}
+                title={isActive ? "Deactivate template" : "Activate template"}
+                aria-label={isActive ? "Deactivate template" : "Activate template"}
+              >
+                <Power className="w-3.5 h-3.5" />
+              </button>
+
+              {/* Delete with Confirmation */}
+              {!confirmDelete ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  className="p-1.5 rounded-lg text-text-muted hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-all active:scale-95"
+                  title="Delete template"
+                  aria-label="Delete template"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              ) : (
+                <div className="flex items-center gap-1 bg-surface-300 border border-rose-500/30 rounded-lg p-0.5">
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="px-2 py-1 rounded text-[10px] font-semibold bg-rose-500 text-white hover:bg-rose-600 transition-colors"
+                  >
+                    {deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : "Delete"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(false)}
+                    className="p-1 text-text-muted hover:text-text-main"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+
+              {/* Expand / Collapse Chevron */}
+              <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                className="p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-200 transition-all"
+                aria-label={expanded ? "Collapse template" : "Expand template"}
+              >
+                {expanded ? (
+                  <ChevronUp className="w-4 h-4" />
                 ) : (
-                  <Square className="w-4 h-4 text-text-muted" />
+                  <ChevronDown className="w-4 h-4" />
                 )}
               </button>
-            )}
-            <Badge variant={isActive ? "success" : "secondary"} className="font-mono text-[10px]">
-              {isActive ? "Active" : "Inactive"}
-            </Badge>
-            <Badge variant="secondary" className="font-mono text-[10px]">
-              ID #{template.id}
-            </Badge>
+            </>
+          ) : (
+            /* Editing Controls */
+            <>
+              <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer mr-2 select-none">
+                <input
+                  type="checkbox"
+                  checked={isActive}
+                  onChange={(e) => setIsActive(e.target.checked)}
+                  className="rounded border-border bg-surface-300 text-primary focus:ring-primary h-3.5 w-3.5"
+                />
+                <span>Active</span>
+              </label>
 
-            {editing ? (
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="bg-surface-300 border border-border rounded-md px-2.5 py-1 text-sm font-semibold text-text-main focus:outline-none focus:ring-1 focus:ring-primary transition-shadow"
-                placeholder="Template name..."
-                maxLength={100}
-              />
-            ) : (
-              <h2 className="text-sm font-semibold text-text-main group-hover:text-primary transition-colors truncate ml-1">
-                {template.name}
-              </h2>
-            )}
-
-            {saveState === "saved" && (
-              <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-medium shrink-0">
-                <Check className="w-3 h-3" /> Saved
+              <span className="hidden sm:flex items-center gap-1 text-[10px] text-text-muted mr-1">
+                <Keyboard className="w-3 h-3" />
+                <kbd className="font-mono">Ctrl+S</kbd>
               </span>
-            )}
-            {isDirty && saveState === "idle" && (
-              <span className="text-[10px] text-warning font-medium shrink-0">unsaved</span>
-            )}
-          </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {!editing ? (
-              <>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleToggleActive();
-                  }}
-                  title={isActive ? "Deactivate template" : "Activate template"}
-                  className={`p-2 rounded-lg border text-xs transition-all min-h-[38px] min-w-[38px] flex items-center justify-center active:scale-95 ${
-                    isActive
-                      ? "bg-surface-200 border-border text-text-secondary hover:text-warning"
-                      : "bg-surface-200 border-border text-text-muted hover:text-emerald-400"
-                  }`}
-                >
-                  <Power className="w-3.5 h-3.5" />
-                </button>
+              <button
+                type="button"
+                onClick={handleCancel}
+                disabled={saveState === "saving"}
+                className="px-3 py-1.5 rounded-lg bg-surface-200 border border-border text-xs font-medium text-text-secondary hover:text-text-main hover:bg-surface-300 transition-all disabled:opacity-50"
+              >
+                Cancel
+              </button>
 
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditing(true);
-                    setExpanded(true);
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/25 text-primary text-xs font-semibold hover:bg-primary/20 active:scale-95 transition-all min-h-[38px]"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                  <span>Edit</span>
-                </button>
-
-                {!confirmDelete ? (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setConfirmDelete(true);
-                    }}
-                    title="Delete template"
-                    className="p-2 rounded-lg bg-surface-200 border border-border text-text-muted hover:text-danger hover:bg-destructive/10 hover:border-destructive/30 transition-all min-h-[38px] min-w-[38px] flex items-center justify-center active:scale-95"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saveState === "saving" || !isDirty}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-brand-hover active:scale-95 transition-all shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saveState === "saving" ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 ) : (
-                  <div
-                    className="flex items-center gap-1 bg-destructive/10 border border-destructive/30 rounded-lg p-1"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete();
-                      }}
-                      disabled={deleting}
-                      className="px-2.5 py-1 text-xs font-semibold text-danger hover:bg-destructive/20 rounded min-h-[32px] transition-colors"
-                    >
-                      {deleting ? "…" : "Confirm"}
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setConfirmDelete(false);
-                      }}
-                      className="p-1 text-text-muted hover:text-text-main rounded min-h-[32px] min-w-[32px] flex items-center justify-center"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  <Check className="w-3.5 h-3.5" />
                 )}
-
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setExpanded((v) => !v);
-                  }}
-                  className="p-2 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-200 transition-all min-h-[38px] min-w-[38px] flex items-center justify-center active:scale-95"
-                  aria-label={expanded ? "Collapse template" : "Expand template"}
-                >
-                  {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                </button>
-              </>
-            ) : (
-              <>
-                <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer mr-2 select-none">
-                  <input
-                    type="checkbox"
-                    checked={isActive}
-                    onChange={(e) => setIsActive(e.target.checked)}
-                    className="rounded border-border bg-surface-300 text-primary focus:ring-primary h-3.5 w-3.5"
-                  />
-                  <span>Active</span>
-                </label>
-
-                <span className="hidden sm:flex items-center gap-1 text-[10px] text-text-muted">
-                  <Keyboard className="w-3 h-3" />
-                  <kbd className="font-mono">Ctrl+S</kbd>
-                </span>
-
-                <button
-                  onClick={handleCancel}
-                  disabled={saveState === "saving"}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-surface-200 border border-border text-text-secondary text-xs font-medium hover:text-text-main active:scale-95 transition-all min-h-[34px] disabled:opacity-50"
-                >
-                  <X className="w-3.5 h-3.5" />
-                  Cancel
-                </button>
-
-                <button
-                  onClick={handleSave}
-                  disabled={saveState === "saving" || !isDirty}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-white text-xs font-semibold hover:bg-brand-hover active:scale-95 transition-all min-h-[34px] disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {saveState === "saving" ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Check className="w-3.5 h-3.5" />
-                  )}
-                  {saveState === "saving" ? "Saving…" : "Save"}
-                </button>
-              </>
-            )}
-          </div>
+                <span>{saveState === "saving" ? "Saving…" : "Save"}</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* ── Error banner ── */}
+      {/* ── Error Banner ── */}
       {errorMsg && (
-        <div className="flex items-center gap-2 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2.5">
+        <div className="flex items-center gap-2 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2">
           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-          <span>{errorMsg}</span>
+          <span className="flex-1">{errorMsg}</span>
           <button
+            type="button"
             onClick={() => setErrorMsg(null)}
-            className="ml-auto text-rose-300 hover:text-rose-200"
+            className="text-rose-300 hover:text-rose-200"
           >
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
 
-      {/* ── Variable insertion toolbar with drag & drop (editing only) ── */}
-      {editing && (
-        <div className="p-3 rounded-xl bg-surface-200/90 border border-border space-y-2">
-          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-text-secondary tracking-wide uppercase">
-            <Tag className="w-3.5 h-3.5 text-primary" />
-            <span>Available Merge Tags</span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 pt-0.5">
-            {VARIABLES.map((v) => (
-              <div
-                key={v.token}
-                draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.setData("text/plain", v.token);
-                  e.dataTransfer.setData("text", v.token);
-                  e.dataTransfer.setData("application/x-mergetag", v.token);
-                  e.dataTransfer.effectAllowed = "copy";
-                  setDraggingToken(v.token);
-                }}
-                onDragEnd={() => {
-                  setDraggingToken(null);
-                  setIsSubjectOver(false);
-                  setIsBodyOver(false);
-                }}
-                onClick={() => insertVariable(v.token)}
-                title={`Drag into Subject or Body, or click to insert ${v.token}`}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-300 border border-border/80 text-primary hover:text-white hover:bg-primary/20 hover:border-primary/50 cursor-grab active:cursor-grabbing hover:scale-[1.03] active:scale-[0.97] transition-all shadow-sm select-none group text-xs font-mono"
-              >
-                <GripVertical className="w-3 h-3 text-text-muted group-hover:text-primary transition-colors shrink-0" />
-                <span>{v.token}</span>
+      {/* ═════════════════════════════════════════════════════════════════════ */}
+      {/* ── VIEW MODE (Collapsed summary or Expanded Clean Email Card) ── */}
+      {/* ═════════════════════════════════════════════════════════════════════ */}
+      {!editing && (
+        <div>
+          {/* Quick collapsed line */}
+          {!expanded ? (
+            <div
+              className="flex items-center justify-between text-xs text-text-secondary cursor-pointer select-none py-0.5 group"
+              onClick={() => setExpanded(true)}
+            >
+              <div className="min-w-0 flex-1 pr-4">
+                <span className="text-text-muted font-medium mr-1.5">Subject:</span>
+                <span className="text-text-main group-hover:text-primary transition-colors truncate">
+                  {template.subject}
+                </span>
               </div>
-            ))}
-          </div>
+              <span className="text-[11px] text-text-muted font-mono shrink-0">
+                Click to view email
+              </span>
+            </div>
+          ) : (
+            /* Expanded Clean Gmail-Style Card */
+            <div className="rounded-xl border border-border/70 bg-surface-100/70 overflow-hidden shadow-xs">
+              {/* Card Header with View Switcher & Shuffle */}
+              <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-surface-200/60 border-b border-border/50">
+                <div className="flex items-center gap-2">
+                  <Mail className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-xs font-semibold text-text-main">
+                    Email Preview
+                  </span>
+                  {hasSpintax && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.2 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
+                      <Sparkles className="w-2.5 h-2.5" />
+                      Spintax Active
+                    </span>
+                  )}
+                </div>
 
-          {/* Anti-Spam Spintax Rotation Row */}
-          <div className="pt-2 border-t border-border/40 space-y-1.5">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-400 tracking-wide uppercase">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Anti-Spam Spintax Rotation</span>
-              <span className="text-[10px] text-text-muted lowercase font-normal hidden sm:inline">(rotates words automatically for each recipient)</span>
+                <div className="flex items-center gap-2">
+                  {/* View Mode Toggle */}
+                  <div className="flex items-center p-0.5 rounded-lg bg-surface-300/80 border border-border/50 text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => setViewTab("preview")}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md font-medium transition-all ${
+                        viewTab === "preview"
+                          ? "bg-surface-100 text-text-main font-semibold shadow-xs"
+                          : "text-text-muted hover:text-text-main"
+                      }`}
+                    >
+                      <Eye className="w-3 h-3" />
+                      <span>Live Preview</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewTab("source")}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md font-medium transition-all ${
+                        viewTab === "source"
+                          ? "bg-surface-100 text-text-main font-semibold shadow-xs"
+                          : "text-text-muted hover:text-text-main"
+                      }`}
+                    >
+                      <Code2 className="w-3 h-3" />
+                      <span>Template Source</span>
+                    </button>
+                  </div>
+
+                  {/* Shuffle Button */}
+                  {hasSpintax && viewTab === "preview" && (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewSeed((s) => s + 1)}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg bg-surface-200 text-text-secondary hover:text-emerald-400 hover:bg-emerald-500/10 border border-border transition-all active:scale-95"
+                      title="Shuffle Spintax variation with sample lead data"
+                    >
+                      <Shuffle className="w-3 h-3 text-emerald-400" />
+                      <span>Shuffle</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Email Content Area */}
+              <div className="p-4 sm:p-5 space-y-4">
+                {/* Meta header (Recipient & Subject) */}
+                <div className="space-y-2 pb-3.5 border-b border-border/40 text-xs">
+                  {viewTab === "preview" && (
+                    <div className="flex items-center gap-2 text-text-muted">
+                      <User className="w-3.5 h-3.5 shrink-0" />
+                      <span className="font-medium text-text-secondary">To:</span>
+                      <span className="font-medium text-text-main">
+                        Joe &lt;creator@theroganclips.com&gt;
+                      </span>
+                      <span className="text-[10px] text-text-muted font-mono">
+                        (850K subscribers)
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="flex items-start gap-2">
+                    <span className="text-text-muted font-medium shrink-0 pt-0.5">
+                      Subject:
+                    </span>
+                    <span className="font-semibold text-text-main leading-relaxed">
+                      {viewTab === "preview" ? previewSubject : template.subject}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Email Body */}
+                <div className="text-xs sm:text-sm text-text-secondary leading-relaxed font-sans whitespace-pre-wrap max-h-[380px] overflow-y-auto pr-2">
+                  {viewTab === "preview" ? previewBody : template.body}
+                </div>
+              </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2 pt-0.5">
-              {SPINTAX_BLOCKS.map((s) => (
-                <button
-                  type="button"
-                  key={s.label}
-                  onClick={() => insertVariable(s.token)}
-                  title={`Click to insert ${s.token}`}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:text-white hover:bg-emerald-500/25 hover:border-emerald-500/50 cursor-pointer active:scale-[0.97] transition-all shadow-sm select-none text-xs font-mono"
-                >
-                  <Sparkles className="w-3 h-3 text-emerald-400 shrink-0" />
-                  <span>{s.label}: {s.token}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+          )}
         </div>
       )}
 
-      {/* ── Editor / Preview panel ── */}
-      {(editing || expanded) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* LEFT — Editor */}
-          <div className="space-y-3 p-4 rounded-xl bg-surface-200 border border-border">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
-                {editing ? "Editor" : "Template Source"}
-              </span>
-            </div>
-
-            {/* Subject field with Drop Target */}
-            <div
-              onDragOver={(e) => {
-                if (!editing) return;
-                e.preventDefault();
-                e.dataTransfer.dropEffect = "copy";
-                if (!isSubjectOver) setIsSubjectOver(true);
-              }}
-              onDragLeave={(e) => {
-                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                  setIsSubjectOver(false);
-                }
-              }}
-              onDrop={(e) => editing && handleSubjectDrop(e)}
-              className={`space-y-1.5 p-2 rounded-xl transition-all ${
-                editing && isSubjectOver
-                  ? "ring-2 ring-primary border border-primary bg-primary/[0.05]"
-                  : editing && draggingToken
-                  ? "ring-1 ring-primary/40 border border-dashed border-primary/50 bg-primary/[0.02]"
-                  : "border border-transparent"
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <label className="text-[10px] text-text-muted uppercase font-semibold tracking-wider">
+      {/* ═════════════════════════════════════════════════════════════════════ */}
+      {/* ── EDIT MODE (Instantly & ManyReach Inspired Clean Composer) ── */}
+      {/* ═════════════════════════════════════════════════════════════════════ */}
+      {editing && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pt-1">
+          {/* LEFT: Clean Editor (7 cols on lg) */}
+          <div className="lg:col-span-7 space-y-4">
+            {/* Subject Input Box */}
+            <div className="rounded-xl border border-border/80 bg-surface-100 p-3.5 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
                   Subject Line
                 </label>
-                {editing && (
-                  <span className={`text-[10px] font-mono font-medium ${subjectLengthColor(subjectLen)}`}>
-                    {subjectLen}/70 chars
-                    {subjectLen > 50 && subjectLen <= 70 && " — getting long"}
-                    {subjectLen > 70 && " — too long"}
-                    {subjectLen <= 50 && " — optimal"}
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`text-[10px] font-mono font-medium ${subjectLengthColor(
+                      subjectLen
+                    )}`}
+                  >
+                    {subjectLen}/70
                   </span>
-                )}
+                  {/* Contextual Insert Menu */}
+                  <TemplateInsertMenu
+                    targetName="subject"
+                    onInsert={(token) => insertVariable(token, "subject")}
+                  />
+                </div>
               </div>
-              {editing ? (
-                <input
-                  ref={subjectRef}
-                  value={subject}
-                  onFocus={() => {
-                    lastFocusedField.current = "subject";
-                  }}
-                  onChange={(e) => setSubject(e.target.value)}
-                  className="w-full bg-surface-300 border border-border rounded-lg px-3 py-2 text-xs font-mono text-text-main focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-text-muted transition-shadow"
-                  placeholder="Your subject line…"
-                  maxLength={200}
-                />
-              ) : (
-                <p className="font-mono text-xs text-text-main break-words">{template.subject}</p>
-              )}
+
+              <input
+                ref={subjectRef}
+                value={subject}
+                onFocus={() => {
+                  lastFocusedField.current = "subject";
+                }}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="e.g. Quick question about {{channel_name}} clips"
+                className="w-full bg-surface-200 border border-border/80 rounded-lg px-3 py-2 text-xs font-medium text-text-main focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary placeholder:text-text-muted transition-all"
+                maxLength={200}
+              />
             </div>
 
-            {/* Body field with Drop Target */}
-            <div
-              onDragOver={(e) => {
-                if (!editing) return;
-                e.preventDefault();
-                e.dataTransfer.dropEffect = "copy";
-                if (!isBodyOver) setIsBodyOver(true);
-              }}
-              onDragLeave={(e) => {
-                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                  setIsBodyOver(false);
-                }
-              }}
-              onDrop={(e) => editing && handleBodyDrop(e)}
-              className={`space-y-1.5 p-2 rounded-xl transition-all pt-2 border-t border-border/50 ${
-                editing && isBodyOver
-                  ? "ring-2 ring-primary border border-primary bg-primary/[0.05]"
-                  : editing && draggingToken
-                  ? "ring-1 ring-primary/40 border border-dashed border-primary/50 bg-primary/[0.02]"
-                  : ""
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <label className="text-[10px] text-text-muted uppercase font-semibold tracking-wider">
-                  Email Body
-                </label>
-                {editing && (
+            {/* Body Textarea Box */}
+            <div className="rounded-xl border border-border/80 bg-surface-100 p-3.5 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <label className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
+                    Email Body
+                  </label>
                   <span className="text-[10px] text-text-muted font-mono">
                     {wordCount} words
                   </span>
-                )}
-              </div>
-              {editing ? (
-                <textarea
-                  ref={bodyRef}
-                  value={body}
-                  onFocus={() => {
-                    lastFocusedField.current = "body";
-                  }}
-                  onChange={(e) => setBody(e.target.value)}
-                  className="w-full min-h-[240px] bg-surface-300 border border-border rounded-lg px-3 py-2.5 text-[11px] font-mono text-text-main leading-relaxed resize-none overflow-hidden focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-text-muted transition-shadow"
-                  placeholder="Write your email body… use {{variable}} syntax for personalization"
+                </div>
+                {/* Contextual Insert Menu */}
+                <TemplateInsertMenu
+                  targetName="body"
+                  onInsert={(token) => insertVariable(token, "body")}
                 />
-              ) : (
-                <pre className="font-mono text-[11px] text-text-secondary whitespace-pre-wrap leading-relaxed">
-                  {template.body}
-                </pre>
-              )}
+              </div>
+
+              <textarea
+                ref={bodyRef}
+                value={body}
+                onFocus={() => {
+                  lastFocusedField.current = "body";
+                }}
+                onChange={(e) => setBody(e.target.value)}
+                placeholder={"Hi {{first_name}},\n\n{|Hello|Hi|Good morning|}\n\n{{custom_line}}\n\nCould I send over 2 sample clips we edited from your recent upload for free?\n\n{|Best|Cheers|Talk soon|},\nLeadMiner Team"}
+                className="w-full min-h-[220px] bg-surface-200 border border-border/80 rounded-lg p-3 text-xs leading-relaxed font-sans text-text-main focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary placeholder:text-text-muted transition-all resize-y"
+              />
             </div>
           </div>
 
-          {/* RIGHT — Live Preview */}
-          <div className="space-y-3 p-4 rounded-xl bg-surface-200 border border-border">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
-                  Live Preview
-                </span>
-                {hasSpintax && (
-                  <Badge variant="outline" className="text-[9px] font-mono border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
-                    Spintax Active
-                  </Badge>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
+          {/* RIGHT: Live Preview (5 cols on lg) */}
+          <div className="lg:col-span-5">
+            <div className="rounded-xl border border-border/80 bg-surface-100 overflow-hidden shadow-xs sticky top-4">
+              <div className="flex items-center justify-between px-3.5 py-2.5 bg-surface-200/70 border-b border-border/50">
+                <div className="flex items-center gap-1.5">
+                  <Eye className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-xs font-semibold text-text-main">
+                    Live Preview
+                  </span>
+                </div>
+
                 {hasSpintax && (
                   <button
                     type="button"
                     onClick={() => setPreviewSeed((s) => s + 1)}
-                    className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded bg-surface-300 text-text-secondary hover:text-emerald-400 hover:bg-emerald-500/10 border border-border transition-all active:scale-95"
-                    title="Generate another variation from your spintax options"
+                    className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-md bg-surface-300 text-text-secondary hover:text-emerald-400 hover:bg-emerald-500/10 border border-border transition-all active:scale-95"
+                    title="Generate another variation"
                   >
                     <Shuffle className="w-3 h-3 text-emerald-400" />
                     <span>Shuffle Variation</span>
                   </button>
                 )}
-                <span className="text-[10px] text-text-muted">sample data</span>
               </div>
-            </div>
 
+              <div className="p-3.5 space-y-3">
+                {/* Recipient info */}
+                <div className="pb-2 border-b border-border/40 text-[11px] space-y-1">
+                  <div className="flex items-center gap-1.5 text-text-muted">
+                    <span className="font-medium text-text-secondary">To:</span>
+                    <span className="text-text-main font-medium truncate">
+                      Joe &lt;creator@theroganclips.com&gt;
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-1.5">
+                    <span className="font-medium text-text-secondary shrink-0">
+                      Subject:
+                    </span>
+                    <span className="text-text-main font-medium break-words">
+                      {previewSubject || (
+                        <span className="italic text-text-muted">No subject</span>
+                      )}
+                    </span>
+                  </div>
+                </div>
 
-
-            {/* Full body preview */}
-            <div className="space-y-2 pt-1">
-              <div className="pb-2 border-b border-border/50">
-                <span className="text-[10px] text-text-muted uppercase tracking-wider block mb-1">
-                  Subject
-                </span>
-                <p className="text-xs font-medium text-text-main">
-                  {previewSubject || <span className="italic text-text-muted">Empty</span>}
-                </p>
-              </div>
-              <div>
-                <span className="text-[10px] text-text-muted uppercase tracking-wider block mb-1.5">
-                  Body
-                </span>
-                <div className="text-[11px] text-text-secondary whitespace-pre-wrap leading-relaxed max-h-[300px] overflow-y-auto pr-1 scrollbar-thin">
-                  {previewBody || <span className="italic text-text-muted">Empty</span>}
+                {/* Body Preview */}
+                <div className="text-xs text-text-secondary whitespace-pre-wrap leading-relaxed max-h-[300px] overflow-y-auto pr-1">
+                  {previewBody || (
+                    <span className="italic text-text-muted">
+                      Start writing in the editor to see your email live preview…
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

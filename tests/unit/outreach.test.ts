@@ -66,6 +66,22 @@ describe('Template Engine', () => {
             'Hello David, loved your videos! Best, Rohit',
             'Hello David, loved your videos! Cheers, Rohit']).toContain(rendered);
   });
+
+  it('should resolve delimiter spintax {|Hello|Hi|Good morning|} and {|Thanks|Cheers|Regards|}', () => {
+    const opening = templateEngine.spin('{|Hello|Hi|Good morning|}');
+    expect(['Hello', 'Hi', 'Good morning']).toContain(opening);
+
+    const closing = templateEngine.spin('{|Thanks|Cheers|Regards|Greetings|Sincerely|Best wishes|Kind regards|Best|}');
+    expect(['Thanks', 'Cheers', 'Regards', 'Greetings', 'Sincerely', 'Best wishes', 'Kind regards', 'Best']).toContain(closing);
+  });
+
+  it('should strip abtest tags and rotate between test variations', () => {
+    for (let i = 0; i < 20; i++) {
+      const res = templateEngine.spin('{abtest|This is test A| This is test B|}');
+      expect(['This is test A', 'This is test B']).toContain(res);
+      expect(res).not.toBe('abtest');
+    }
+  });
 });
 
 describe('Gemini Personalizer Service', () => {

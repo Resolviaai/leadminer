@@ -1,10 +1,9 @@
 "use client";
 
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useDeferredValue } from "react";
 import { useRouter } from "next/navigation";
 import {
   FileText,
-  Info,
   Plus,
   X,
   Check,
@@ -13,18 +12,22 @@ import {
   ChevronUp,
   Layers,
   AlertCircle,
-  GripVertical,
-  Tag,
   CheckSquare,
   Square,
   Power,
   Trash2,
   Sparkles,
   Shuffle,
+  Eye,
+  User,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TemplateEditor } from "@/components/TemplateEditor";
+import { TemplateInsertMenu } from "@/components/templates/TemplateInsertMenu";
+import {
+  renderTemplatePreview,
+} from "@/components/templates/spintax-presets";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface Template {
@@ -35,57 +38,14 @@ interface Template {
   isActive: boolean;
 }
 
-const VARIABLES = [
-  { label: "first_name", token: "{{first_name}}" },
-  { label: "channel_name", token: "{{channel_name}}" },
-  { label: "channel_url", token: "{{channel_url}}" },
-  { label: "subscriber_count", token: "{{subscriber_count}}" },
-  { label: "custom_line", token: "{{custom_line}}" },
-];
-
-const SPINTAX_BLOCKS = [
-  { label: "Greetings", token: "{Hey|Hi|Hello}" },
-  { label: "Subjects", token: "{Quick question|Thoughts on your channel|Hey {{first_name}}}" },
-  { label: "Compliments", token: "{Loved your latest upload|Big fan of your content|Really enjoyed your recent video}" },
-  { label: "Sign-offs", token: "{Best,|Cheers,|Talk soon,}" },
-];
-
-const SAMPLE: Record<string, string> = {
-  "{{first_name}}": "Joe",
-  "{{channel_name}}": "The Rogan Clips",
-  "{{channel_url}}": "https://youtube.com/c/theroganclips",
-  "{{subscriber_count}}": "850,000",
-  "{{custom_line}}": "Loved your recent breakdown, the pacing was spot-on.",
-};
-
-function spinText(text: string): string {
-  if (!text) return "";
-  const spintaxRegex = /\{([^{}]+?\|[^{}]+?)\}/g;
-  let spun = text;
-  let iteration = 0;
-  while (spintaxRegex.test(spun) && iteration < 5) {
-    spun = spun.replace(spintaxRegex, (_, optionsStr) => {
-      const options = optionsStr.split("|");
-      const chosen = options[Math.floor(Math.random() * options.length)];
-      return chosen.trim();
-    });
-    iteration++;
-  }
-  return spun;
-}
-
-function renderPreview(text: string, _seed?: number) {
-  const substituted = Object.entries(SAMPLE).reduce(
-    (acc, [token, val]) => acc.replaceAll(token, val),
-    text
-  );
-  return spinText(substituted);
+function countWords(text: string) {
+  return text.trim() ? text.trim().split(/\s+/).length : 0;
 }
 
 function subjectLengthColor(len: number) {
   if (len <= 50) return "text-emerald-400";
-  if (len <= 70) return "text-warning";
-  return "text-danger";
+  if (len <= 70) return "text-amber-400";
+  return "text-rose-400";
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -207,12 +167,18 @@ export function TemplatesManager({
   const newSubjectRef = useRef<HTMLInputElement>(null);
   const newBodyRef = useRef<HTMLTextAreaElement>(null);
   const lastFocusedField = useRef<"subject" | "body">("body");
-  const [draggingToken, setDraggingToken] = useState<string | null>(null);
-  const [isSubjectOver, setIsSubjectOver] = useState(false);
-  const [isBodyOver, setIsBodyOver] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   const activeCount = initialTemplates.filter((t) => t.isActive).length;
+
+  // Deferred values for preview performance
+  const deferredNewSubject = useDeferredValue(subject);
+  const deferredNewBody = useDeferredValue(body);
+  const newHasSpintax =
+    /\{([^{}]*?\|[^{}]*?)\}/.test(subject) || /\{([^{}]*?\|[^{}]*?)\}/.test(body);
+  const previewNewSubject = renderTemplatePreview(deferredNewSubject, previewSeed);
+  const previewNewBody = renderTemplatePreview(deferredNewBody, previewSeed);
+  const newWordCount = countWords(body);
 
   // ── New Template Creation ──
   const insertVariableIntoNew = (token: string, targetField?: "subject" | "body") => {
@@ -248,98 +214,6 @@ export function TemplatesManager({
         el.selectionStart = el.selectionEnd = start + token.length;
       });
     }
-  };
-
-  const handleSubjectDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsSubjectOver(false);
-    setDraggingToken(null);
-
-    const token =
-      e.dataTransfer.getData("application/x-mergetag") ||
-      e.dataTransfer.getData("text/plain") ||
-      e.dataTransfer.getData("text");
-    if (!token) return;
-
-    const input = newSubjectRef.current;
-    if (!input) {
-      setSubject((p) => p + token);
-      return;
-    }
-
-    let insertPos = input.selectionStart ?? input.value.length;
-    try {
-      if (typeof (document as any).caretPositionFromPoint === "function") {
-        const pos = (document as any).caretPositionFromPoint(e.clientX, e.clientY);
-        if (pos && typeof pos.offset === "number" && (pos.offsetNode === input || input.contains(pos.offsetNode))) {
-          insertPos = pos.offset;
-        }
-      } else if (typeof document.caretRangeFromPoint === "function") {
-        const range = document.caretRangeFromPoint(e.clientX, e.clientY);
-        if (range && typeof range.startOffset === "number" && (range.startContainer === input || input.contains(range.startContainer))) {
-          insertPos = range.startOffset;
-        }
-      }
-    } catch {}
-
-    insertPos = Math.max(0, Math.min(insertPos, input.value.length));
-    const nextVal = input.value.slice(0, insertPos) + token + input.value.slice(insertPos);
-    setSubject(nextVal);
-    setNewErrors((p) => ({ ...p, subject: "" }));
-    lastFocusedField.current = "subject";
-
-    requestAnimationFrame(() => {
-      input.focus();
-      try {
-        input.setSelectionRange(insertPos + token.length, insertPos + token.length);
-      } catch {}
-    });
-  };
-
-  const handleBodyDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsBodyOver(false);
-    setDraggingToken(null);
-
-    const token =
-      e.dataTransfer.getData("application/x-mergetag") ||
-      e.dataTransfer.getData("text/plain") ||
-      e.dataTransfer.getData("text");
-    if (!token) return;
-
-    const textarea = newBodyRef.current;
-    if (!textarea) {
-      setBody((p) => p + token);
-      return;
-    }
-
-    let insertPos = textarea.selectionStart ?? textarea.value.length;
-    try {
-      if (typeof (document as any).caretPositionFromPoint === "function") {
-        const pos = (document as any).caretPositionFromPoint(e.clientX, e.clientY);
-        if (pos && typeof pos.offset === "number" && (pos.offsetNode === textarea || textarea.contains(pos.offsetNode))) {
-          insertPos = pos.offset;
-        }
-      } else if (typeof document.caretRangeFromPoint === "function") {
-        const range = document.caretRangeFromPoint(e.clientX, e.clientY);
-        if (range && typeof range.startOffset === "number" && (range.startContainer === textarea || textarea.contains(range.startContainer))) {
-          insertPos = range.startOffset;
-        }
-      }
-    } catch {}
-
-    insertPos = Math.max(0, Math.min(insertPos, textarea.value.length));
-    const nextVal = textarea.value.slice(0, insertPos) + token + textarea.value.slice(insertPos);
-    setBody(nextVal);
-    setNewErrors((p) => ({ ...p, body: "" }));
-    lastFocusedField.current = "body";
-
-    requestAnimationFrame(() => {
-      textarea.focus();
-      try {
-        textarea.setSelectionRange(insertPos + token.length, insertPos + token.length);
-      } catch {}
-    });
   };
 
   const handleCreateTemplate = async () => {
@@ -452,60 +326,6 @@ export function TemplatesManager({
                 <span>New Template</span>
               </button>
             </div>
-          </div>
-        </div>
-      </Card>
-
-      {/* ── Merge Tags Reference Card (Compact horizontal scroll on mobile) ── */}
-      <Card className="p-3 sm:p-4 border-border bg-surface-100">
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <div className="flex items-center gap-2">
-            <Info className="w-3.5 h-3.5 text-primary shrink-0" />
-            <span className="text-[10px] sm:text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
-              Available Merge Tags
-            </span>
-          </div>
-          <span className="text-[10px] text-text-muted hidden sm:inline">
-            <span className="font-medium text-text-secondary">custom_line</span> is AI personalized with Gemini
-          </span>
-        </div>
-        <div className="relative">
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 sm:flex-wrap">
-            {VARIABLES.map((v) => (
-              <code
-                key={v.token}
-                className="text-[11px] font-mono px-2.5 py-1 rounded-md bg-brand-soft border border-primary/20 text-brand-accent shrink-0 select-all cursor-copy active:scale-95 transition-transform"
-              >
-                {v.token}
-              </code>
-            ))}
-          </div>
-          <div className="sm:hidden absolute right-0 top-0 bottom-1 w-6 bg-gradient-to-l from-surface-100 to-transparent pointer-events-none" />
-        </div>
-
-        {/* Spintax Reference */}
-        <div className="pt-2.5 mt-2.5 border-t border-border/40">
-          <div className="flex items-center justify-between gap-2 mb-1.5">
-            <div className="flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span className="text-[10px] sm:text-[11px] font-semibold text-emerald-400 uppercase tracking-wider">
-                Anti-Spam Spintax Syntax
-              </span>
-            </div>
-            <span className="text-[10px] text-text-muted hidden sm:inline">
-              Wrap options in <code className="font-mono text-emerald-400">{"{A|B|C}"}</code> to rotate text for every recipient
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 sm:flex-wrap">
-            {SPINTAX_BLOCKS.map((s) => (
-              <code
-                key={s.label}
-                className="text-[11px] font-mono px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 shrink-0 select-all cursor-copy active:scale-95 transition-transform"
-                title="Click or copy into your template"
-              >
-                {s.token}
-              </code>
-            ))}
           </div>
         </div>
       </Card>
@@ -644,10 +464,12 @@ export function TemplatesManager({
               </div>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Left Column: Form Fields */}
-              <div className="space-y-3.5">
-                <div className="space-y-1">
+            {/* Layout: Composer on Left, Live Gmail-style Preview on Right */}
+            <div className={`grid grid-cols-1 ${showNewPreview ? "lg:grid-cols-12" : ""} gap-5`}>
+              {/* Left Column: Composer */}
+              <div className={`${showNewPreview ? "lg:col-span-7" : "w-full"} space-y-4`}>
+                {/* Template Name */}
+                <div className="rounded-xl border border-border/80 bg-surface-100 p-3.5 space-y-1.5">
                   <label className="text-[10px] text-text-muted uppercase font-semibold tracking-wider block">
                     Template Name
                   </label>
@@ -658,9 +480,9 @@ export function TemplatesManager({
                       setNewErrors((p) => ({ ...p, name: "" }));
                     }}
                     placeholder="e.g. Creator Collab Offer v1"
-                    maxLength={255}
-                    className={`w-full bg-surface-200 border rounded-lg px-3 py-2 text-xs text-text-main focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-text-muted ${
-                      newErrors.name ? "border-rose-500/60" : "border-border"
+                    maxLength={100}
+                    className={`w-full bg-surface-200 border rounded-lg px-3 py-2 text-xs text-text-main focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-text-muted transition-all ${
+                      newErrors.name ? "border-rose-500/60" : "border-border/80"
                     }`}
                   />
                   {newErrors.name && (
@@ -668,38 +490,26 @@ export function TemplatesManager({
                   )}
                 </div>
 
-                {/* Subject Line with Drop Target */}
-                <div
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = "copy";
-                    if (!isSubjectOver) setIsSubjectOver(true);
-                  }}
-                  onDragLeave={(e) => {
-                    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                      setIsSubjectOver(false);
-                    }
-                  }}
-                  onDrop={handleSubjectDrop}
-                  className={`space-y-1 p-2 rounded-xl transition-all ${
-                    isSubjectOver
-                      ? "ring-2 ring-primary border border-primary bg-primary/[0.05]"
-                      : draggingToken
-                      ? "ring-1 ring-primary/40 border border-dashed border-primary/50 bg-primary/[0.02]"
-                      : "border border-transparent"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
+                {/* Subject Line */}
+                <div className="rounded-xl border border-border/80 bg-surface-100 p-3.5 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
                     <label className="text-[10px] text-text-muted uppercase font-semibold tracking-wider">
                       Subject Line
                     </label>
-                    <span
-                      className={`text-[10px] font-mono font-medium ${subjectLengthColor(
-                        subject.length
-                      )}`}
-                    >
-                      {subject.length}/70 chars
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`text-[10px] font-mono font-medium ${subjectLengthColor(
+                          subject.length
+                        )}`}
+                      >
+                        {subject.length}/70 chars
+                      </span>
+                      {/* Contextual Insert Menu */}
+                      <TemplateInsertMenu
+                        targetName="subject"
+                        onInsert={(token) => insertVariableIntoNew(token, "subject")}
+                      />
+                    </div>
                   </div>
                   <input
                     ref={newSubjectRef}
@@ -711,104 +521,33 @@ export function TemplatesManager({
                       setSubject(e.target.value);
                       setNewErrors((p) => ({ ...p, subject: "" }));
                     }}
-                    placeholder="e.g. Quick question for {{channel_name}}"
-                    maxLength={500}
-                    className={`w-full bg-surface-200 border rounded-lg px-3 py-2 text-xs font-mono text-text-main focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-text-muted transition-shadow ${
-                      newErrors.subject ? "border-rose-500/60" : "border-border"
+                    placeholder="e.g. Quick question about {{channel_name}} clips"
+                    maxLength={200}
+                    className={`w-full bg-surface-200 border rounded-lg px-3 py-2 text-xs font-medium text-text-main focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-text-muted transition-all ${
+                      newErrors.subject ? "border-rose-500/60" : "border-border/80"
                     }`}
                   />
                   {newErrors.subject && (
-                    <p className="text-[11px] text-rose-400">
-                      {newErrors.subject}
-                    </p>
+                    <p className="text-[11px] text-rose-400">{newErrors.subject}</p>
                   )}
                 </div>
 
-                {/* Variable insertion toolbar with drag & drop */}
-                <div className="p-3 rounded-xl bg-surface-200/90 border border-border space-y-2">
-                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-text-secondary tracking-wide uppercase">
-                    <Tag className="w-3.5 h-3.5 text-primary" />
-                    <span>Available Merge Tags</span>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                    {VARIABLES.map((v) => (
-                      <div
-                        key={v.token}
-                        draggable
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData("text/plain", v.token);
-                          e.dataTransfer.setData("text", v.token);
-                          e.dataTransfer.setData("application/x-mergetag", v.token);
-                          e.dataTransfer.effectAllowed = "copy";
-                          setDraggingToken(v.token);
-                        }}
-                        onDragEnd={() => {
-                          setDraggingToken(null);
-                          setIsSubjectOver(false);
-                          setIsBodyOver(false);
-                        }}
-                        onClick={() => insertVariableIntoNew(v.token)}
-                        title={`Drag into Subject or Body, or click to insert ${v.token}`}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-300 border border-border/80 text-primary hover:text-white hover:bg-primary/20 hover:border-primary/50 cursor-grab active:cursor-grabbing hover:scale-[1.03] active:scale-[0.97] transition-all shadow-sm select-none group text-xs font-mono"
-                      >
-                        <GripVertical className="w-3 h-3 text-text-muted group-hover:text-primary transition-colors shrink-0" />
-                        <span>{v.token}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Spintax Rotation Row */}
-                  <div className="pt-2 border-t border-border/40 space-y-1.5">
-                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-400 tracking-wide uppercase">
-                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Anti-Spam Spintax Rotation</span>
+                {/* Email Body */}
+                <div className="rounded-xl border border-border/80 bg-surface-100 p-3.5 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <label className="text-[10px] text-text-muted uppercase font-semibold tracking-wider">
+                        Email Body
+                      </label>
+                      <span className="text-[10px] text-text-muted font-mono">
+                        {newWordCount} words
+                      </span>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                      {SPINTAX_BLOCKS.map((s) => (
-                        <button
-                          type="button"
-                          key={s.label}
-                          onClick={() => insertVariableIntoNew(s.token)}
-                          title={`Click to insert ${s.token}`}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:text-white hover:bg-emerald-500/25 hover:border-emerald-500/50 cursor-pointer active:scale-[0.97] transition-all shadow-sm select-none text-xs font-mono"
-                        >
-                          <Sparkles className="w-3 h-3 text-emerald-400 shrink-0" />
-                          <span>{s.label}: {s.token}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Email Body with Drop Target */}
-                <div
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = "copy";
-                    if (!isBodyOver) setIsBodyOver(true);
-                  }}
-                  onDragLeave={(e) => {
-                    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                      setIsBodyOver(false);
-                    }
-                  }}
-                  onDrop={handleBodyDrop}
-                  className={`space-y-1 p-2 rounded-xl transition-all ${
-                    isBodyOver
-                      ? "ring-2 ring-primary border border-primary bg-primary/[0.05]"
-                      : draggingToken
-                      ? "ring-1 ring-primary/40 border border-dashed border-primary/50 bg-primary/[0.02]"
-                      : "border border-transparent"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <label className="text-[10px] text-text-muted uppercase font-semibold tracking-wider">
-                      Email Body
-                    </label>
-                    <span className="text-[10px] text-text-muted font-mono">
-                      {body.trim() ? body.trim().split(/\s+/).length : 0} words
-                    </span>
+                    {/* Contextual Insert Menu */}
+                    <TemplateInsertMenu
+                      targetName="body"
+                      onInsert={(token) => insertVariableIntoNew(token, "body")}
+                    />
                   </div>
                   <textarea
                     ref={newBodyRef}
@@ -820,10 +559,10 @@ export function TemplatesManager({
                       setBody(e.target.value);
                       setNewErrors((p) => ({ ...p, body: "" }));
                     }}
-                    rows={10}
-                    placeholder={"Hi {{first_name}},\n\n{{custom_line}}\n\nI noticed your channel {{channel_name}} has reached {{subscriber_count}} subscribers..."}
-                    className={`w-full bg-surface-200 border rounded-lg px-3 py-2 text-[11px] font-mono text-text-main leading-relaxed resize-y focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-text-muted transition-shadow ${
-                      newErrors.body ? "border-rose-500/60" : "border-border"
+                    rows={11}
+                    placeholder={"Hi {{first_name}},\n\n{|Hello|Hi|Good morning|}\n\n{{custom_line}}\n\nI noticed your channel {{channel_name}} has reached {{subscriber_count}} subscribers.\n\nCould I send over 2 sample clips we edited from your recent upload for free?\n\n{|Best|Cheers|Talk soon|},\nLeadMiner Team"}
+                    className={`w-full bg-surface-200 border rounded-lg p-3 text-xs leading-relaxed font-sans text-text-main resize-y focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-text-muted transition-all ${
+                      newErrors.body ? "border-rose-500/60" : "border-border/80"
                     }`}
                   />
                   {newErrors.body && (
@@ -831,6 +570,7 @@ export function TemplatesManager({
                   )}
                 </div>
 
+                {/* Bottom Action Buttons */}
                 <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border">
                   <button
                     type="button"
@@ -856,57 +596,72 @@ export function TemplatesManager({
                 </div>
               </div>
 
-              {/* Right Column: Live Mock Preview */}
+              {/* Right Column: Live Email Card Preview */}
               {showNewPreview && (
-                <div className="space-y-3 p-4 rounded-xl bg-surface-200 border border-border">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
-                        Live Preview
-                      </span>
-                      {(/\{([^{}]+?\|[^{}]+?)\}/.test(subject) || /\{([^{}]+?\|[^{}]+?)\}/.test(body)) && (
-                        <Badge variant="outline" className="text-[9px] font-mono border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
-                          Spintax Active
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {(/\{([^{}]+?\|[^{}]+?)\}/.test(subject) || /\{([^{}]+?\|[^{}]+?)\}/.test(body)) && (
+                <div className="lg:col-span-5">
+                  <div className="rounded-xl border border-border/80 bg-surface-100 overflow-hidden shadow-xs sticky top-4">
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-3.5 py-2.5 bg-surface-200/70 border-b border-border/50">
+                      <div className="flex items-center gap-1.5">
+                        <Eye className="w-3.5 h-3.5 text-primary" />
+                        <span className="text-xs font-semibold text-text-main">
+                          Live Email Preview
+                        </span>
+                        {newHasSpintax && (
+                          <span className="inline-flex items-center gap-1 text-[9px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
+                            <Sparkles className="w-2.5 h-2.5" />
+                            Spintax
+                          </span>
+                        )}
+                      </div>
+
+                      {newHasSpintax && (
                         <button
                           type="button"
                           onClick={() => setPreviewSeed((s) => s + 1)}
-                          className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded bg-surface-300 text-text-secondary hover:text-emerald-400 hover:bg-emerald-500/10 border border-border transition-all active:scale-95"
-                          title="Generate another variation from your spintax options"
+                          className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-md bg-surface-300 text-text-secondary hover:text-emerald-400 hover:bg-emerald-500/10 border border-border transition-all active:scale-95"
+                          title="Generate another variation"
                         >
                           <Shuffle className="w-3 h-3 text-emerald-400" />
-                          <span>Shuffle Variation</span>
+                          <span>Shuffle</span>
                         </button>
                       )}
-                      <span className="text-[10px] text-text-muted">
-                        sample lead data
-                      </span>
                     </div>
-                  </div>
 
+                    {/* Email Card Body */}
+                    <div className="p-4 space-y-3 bg-surface-100/50">
+                      {/* Meta */}
+                      <div className="space-y-1.5 pb-3 border-b border-border/40 text-xs">
+                        <div className="flex items-center gap-2 text-text-muted">
+                          <User className="w-3 h-3 text-primary shrink-0" />
+                          <span className="font-medium text-text-secondary">To:</span>
+                          <span className="text-text-main font-medium truncate">
+                            Joe &lt;joe@youtube-creator.com&gt;
+                          </span>
+                          <span className="text-[10px] text-text-muted hidden sm:inline">
+                            (850K subscribers)
+                          </span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <span className="text-text-muted font-medium shrink-0 pt-0.5">
+                            Subject:
+                          </span>
+                          <span className="font-semibold text-text-main leading-relaxed">
+                            {previewNewSubject || (
+                              <span className="italic text-text-muted font-normal">
+                                Subject line preview…
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      </div>
 
-                  <div className="space-y-2 pt-1">
-                    <div className="pb-2 border-b border-border/50">
-                      <span className="text-[10px] text-text-muted uppercase tracking-wider block mb-1">
-                        Subject
-                      </span>
-                      <p className="text-xs font-medium text-text-main">
-                        {renderPreview(subject, previewSeed) || (
-                          <span className="italic text-text-muted">Empty</span>
-                        )}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-text-muted uppercase tracking-wider block mb-1.5">
-                        Body
-                      </span>
-                      <div className="text-[11px] text-text-secondary whitespace-pre-wrap leading-relaxed max-h-[260px] overflow-y-auto">
-                        {renderPreview(body, previewSeed) || (
-                          <span className="italic text-text-muted">Empty</span>
+                      {/* Content */}
+                      <div className="text-xs text-text-secondary leading-relaxed font-sans whitespace-pre-wrap max-h-[340px] overflow-y-auto pr-2">
+                        {previewNewBody || (
+                          <span className="italic text-text-muted">
+                            Email body preview will appear here as you type…
+                          </span>
                         )}
                       </div>
                     </div>

@@ -52,19 +52,38 @@ export class TemplateEngine {
   }
 
   /**
-   * Spintax processor: resolves {option1|option2|option3} syntax.
+   * Spintax processor: resolves {option1|option2|option3}, {|opt1|opt2|}, and {abtest|optA|optB}.
    * Recursively resolves up to 5 levels of nesting, picking a random option for each block.
    */
   public spin(text: string): string {
     if (!text) return '';
-    const spintaxRegex = /\{([^{}]+?\|[^{}]+?)\}/g;
+    const spintaxRegex = /\{([^{}]*?\|[^{}]*?)\}/g;
     let spun = text;
     let iteration = 0;
     while (spintaxRegex.test(spun) && iteration < 5) {
       spun = spun.replace(spintaxRegex, (_, optionsStr) => {
-        const options = optionsStr.split('|');
-        const chosen = options[Math.floor(Math.random() * options.length)];
-        return chosen.trim();
+        let rawOptions: string[] = optionsStr.split('|');
+
+        // Strip abtest / ab_test / ab-test tag if present as first element
+        if (rawOptions.length > 0 && /^\s*ab[-_]?test\s*$/i.test(rawOptions[0])) {
+          rawOptions.shift();
+        }
+
+        // If formatted with outer delimiters {|opt1|opt2|opt3|}, strip outer empty tokens
+        if (rawOptions.length > 2 && rawOptions[0].trim() === '' && rawOptions[rawOptions.length - 1].trim() === '') {
+          rawOptions = rawOptions.slice(1, -1);
+        } else if (rawOptions.length > 1 && rawOptions[0].trim() === '' && rawOptions.slice(1).some((o: string) => o.trim().length > 0)) {
+          rawOptions.shift();
+        } else if (rawOptions.length > 2 && rawOptions[rawOptions.length - 1].trim() === '' && rawOptions.slice(0, -1).some((o: string) => o.trim().length > 0)) {
+          rawOptions.pop();
+        }
+
+        const cleaned: string[] = rawOptions.map((o: string) => o.trim());
+        const choices: string[] = cleaned.filter((o: string) => o.length > 0);
+        const finalPool: string[] = choices.length > 0 ? choices : cleaned;
+
+        const chosen = finalPool[Math.floor(Math.random() * finalPool.length)];
+        return chosen;
       });
       iteration++;
     }
