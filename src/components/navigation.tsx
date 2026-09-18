@@ -100,33 +100,33 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
           {isCollapsed ? (
             <div className="w-full flex items-center justify-between">
               <Link href="/" className="shrink-0" title="LeadMiner">
-                <img src="/favicon.svg" alt="LeadMiner Logo" className="w-8 h-8 rounded-lg shadow-sm" />
+                <img src="/favicon.svg" alt="LeadMiner Logo" className="w-8 h-8 rounded-lg shadow-sm object-contain" />
               </Link>
               <button
                 type="button"
                 onClick={handleToggleCollapse}
                 title="Expand sidebar"
                 aria-label="Expand sidebar"
-                className="p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-200 transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded-md border border-border/60 bg-surface-200/50 text-text-muted hover:text-text-main hover:bg-surface-200 hover:border-border transition-all active:scale-95"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           ) : (
             <>
-              <Link href="/" className="flex items-center space-x-3 min-w-0 group">
-                <img src="/favicon.svg" alt="LeadMiner Logo" className="w-8.5 h-8.5 rounded-lg shrink-0 shadow-sm" />
+              <Link href="/" className="flex items-center space-x-2.5 min-w-0 group">
+                <img src="/favicon.svg" alt="LeadMiner Logo" className="w-8 h-8 rounded-lg shrink-0 shadow-sm object-contain" />
                 <div className="min-w-0">
-                  <span className="font-semibold text-[15px] tracking-tight text-text-main block truncate group-hover:text-primary transition-colors">
+                  <span className="font-semibold text-sm tracking-tight text-text-main block truncate group-hover:text-primary transition-colors">
                     LeadMiner
                   </span>
-                  <span className="text-xs text-text-muted block -mt-0.5 truncate">YouTube Outreach</span>
+                  <span className="text-[11px] text-text-muted block -mt-0.5 truncate">YouTube Outreach</span>
                 </div>
               </Link>
-              <div className="flex items-center space-x-1.5 shrink-0">
+              <div className="flex items-center space-x-2 shrink-0">
                 {dryRun && (
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/30 font-medium">
-                    DRY
+                    DRY RUN
                   </span>
                 )}
                 <button
@@ -134,7 +134,7 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
                   onClick={handleToggleCollapse}
                   title="Collapse sidebar"
                   aria-label="Collapse sidebar"
-                  className="p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-200 transition-colors"
+                  className="w-7 h-7 flex items-center justify-center rounded-md border border-border/60 bg-surface-200/50 text-text-muted hover:text-text-main hover:bg-surface-200 hover:border-border transition-all active:scale-95"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
