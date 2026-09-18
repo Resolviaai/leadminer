@@ -19,6 +19,8 @@ import {
   X,
   Zap,
   Send,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 
 const mainNavItems = [
@@ -44,10 +46,34 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
   const pathname = usePathname();
   const [pendingPath, setPendingPath] = useState<string | null>(null);
   const [isMobileMoreOpen, setIsMobileMoreOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   React.useEffect(() => {
     setPendingPath(null);
   }, [pathname]);
+
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem('leadminer_sidebar_collapsed');
+      if (saved !== null) {
+        setIsCollapsed(saved === 'true');
+      }
+    } catch {
+      // safe fallback
+    }
+  }, []);
+
+  const handleToggleCollapse = () => {
+    setIsCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('leadminer_sidebar_collapsed', String(next));
+      } catch {
+        // safe fallback
+      }
+      return next;
+    });
+  };
 
   const isActive = (href: string) => {
     const current = pendingPath ?? pathname;
@@ -60,31 +86,106 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
       {/* ==================================================== */}
       {/* 1. DESKTOP SIDEBAR (hidden on mobile, visible on md+) */}
       {/* ==================================================== */}
-      <aside className="hidden md:flex w-64 bg-surface-100 border-r border-border flex-col shrink-0 h-screen sticky top-0">
+      <aside
+        className={`hidden md:flex bg-surface-100 border-r border-border flex-col shrink-0 h-screen sticky top-0 transition-[width] duration-200 ease-in-out z-30 ${
+          isCollapsed ? 'w-[72px]' : 'w-72'
+        }`}
+      >
         {/* Brand Header with exact h-14 to align with topbar */}
-        <div className="h-14 px-4 border-b border-border flex items-center justify-between shrink-0">
-          <div className="flex items-center space-x-2.5">
-            <img src="/favicon.svg" alt="LeadMiner Logo" className="w-8 h-8 rounded-lg shrink-0 shadow-sm" />
-            <div>
-              <span className="font-semibold text-sm tracking-tight text-text-main block">LeadMiner</span>
-              <span className="text-[11px] text-text-muted block -mt-0.5">YouTube Outreach</span>
+        <div
+          className={`h-14 border-b border-border flex items-center shrink-0 ${
+            isCollapsed ? 'px-2.5 justify-between' : 'px-4 justify-between'
+          }`}
+        >
+          {isCollapsed ? (
+            <div className="w-full flex items-center justify-between">
+              <Link href="/" className="shrink-0" title="LeadMiner">
+                <img src="/favicon.svg" alt="LeadMiner Logo" className="w-8 h-8 rounded-lg shadow-sm" />
+              </Link>
+              <button
+                type="button"
+                onClick={handleToggleCollapse}
+                title="Expand sidebar"
+                aria-label="Expand sidebar"
+                className="p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-200 transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
-          </div>
-          {dryRun && (
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/30 font-medium">
-              DRY RUN
-            </span>
+          ) : (
+            <>
+              <Link href="/" className="flex items-center space-x-3 min-w-0 group">
+                <img src="/favicon.svg" alt="LeadMiner Logo" className="w-8.5 h-8.5 rounded-lg shrink-0 shadow-sm" />
+                <div className="min-w-0">
+                  <span className="font-semibold text-[15px] tracking-tight text-text-main block truncate group-hover:text-primary transition-colors">
+                    LeadMiner
+                  </span>
+                  <span className="text-xs text-text-muted block -mt-0.5 truncate">YouTube Outreach</span>
+                </div>
+              </Link>
+              <div className="flex items-center space-x-1.5 shrink-0">
+                {dryRun && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/30 font-medium">
+                    DRY
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={handleToggleCollapse}
+                  title="Collapse sidebar"
+                  aria-label="Collapse sidebar"
+                  className="p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-200 transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+              </div>
+            </>
           )}
         </div>
 
         {/* Desktop Navigation Links */}
-        <nav className="p-3 space-y-1 flex-1 overflow-y-auto">
-          <div className="px-3 py-1.5 text-[11px] font-medium text-text-muted uppercase tracking-wider">
-            Platform
-          </div>
+        <nav className={`flex-1 overflow-y-auto ${isCollapsed ? 'p-2 space-y-1' : 'p-3.5 space-y-1.5'}`}>
+          {!isCollapsed ? (
+            <div className="px-3.5 py-1.5 text-xs font-semibold text-text-muted/80 uppercase tracking-wider">
+              Platform
+            </div>
+          ) : (
+            <div className="my-2 border-t border-border/60 mx-2" />
+          )}
+
           {allNavItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
+
+            if (isCollapsed) {
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  prefetch={true}
+                  title={item.name}
+                  aria-label={item.name}
+                  onClick={() => {
+                    if (item.href !== pathname) setPendingPath(item.href);
+                  }}
+                  className={`flex items-center justify-center w-11 h-11 mx-auto rounded-lg transition-all active:scale-[0.98] relative group ${
+                    active
+                      ? 'bg-surface-200 text-primary border border-primary/30 shadow-sm'
+                      : 'text-text-muted hover:text-text-main hover:bg-surface-200/60'
+                  }`}
+                >
+                  <Icon
+                    className={`w-5 h-5 shrink-0 ${active ? 'text-primary' : 'text-text-muted'}`}
+                    strokeWidth={active ? 2.2 : 1.75}
+                  />
+                  {/* Floating tooltip on hover */}
+                  <div className="pointer-events-none absolute left-full ml-3 px-2.5 py-1 bg-surface-100 border border-border rounded-md text-xs font-medium text-text-main shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50">
+                    {item.name}
+                  </div>
+                </Link>
+              );
+            }
+
             return (
               <Link
                 key={item.name}
@@ -93,17 +194,17 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
                 onClick={() => {
                   if (item.href !== pathname) setPendingPath(item.href);
                 }}
-                className={`flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-all active:scale-[0.98] ${
+                className={`flex items-center space-x-3.5 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all active:scale-[0.98] ${
                   active
-                    ? 'bg-surface-200 text-text-main font-semibold border-l-2 border-primary shadow-sm'
-                    : 'text-text-secondary hover:text-text-main hover:bg-surface-200/50'
+                    ? 'bg-surface-200 text-text-main font-semibold border-l-[3px] border-primary shadow-sm'
+                    : 'text-text-secondary hover:text-text-main hover:bg-surface-200/60'
                 }`}
               >
                 <Icon
-                  className={`w-4 h-4 ${active ? 'text-primary' : 'text-text-muted'}`}
+                  className={`w-5 h-5 shrink-0 ${active ? 'text-primary' : 'text-text-muted'}`}
                   strokeWidth={active ? 2 : 1.75}
                 />
-                <span>{item.name}</span>
+                <span className="truncate text-[13.5px]">{item.name}</span>
               </Link>
             );
           })}
