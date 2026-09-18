@@ -3,7 +3,8 @@ import { runCleanup } from '@/workers/cleanup.worker';
 import { runReplySync } from '@/workers/replies.worker';
 import { runDiscoveryBatch } from '@/workers/discovery.worker';
 import { runVerificationBatch } from '@/workers/verification.worker';
-import { runOutreachBatch } from '@/workers/outreach.worker';
+import { runPlanner } from '@/workers/planner.worker';
+import { runDispatcher } from '@/workers/dispatcher.worker';
 import { verifyWorkerAuth } from '@/lib/worker-auth';
 
 export const dynamic = 'force-dynamic';
@@ -49,13 +50,22 @@ async function executePipeline() {
     results.verification = { error: err.message };
   }
 
-  // 4. Dispatch outreach to verified and qualified leads (dynamically scaled across all active accounts)
+  // 4. Plan today's outreach schedule (volume jitter, time jitter, multi-contact staggering)
   try {
-    console.log('[Pipeline] Step 4/5: Running personalized outreach batch (dynamic account capacity)...');
-    results.outreach = await runOutreachBatch();
+    console.log('[Pipeline] Step 4/5: Running morning planner to distribute daily schedule...');
+    results.planner = await runPlanner();
   } catch (err: any) {
-    console.error('[Pipeline] Error in outreach step:', err);
-    results.outreach = { error: err.message };
+    console.error('[Pipeline] Error in planner step:', err);
+    results.planner = { error: err.message };
+  }
+
+  // 5. Run immediate dispatcher tick for any emails scheduled due right now
+  try {
+    console.log('[Pipeline] Step 5/5: Running initial dispatch check...');
+    results.dispatch = await runDispatcher(2);
+  } catch (err: any) {
+    console.error('[Pipeline] Error in dispatch step:', err);
+    results.dispatch = { error: err.message };
   }
 
   const finishedAt = new Date();

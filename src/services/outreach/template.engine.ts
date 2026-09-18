@@ -47,7 +47,28 @@ export class TemplateEngine {
       }
     }
 
-    return rendered;
+    // Resolve Spintax rotation: {option1|option2|option3}
+    return this.spin(rendered);
+  }
+
+  /**
+   * Spintax processor: resolves {option1|option2|option3} syntax.
+   * Recursively resolves up to 5 levels of nesting, picking a random option for each block.
+   */
+  public spin(text: string): string {
+    if (!text) return '';
+    const spintaxRegex = /\{([^{}]+?\|[^{}]+?)\}/g;
+    let spun = text;
+    let iteration = 0;
+    while (spintaxRegex.test(spun) && iteration < 5) {
+      spun = spun.replace(spintaxRegex, (_, optionsStr) => {
+        const options = optionsStr.split('|');
+        const chosen = options[Math.floor(Math.random() * options.length)];
+        return chosen.trim();
+      });
+      iteration++;
+    }
+    return spun;
   }
 
   public detectVariables(templateString: string): string[] {

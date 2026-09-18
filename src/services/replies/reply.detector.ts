@@ -1,6 +1,6 @@
 import { db } from '../../db/client';
-import { messages, replies, leads, campaigns, gmailAccounts, suppressions } from '../../db/schema';
-import { eq, and, sql } from 'drizzle-orm';
+import { messages, replies, leads, campaigns, gmailAccounts, suppressions, scheduledEmails } from '../../db/schema';
+import { eq, and, sql, inArray } from 'drizzle-orm';
 import { telegramService } from '../notifications/telegram.service';
 import { env } from '../../config/env';
 
@@ -101,6 +101,25 @@ export class ReplyDetectorService {
             updatedAt: new Date(),
           })
           .where(eq(leads.id, match.leadId));
+      }
+
+      // Automatically cancel any remaining pending scheduled emails for this lead (e.g. secondary contacts)
+      try {
+        await db
+          .update(scheduledEmails)
+          .set({
+            status: 'CANCELLED',
+            error: isOptOut ? 'Lead opted out / unsubscribed' : 'Lead replied on another contact thread',
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(scheduledEmails.leadId, match.leadId),
+              inArray(scheduledEmails.status, ['PENDING', 'SENDING'])
+            )
+          );
+      } catch (cancelErr: any) {
+        console.warn(`[Reply Detector] Non-fatal: could not cancel scheduled emails for lead ${match.leadId}:`, cancelErr.message);
       }
 
       // 4. Send high-signal Telegram notification with isolated failure protection

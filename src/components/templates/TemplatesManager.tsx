@@ -19,6 +19,8 @@ import {
   Square,
   Power,
   Trash2,
+  Sparkles,
+  Shuffle,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -41,6 +43,13 @@ const VARIABLES = [
   { label: "custom_line", token: "{{custom_line}}" },
 ];
 
+const SPINTAX_BLOCKS = [
+  { label: "Greetings", token: "{Hey|Hi|Hello}" },
+  { label: "Subjects", token: "{Quick question|Thoughts on your channel|Hey {{first_name}}}" },
+  { label: "Compliments", token: "{Loved your latest upload|Big fan of your content|Really enjoyed your recent video}" },
+  { label: "Sign-offs", token: "{Best,|Cheers,|Talk soon,}" },
+];
+
 const SAMPLE: Record<string, string> = {
   "{{first_name}}": "Joe",
   "{{channel_name}}": "The Rogan Clips",
@@ -49,11 +58,28 @@ const SAMPLE: Record<string, string> = {
   "{{custom_line}}": "Loved your recent breakdown, the pacing was spot-on.",
 };
 
-function renderPreview(text: string) {
-  return Object.entries(SAMPLE).reduce(
+function spinText(text: string): string {
+  if (!text) return "";
+  const spintaxRegex = /\{([^{}]+?\|[^{}]+?)\}/g;
+  let spun = text;
+  let iteration = 0;
+  while (spintaxRegex.test(spun) && iteration < 5) {
+    spun = spun.replace(spintaxRegex, (_, optionsStr) => {
+      const options = optionsStr.split("|");
+      const chosen = options[Math.floor(Math.random() * options.length)];
+      return chosen.trim();
+    });
+    iteration++;
+  }
+  return spun;
+}
+
+function renderPreview(text: string, _seed?: number) {
+  const substituted = Object.entries(SAMPLE).reduce(
     (acc, [token, val]) => acc.replaceAll(token, val),
     text
   );
+  return spinText(substituted);
 }
 
 function subjectLengthColor(len: number) {
@@ -176,6 +202,7 @@ export function TemplatesManager({
   const [newErrors, setNewErrors] = useState<Record<string, string>>({});
   const [newServerError, setNewServerError] = useState<string | null>(null);
   const [showNewPreview, setShowNewPreview] = useState(true);
+  const [previewSeed, setPreviewSeed] = useState(0);
 
   const newSubjectRef = useRef<HTMLInputElement>(null);
   const newBodyRef = useRef<HTMLTextAreaElement>(null);
@@ -455,6 +482,32 @@ export function TemplatesManager({
           </div>
           <div className="sm:hidden absolute right-0 top-0 bottom-1 w-6 bg-gradient-to-l from-surface-100 to-transparent pointer-events-none" />
         </div>
+
+        {/* Spintax Reference */}
+        <div className="pt-2.5 mt-2.5 border-t border-border/40">
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span className="text-[10px] sm:text-[11px] font-semibold text-emerald-400 uppercase tracking-wider">
+                Anti-Spam Spintax Syntax
+              </span>
+            </div>
+            <span className="text-[10px] text-text-muted hidden sm:inline">
+              Wrap options in <code className="font-mono text-emerald-400">{"{A|B|C}"}</code> to rotate text for every recipient
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 sm:flex-wrap">
+            {SPINTAX_BLOCKS.map((s) => (
+              <code
+                key={s.label}
+                className="text-[11px] font-mono px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 shrink-0 select-all cursor-copy active:scale-95 transition-transform"
+                title="Click or copy into your template"
+              >
+                {s.token}
+              </code>
+            ))}
+          </div>
+        </div>
       </Card>
 
       {/* ── Batch Notification Message ── */}
@@ -704,6 +757,28 @@ export function TemplatesManager({
                       </div>
                     ))}
                   </div>
+
+                  {/* Spintax Rotation Row */}
+                  <div className="pt-2 border-t border-border/40 space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-400 tracking-wide uppercase">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Anti-Spam Spintax Rotation</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                      {SPINTAX_BLOCKS.map((s) => (
+                        <button
+                          type="button"
+                          key={s.label}
+                          onClick={() => insertVariableIntoNew(s.token)}
+                          title={`Click to insert ${s.token}`}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:text-white hover:bg-emerald-500/25 hover:border-emerald-500/50 cursor-pointer active:scale-[0.97] transition-all shadow-sm select-none text-xs font-mono"
+                        >
+                          <Sparkles className="w-3 h-3 text-emerald-400 shrink-0" />
+                          <span>{s.label}: {s.token}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Email Body with Drop Target */}
@@ -785,12 +860,32 @@ export function TemplatesManager({
               {showNewPreview && (
                 <div className="space-y-3 p-4 rounded-xl bg-surface-200 border border-border">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
-                      Live Preview
-                    </span>
-                    <span className="text-[10px] text-text-muted">
-                      sample lead data
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
+                        Live Preview
+                      </span>
+                      {(/\{([^{}]+?\|[^{}]+?)\}/.test(subject) || /\{([^{}]+?\|[^{}]+?)\}/.test(body)) && (
+                        <Badge variant="outline" className="text-[9px] font-mono border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
+                          Spintax Active
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {(/\{([^{}]+?\|[^{}]+?)\}/.test(subject) || /\{([^{}]+?\|[^{}]+?)\}/.test(body)) && (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewSeed((s) => s + 1)}
+                          className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded bg-surface-300 text-text-secondary hover:text-emerald-400 hover:bg-emerald-500/10 border border-border transition-all active:scale-95"
+                          title="Generate another variation from your spintax options"
+                        >
+                          <Shuffle className="w-3 h-3 text-emerald-400" />
+                          <span>Shuffle Variation</span>
+                        </button>
+                      )}
+                      <span className="text-[10px] text-text-muted">
+                        sample lead data
+                      </span>
+                    </div>
                   </div>
 
 
@@ -800,7 +895,7 @@ export function TemplatesManager({
                         Subject
                       </span>
                       <p className="text-xs font-medium text-text-main">
-                        {renderPreview(subject) || (
+                        {renderPreview(subject, previewSeed) || (
                           <span className="italic text-text-muted">Empty</span>
                         )}
                       </p>
@@ -810,7 +905,7 @@ export function TemplatesManager({
                         Body
                       </span>
                       <div className="text-[11px] text-text-secondary whitespace-pre-wrap leading-relaxed max-h-[260px] overflow-y-auto">
-                        {renderPreview(body) || (
+                        {renderPreview(body, previewSeed) || (
                           <span className="italic text-text-muted">Empty</span>
                         )}
                       </div>

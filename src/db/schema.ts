@@ -7,6 +7,7 @@ import {
   bigint,
   boolean,
   timestamp,
+  date,
   jsonb,
   pgEnum,
   uniqueIndex,
@@ -84,6 +85,14 @@ export const messageSendStatusEnum = pgEnum('message_send_status', [
   'CANCELLED',
   'SIMULATED',
   'UNCONFIRMED',
+]);
+
+export const scheduledEmailStatusEnum = pgEnum('scheduled_email_status', [
+  'PENDING',
+  'SENDING',
+  'SENT',
+  'FAILED',
+  'CANCELLED',
 ]);
 
 export const personalizationStatusEnum = pgEnum('personalization_status', [
@@ -354,6 +363,32 @@ export const replies = pgTable(
   ]
 );
 
+// 8b. scheduled_emails
+export const scheduledEmails = pgTable(
+  'scheduled_emails',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    campaignId: bigint('campaign_id', { mode: 'number' }).notNull().references(() => campaigns.id, { onDelete: 'cascade' }),
+    leadId: bigint('lead_id', { mode: 'number' }).notNull().references(() => leads.id, { onDelete: 'cascade' }),
+    contactId: bigint('contact_id', { mode: 'number' }).notNull().references(() => contacts.id, { onDelete: 'cascade' }),
+    gmailAccountId: bigint('gmail_account_id', { mode: 'number' }).notNull().references(() => gmailAccounts.id, { onDelete: 'cascade' }),
+    scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
+    scheduledDate: date('scheduled_date').notNull(),
+    status: scheduledEmailStatusEnum('status').notNull().default('PENDING'),
+    attempts: integer('attempts').notNull().default(0),
+    sentMessageId: varchar('sent_message_id', { length: 255 }),
+    error: text('error'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_scheduled_emails_dispatch').on(table.scheduledAt, table.status),
+    index('idx_scheduled_emails_lead_status').on(table.leadId, table.status),
+    index('idx_scheduled_emails_account').on(table.gmailAccountId, table.scheduledAt),
+    uniqueIndex('uq_scheduled_emails_contact_date').on(table.contactId, table.campaignId, table.scheduledDate),
+  ]
+);
+
 // 9. jobs
 export const jobs = pgTable(
   'jobs',
@@ -433,6 +468,7 @@ export const leadsRelations = relations(leads, ({ one, many }) => ({
   keywordSources: many(leadKeywordSources),
   messages: many(messages),
   replies: many(replies),
+  scheduledEmails: many(scheduledEmails),
 }));
 
 export const leadKeywordSourcesRelations = relations(leadKeywordSources, ({ one }) => ({
@@ -459,6 +495,7 @@ export const campaignsRelations = relations(campaigns, ({ one, many }) => ({
     references: [templates.id],
   }),
   messages: many(messages),
+  scheduledEmails: many(scheduledEmails),
 }));
 
 export const messagesRelations = relations(messages, ({ one }) => ({
@@ -477,5 +514,24 @@ export const messagesRelations = relations(messages, ({ one }) => ({
   template: one(templates, {
     fields: [messages.templateId],
     references: [templates.id],
+  }),
+}));
+
+export const scheduledEmailsRelations = relations(scheduledEmails, ({ one }) => ({
+  campaign: one(campaigns, {
+    fields: [scheduledEmails.campaignId],
+    references: [campaigns.id],
+  }),
+  lead: one(leads, {
+    fields: [scheduledEmails.leadId],
+    references: [leads.id],
+  }),
+  contact: one(contacts, {
+    fields: [scheduledEmails.contactId],
+    references: [contacts.id],
+  }),
+  gmailAccount: one(gmailAccounts, {
+    fields: [scheduledEmails.gmailAccountId],
+    references: [gmailAccounts.id],
   }),
 }));

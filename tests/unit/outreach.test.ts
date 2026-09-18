@@ -48,6 +48,24 @@ describe('Template Engine', () => {
     expect(rendered).not.toContain('--');
     expect(rendered).toBe('Hey Alex,\n\nLoved your latest breakdown, the pacing was spot-on, really enjoyed it.');
   });
+
+  it('should rotate and resolve spintax blocks {option1|option2}', () => {
+    const template = '{Hey|Hi|Hello} {{first_name}}, {great|loved} your videos! {Best|Cheers}, Rohit';
+    const rendered = templateEngine.render(template, { first_name: 'David' });
+    
+    expect(['Hey David, great your videos! Best, Rohit',
+            'Hey David, great your videos! Cheers, Rohit',
+            'Hey David, loved your videos! Best, Rohit',
+            'Hey David, loved your videos! Cheers, Rohit',
+            'Hi David, great your videos! Best, Rohit',
+            'Hi David, great your videos! Cheers, Rohit',
+            'Hi David, loved your videos! Best, Rohit',
+            'Hi David, loved your videos! Cheers, Rohit',
+            'Hello David, great your videos! Best, Rohit',
+            'Hello David, great your videos! Cheers, Rohit',
+            'Hello David, loved your videos! Best, Rohit',
+            'Hello David, loved your videos! Cheers, Rohit']).toContain(rendered);
+  });
 });
 
 describe('Gemini Personalizer Service', () => {

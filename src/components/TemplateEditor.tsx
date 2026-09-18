@@ -23,6 +23,8 @@ import {
   Tag,
   CheckSquare,
   Square,
+  Sparkles,
+  Shuffle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -46,21 +48,45 @@ const VARIABLES = [
   { label: "custom_line", token: "{{custom_line}}" },
 ];
 
+const SPINTAX_BLOCKS = [
+  { label: "Greetings", token: "{Hey|Hi|Hello}" },
+  { label: "Subjects", token: "{Quick question|Thoughts on your channel|Hey {{first_name}}}" },
+  { label: "Compliments", token: "{Loved your latest upload|Big fan of your content|Really enjoyed your recent video}" },
+  { label: "Sign-offs", token: "{Best,|Cheers,|Talk soon,}" },
+];
+
 const SAMPLE: Record<string, string> = {
   "{{first_name}}": "Joe",
   "{{channel_name}}": "The Rogan Clips",
   "{{channel_url}}": "https://youtube.com/c/theroganclips",
   "{{subscriber_count}}": "850,000",
   "{{custom_line}}":
-    "Loved your recent breakdown — the pacing was spot-on.",
+    "Loved your recent breakdown, the pacing was spot-on.",
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+function spinText(text: string): string {
+  if (!text) return "";
+  const spintaxRegex = /\{([^{}]+?\|[^{}]+?)\}/g;
+  let spun = text;
+  let iteration = 0;
+  while (spintaxRegex.test(spun) && iteration < 5) {
+    spun = spun.replace(spintaxRegex, (_, optionsStr) => {
+      const options = optionsStr.split("|");
+      const chosen = options[Math.floor(Math.random() * options.length)];
+      return chosen.trim();
+    });
+    iteration++;
+  }
+  return spun;
+}
+
 function renderPreview(text: string) {
-  return Object.entries(SAMPLE).reduce(
+  const substituted = Object.entries(SAMPLE).reduce(
     (acc, [token, val]) => acc.replaceAll(token, val),
     text
   );
+  return spinText(substituted);
 }
 
 function countWords(text: string) {
@@ -109,6 +135,7 @@ export function TemplateEditor({
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
+  const [previewSeed, setPreviewSeed] = useState(0);
 
   // Delete state
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -388,8 +415,9 @@ export function TemplateEditor({
   // ── Computed ──
   const subjectLen = subject.length;
   const wordCount = countWords(body);
-  const previewSubject = renderPreview(deferredSubject);
-  const previewBody = renderPreview(deferredBody);
+  const previewSubject = React.useMemo(() => renderPreview(deferredSubject), [deferredSubject, previewSeed]);
+  const previewBody = React.useMemo(() => renderPreview(deferredBody), [deferredBody, previewSeed]);
+  const hasSpintax = /\{([^{}]+?\|[^{}]+?)\}/.test(subject) || /\{([^{}]+?\|[^{}]+?)\}/.test(body);
 
   return (
     <div className="space-y-4">
@@ -792,6 +820,29 @@ export function TemplateEditor({
               </div>
             ))}
           </div>
+
+          {/* Anti-Spam Spintax Rotation Row */}
+          <div className="pt-2 border-t border-border/40 space-y-1.5">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-400 tracking-wide uppercase">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Anti-Spam Spintax Rotation</span>
+              <span className="text-[10px] text-text-muted lowercase font-normal hidden sm:inline">(rotates words automatically for each recipient)</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 pt-0.5">
+              {SPINTAX_BLOCKS.map((s) => (
+                <button
+                  type="button"
+                  key={s.label}
+                  onClick={() => insertVariable(s.token)}
+                  title={`Click to insert ${s.token}`}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:text-white hover:bg-emerald-500/25 hover:border-emerald-500/50 cursor-pointer active:scale-[0.97] transition-all shadow-sm select-none text-xs font-mono"
+                >
+                  <Sparkles className="w-3 h-3 text-emerald-400 shrink-0" />
+                  <span>{s.label}: {s.token}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -912,10 +963,30 @@ export function TemplateEditor({
           {/* RIGHT — Live Preview */}
           <div className="space-y-3 p-4 rounded-xl bg-surface-200 border border-border">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
-                Live Preview
-              </span>
-              <span className="text-[10px] text-text-muted">sample data</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
+                  Live Preview
+                </span>
+                {hasSpintax && (
+                  <Badge variant="outline" className="text-[9px] font-mono border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
+                    Spintax Active
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {hasSpintax && (
+                  <button
+                    type="button"
+                    onClick={() => setPreviewSeed((s) => s + 1)}
+                    className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded bg-surface-300 text-text-secondary hover:text-emerald-400 hover:bg-emerald-500/10 border border-border transition-all active:scale-95"
+                    title="Generate another variation from your spintax options"
+                  >
+                    <Shuffle className="w-3 h-3 text-emerald-400" />
+                    <span>Shuffle Variation</span>
+                  </button>
+                )}
+                <span className="text-[10px] text-text-muted">sample data</span>
+              </div>
             </div>
 
 
