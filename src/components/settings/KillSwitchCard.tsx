@@ -1,10 +1,11 @@
-﻿'use client';
+'use client';
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShieldAlert, Play, Loader2, AlertCircle } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
 
 interface Props {
   initialActive: boolean;
@@ -92,24 +93,16 @@ export function KillSwitchCard({ initialActive }: Props) {
           </p>
         </div>
 
-        <div className="shrink-0">
-          <Button
-            type="button"
-            onClick={handleToggle}
-            variant={isActive ? 'default' : 'destructive'}
-            className="w-full sm:w-auto h-11 sm:h-12 px-5 sm:px-6 text-xs font-semibold tracking-wide active:scale-[0.98] transition-all flex items-center justify-center gap-2 select-none shadow-sm cursor-pointer"
-          >
-            {isSyncing ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : isActive ? (
-              <Play className="w-3.5 h-3.5 fill-current" />
-            ) : (
-              <ShieldAlert className="w-3.5 h-3.5" />
-            )}
-            <span>
-              {isActive ? 'RESUME SENDING EMAILS' : 'STOP ALL OUTREACH'}
-            </span>
-          </Button>
+        <div className="shrink-0 flex items-center justify-center sm:justify-end">
+          <SlideToConfirm
+            key={isActive ? 'armed' : 'active'}
+            label={isActive ? 'Slide to resume outreach' : 'Slide to stop outreach'}
+            confirmedLabel={isActive ? 'Outreach Resumed' : 'Outreach Paused'}
+            variant={isActive ? 'warning' : 'danger'}
+            width={260}
+            disabled={isSyncing}
+            onConfirm={handleToggle}
+          />
         </div>
       </Card>
 
