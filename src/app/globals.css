@@ -127,24 +127,30 @@
 /* Contextual theme variants */
 .sld[data-variant="danger"],
 .sld[data-variant="destructive"] {
-  --fill-slab: #221414;
+  --fill-slab: #140d0d;
   --fill-on: #ef4444;
   --fill-on-rgb: 239, 68, 68;
   --pane-edge: rgba(239, 68, 68, 0.35);
+  --text-track: #fca5a5;
+  --ink-handle: #ffffff;
 }
 
 .sld[data-variant="warning"] {
-  --fill-slab: #241c12;
+  --fill-slab: #141108;
   --fill-on: #f59e0b;
   --fill-on-rgb: 245, 158, 11;
   --pane-edge: rgba(245, 158, 11, 0.35);
+  --text-track: #fde68a;
+  --ink-handle: #181818;
 }
 
 .sld[data-variant="success"] {
-  --fill-slab: #122216;
+  --fill-slab: #0c140e;
   --fill-on: #22c55e;
   --fill-on-rgb: 34, 197, 94;
   --pane-edge: rgba(34, 197, 94, 0.35);
+  --text-track: #86efac;
+  --ink-handle: #ffffff;
 }
 
 .sld[data-disabled="true"] {
@@ -179,6 +185,7 @@
   touch-action: none;
   -webkit-user-select: none;
   user-select: none;
+  overflow: hidden;
 }
 
 [data-stroke="on"] .sld-track {
@@ -239,10 +246,10 @@
      It costs nothing at rest — the words start well clear of
      the handle — and the overlap it was avoiding is now the
      point, since the capsule wipes them as it comes. */
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
   letter-spacing: -0.006em;
-  color: rgba(var(--fill-on-rgb, var(--ink-rgb)), 0.45);
+  color: var(--text-track, rgba(var(--fill-on-rgb, var(--ink-rgb)), 0.65));
   pointer-events: none;
   white-space: nowrap;
 }
@@ -252,10 +259,11 @@
   left: 4px;
   top: 4px;
   height: 48px;
+  width: 48px;
   padding: 0;
   border: 0;
   background: var(--fill-on, var(--ink));
-  color: var(--fill-slab, var(--card));
+  color: var(--ink-handle, var(--fill-slab, var(--card)));
   cursor: grab;
   /* ── it takes the pointer now, and the track still wins ───
      It was `none`, so the track owned the gesture outright.
@@ -303,8 +311,8 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
   letter-spacing: -0.006em;
   white-space: nowrap;
   pointer-events: none;

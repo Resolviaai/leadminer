@@ -19,10 +19,14 @@ export function KillSwitchCard({ initialActive }: Props) {
 
   const handleToggle = async () => {
     const nextState = !isActive;
-    // 1. Instant optimistic state update
-    setIsActive(nextState);
-    setErrorMsg(null);
     setIsSyncing(true);
+    setErrorMsg(null);
+
+    // Allow the slide-to-confirm morph animation to complete smoothly
+    await new Promise((resolve) => setTimeout(resolve, 450));
+
+    // 1. Instant optimistic state update after confirm animation
+    setIsActive(nextState);
 
     try {
       const res = await fetch('/api/kill-switch', {
@@ -99,6 +103,7 @@ export function KillSwitchCard({ initialActive }: Props) {
             label={isActive ? 'Slide to resume outreach' : 'Slide to stop outreach'}
             confirmedLabel={isActive ? 'Outreach Resumed' : 'Outreach Paused'}
             variant={isActive ? 'warning' : 'danger'}
+            corner={12}
             width={260}
             disabled={isSyncing}
             onConfirm={handleToggle}

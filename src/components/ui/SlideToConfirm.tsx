@@ -37,8 +37,9 @@ const GRIP = H - PAD * 2;
 const MIN = 220;
 const MAX = 380;
 
-/* a pill, and the top of the Corner knob */
-const CORNER = H / 2;
+/* default corner radius: 12px (LeadMiner standard), concentric handle is 8px */
+const CORNER = 12;
+const MAX_CORNER = H / 2;
 const SPEED = 50;
 
 /* ── how far the swell is, and it is TINY ──────────────────
@@ -150,7 +151,7 @@ export function SlideToConfirm({
   const span = clamp(Math.round(width), MIN, MAX);
   const TRAVEL = span - PAD * 2 - GRIP;
 
-  const r = clamp(corner, 0, CORNER);
+  const r = clamp(corner, 0, MAX_CORNER);
   /* ── the handle's corner is DERIVED ──────────────────────
      `r - PAD`, floored at zero: the radius of a thing inside
      another, less the gap between them, is what keeps the two
