@@ -58,9 +58,6 @@ export function TemplatesPageClient({
           >
             <FileText className="w-3.5 h-3.5" />
             <span>Templates</span>
-            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-surface-300 text-text-secondary">
-              {initialTemplates.length}
-            </span>
           </button>
 
           <button
@@ -75,9 +72,6 @@ export function TemplatesPageClient({
           >
             <Layers className="w-3.5 h-3.5 text-primary" />
             <span>Sequences</span>
-            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary font-semibold">
-              v2
-            </span>
           </button>
         </div>
       </Card>
