@@ -21,6 +21,7 @@ export interface SequenceStepWithTemplate {
   delayHours: number;
   templateName?: string;
   templateSubject?: string;
+  templateBody?: string;
 }
 
 export interface SequenceModelMetrics {
@@ -409,6 +410,7 @@ export class SequenceService {
           delayHours: sequenceSteps.delayHours,
           templateName: templates.name,
           templateSubject: templates.subject,
+          templateBody: templates.body,
         })
         .from(sequenceSteps)
         .leftJoin(templates, eq(sequenceSteps.templateId, templates.id))

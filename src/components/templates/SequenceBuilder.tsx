@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Layers,
   Plus,
@@ -14,6 +14,10 @@ import {
   RefreshCw,
   CornerDownRight,
   Minus,
+  Sparkles,
+  Shuffle,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +38,8 @@ interface StepItem {
   delayHours: number;
   templateName?: string;
   templateSubject?: string;
+  templateBody?: string;
+  isExpanded?: boolean;
 }
 
 interface SequenceMetrics {
@@ -41,6 +47,11 @@ interface SequenceMetrics {
   equilibriumNewRatio: number;
   equilibriumFollowUpRatio: number;
   stepCount: number;
+}
+
+function countWords(text?: string): number {
+  if (!text || !text.trim()) return 0;
+  return text.trim().split(/\s+/).length;
 }
 
 export function SequenceBuilder() {
@@ -57,6 +68,8 @@ export function SequenceBuilder() {
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
   const [metrics, setMetrics] = useState<SequenceMetrics | null>(null);
 
+  const bodyRefs = useRef<(HTMLTextAreaElement | null)[]>([]);
+
   const fetchSequence = async () => {
     setLoading(true);
     setError(null);
@@ -72,15 +85,53 @@ export function SequenceBuilder() {
         setCapacityBias(parseFloat(data.sequence.capacityBias || "0"));
       }
 
-      setSteps(
-        data.steps && data.steps.length > 0
-          ? data.steps
-          : [
-              { stepNumber: 1, templateId: data.templates[0]?.id || 1, delayDays: 0, delayHours: 0 },
-              { stepNumber: 2, templateId: data.templates[0]?.id || 1, delayDays: 2, delayHours: 0 },
-            ]
-      );
-      setTemplates(data.templates || []);
+      const rawTemplates: TemplateOption[] = data.templates || [];
+      setTemplates(rawTemplates);
+
+      if (data.steps && data.steps.length > 0) {
+        setSteps(
+          data.steps.map((s: any) => {
+            const matchedTpl = rawTemplates.find((t) => t.id === s.templateId);
+            return {
+              ...s,
+              templateSubject: s.templateSubject ?? matchedTpl?.subject ?? "",
+              templateBody: s.templateBody ?? matchedTpl?.body ?? "",
+              isExpanded: true,
+            };
+          })
+        );
+      } else {
+        const defaultTpl = rawTemplates[0] || {
+          id: 1,
+          name: "Initial Pitch",
+          subject: "A 30-sec video concept for {{channel_name}}",
+          body: "Hey {{channel_name}},\n\nLoved your recent video! We help creators scale their views with high-retention short-form clips.\n\nCould I send over a quick 30-second concept for your channel, completely free?\n\nBest,\nTeam LeadMiner",
+        };
+
+        setSteps([
+          {
+            stepNumber: 1,
+            templateId: defaultTpl.id,
+            templateName: defaultTpl.name,
+            templateSubject: defaultTpl.subject,
+            templateBody: defaultTpl.body,
+            delayDays: 0,
+            delayHours: 0,
+            isExpanded: true,
+          },
+          {
+            stepNumber: 2,
+            templateId: 0,
+            templateName: "Follow-Up #1",
+            templateSubject: "",
+            templateBody: "Hey {{channel_name}},\n\nJust wanted to bump this to the top of your inbox in case it got buried. Did you have a quick moment to check out my previous note?\n\nBest,\nTeam LeadMiner",
+            delayDays: 2,
+            delayHours: 0,
+            isExpanded: true,
+          },
+        ]);
+      }
+
       setMetrics(data.metrics || null);
     } catch (err: any) {
       setError(err.message);
@@ -106,17 +157,20 @@ export function SequenceBuilder() {
   const effectiveNewRatio = Math.max(15, Math.min(85, Math.round(baseNewRatio + capacityBias * 100)));
   const effectiveFuRatio = 100 - effectiveNewRatio;
 
-  // Add Step (Instantly.ai pattern: appends step with default 2-day delay)
+  // Add Step (Instantly.ai pattern: appends step with dedicated message editor)
   const handleAddStep = () => {
     const nextStepNum = steps.length + 1;
-    const defaultTemplateId = templates[0]?.id || 1;
     setSteps([
       ...steps,
       {
         stepNumber: nextStepNum,
-        templateId: defaultTemplateId,
+        templateId: 0,
+        templateName: `Follow-Up #${nextStepNum - 1}`,
+        templateSubject: "",
+        templateBody: `Hey {{channel_name}},\n\nJust following up on my previous message. Are you open to taking a look at the concept?\n\nBest,\nTeam LeadMiner`,
         delayDays: 2,
         delayHours: 0,
+        isExpanded: true,
       },
     ]);
   };
@@ -138,6 +192,43 @@ export function SequenceBuilder() {
     const updated = [...steps];
     updated[index] = { ...updated[index], [field]: val };
     setSteps(updated);
+  };
+
+  // Populate step from an existing template dropdown
+  const handleApplyTemplate = (index: number, templateIdStr: string) => {
+    const tId = parseInt(templateIdStr, 10);
+    const selected = templates.find((t) => t.id === tId);
+    if (!selected) return;
+
+    const updated = [...steps];
+    updated[index] = {
+      ...updated[index],
+      templateId: selected.id,
+      templateName: selected.name,
+      templateSubject: selected.subject,
+      templateBody: selected.body,
+    };
+    setSteps(updated);
+  };
+
+  // Insert variable or spintax token into textarea
+  const insertTokenIntoBody = (index: number, token: string) => {
+    const el = bodyRefs.current[index];
+    const currentBody = steps[index].templateBody || "";
+    if (!el) {
+      handleStepChange(index, "templateBody", currentBody + token);
+      return;
+    }
+
+    const start = el.selectionStart ?? currentBody.length;
+    const end = el.selectionEnd ?? currentBody.length;
+    const updated = currentBody.slice(0, start) + token + currentBody.slice(end);
+
+    handleStepChange(index, "templateBody", updated);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.selectionStart = el.selectionEnd = start + token.length;
+    });
   };
 
   // Save changes
@@ -231,12 +322,12 @@ export function SequenceBuilder() {
 
       {/* ── Main Single Column on Mobile, Two Columns on Desktop ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start">
-        {/* Left Column: Instantly.ai Style Connected Timeline (7 cols) */}
+        {/* Left Column: Instantly.ai Style Connected Timeline with Full Message Editors (7 cols) */}
         <div className="lg:col-span-7 space-y-3">
           <div className="flex items-center justify-between px-0.5">
             <div className="flex items-center space-x-2">
               <Layers className="w-4 h-4 text-primary" />
-              <h3 className="text-sm font-semibold text-text-main">Sequence Timeline</h3>
+              <h3 className="text-sm font-semibold text-text-main">Sequence Timeline &amp; Follow-Up Copy</h3>
               <span className="text-xs text-text-muted font-mono">
                 ({steps.length} {steps.length === 1 ? "step" : "steps"})
               </span>
@@ -248,7 +339,7 @@ export function SequenceBuilder() {
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-surface-200 text-text-secondary hover:text-text-main hover:bg-surface-300 text-xs font-medium active:scale-95 transition-all min-h-[36px]"
             >
               <Plus className="w-3.5 h-3.5 text-primary" />
-              <span>Add Step</span>
+              <span>Add Follow-Up</span>
             </button>
           </div>
 
@@ -256,9 +347,9 @@ export function SequenceBuilder() {
           <div className="relative">
             {steps.map((step, idx) => {
               const isInitial = idx === 0;
-              const selectedTemplate = templates.find((t) => t.id === step.templateId);
               const parentStep = idx > 0 ? steps[idx - 1] : null;
-              const parentTemplate = parentStep ? templates.find((t) => t.id === parentStep.templateId) : null;
+              const wordCount = countWords(step.templateBody);
+              const hasSpintax = /\{([^{}]*?\|[^{}]*?)\}/.test(step.templateBody || "") || /\{([^{}]*?\|[^{}]*?)\}/.test(step.templateSubject || "");
 
               return (
                 <div key={idx}>
@@ -312,8 +403,9 @@ export function SequenceBuilder() {
                     </div>
                   )}
 
-                  {/* Step Card */}
+                  {/* Step Card with Full Inline Message Editor */}
                   <Card className="p-3.5 sm:p-4 border-border bg-surface-100 hover:border-studio-border-strong transition-all space-y-3 relative z-10 rounded-xl shadow-sm">
+                    {/* Header Row */}
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-2.5">
                         <div className="w-7 h-7 sm:w-6 sm:h-6 rounded-lg sm:rounded-md bg-surface-200 border border-border text-text-main font-mono font-semibold text-xs flex items-center justify-center shrink-0">
@@ -322,7 +414,7 @@ export function SequenceBuilder() {
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-xs sm:text-sm font-semibold text-text-main">
-                              {isInitial ? "Step 1: Initial Cold Outreach" : `Step ${step.stepNumber}: Follow-Up #${step.stepNumber - 1}`}
+                              {isInitial ? "Step 1: Initial Cold Pitch" : `Step ${step.stepNumber}: Follow-Up #${step.stepNumber - 1}`}
                             </span>
                             {!isInitial && (
                               <Badge
@@ -336,68 +428,146 @@ export function SequenceBuilder() {
                           <p className="text-[11px] text-text-muted mt-0.5 leading-normal">
                             {isInitial
                               ? "Dispatched upon lead qualification during US Eastern business hours."
-                              : `Automatically bumps previous thread after ${step.delayDays} ${
+                              : `Sent ${step.delayDays} ${
                                   weekendPolicy === "SKIP_WEEKENDS" ? "business" : "calendar"
-                                } day(s) if no reply.`}
+                                } day(s) after Step ${step.stepNumber - 1} if creator hasn't replied.`}
                           </p>
                         </div>
                       </div>
 
-                      {!isInitial && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveStep(idx)}
-                          className="min-h-[40px] min-w-[40px] sm:min-h-[32px] sm:min-w-[32px] flex items-center justify-center rounded-lg text-text-muted hover:text-destructive hover:bg-surface-200 active:scale-95 transition-all"
-                          title="Remove this follow-up step"
-                          aria-label="Remove this follow-up step"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
+                      <div className="flex items-center gap-1">
+                        {!isInitial && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveStep(idx)}
+                            className="min-h-[38px] min-w-[38px] sm:min-h-[32px] sm:min-w-[32px] flex items-center justify-center rounded-lg text-text-muted hover:text-destructive hover:bg-surface-200 active:scale-95 transition-all"
+                            title="Remove this follow-up step"
+                            aria-label="Remove this follow-up step"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Step Controls (Layer 2 Well) */}
-                    <div className="p-3 rounded-lg bg-surface-200 border border-border/50 space-y-1.5">
-                      <label className="text-[10px] font-medium uppercase tracking-wider text-text-muted block">
-                        Assigned Email Template
-                      </label>
+                    {/* Pre-fill Template Helper */}
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/40 text-xs">
+                      <span className="text-[11px] text-text-muted">Start from existing template:</span>
                       <select
-                        value={step.templateId}
-                        onChange={(e) => handleStepChange(idx, "templateId", parseInt(e.target.value))}
-                        className="w-full bg-surface-300 border border-border text-xs text-text-main rounded-lg px-3 py-2.5 sm:py-2 outline-none focus:border-primary min-h-[42px] sm:min-h-0"
+                        value={step.templateId || ""}
+                        onChange={(e) => handleApplyTemplate(idx, e.target.value)}
+                        className="bg-surface-200 border border-border text-[11px] text-text-secondary rounded-md px-2 py-1 outline-none focus:border-primary max-w-[200px] truncate"
                       >
+                        <option value="">Load template...</option>
                         {templates.map((t) => (
                           <option key={t.id} value={t.id} className="bg-surface-200 text-text-main">
-                            {t.name} — {t.subject.slice(0, 45)}...
+                            {t.name}
                           </option>
                         ))}
                       </select>
                     </div>
 
-                    {/* Subject Line & Thread Continuity Preview */}
-                    <div className="px-3 py-2.5 rounded-lg bg-surface-200/50 border border-border/40 text-[11px] space-y-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-text-muted font-medium shrink-0">Subject Preview:</span>
-                        {isInitial ? (
-                          <span className="text-text-main font-mono truncate max-w-full">
-                            {selectedTemplate?.subject || "No template assigned"}
-                          </span>
-                        ) : (
-                          <span className="text-text-secondary font-mono truncate max-w-full flex items-center gap-1">
-                            <CornerDownRight className="w-3 h-3 text-primary shrink-0 inline" />
-                            <span className="text-text-muted">Re:</span>{" "}
-                            {parentTemplate?.subject
-                              ? parentTemplate.subject.replace(/^[Rr][Ee]:\s*/, "")
-                              : selectedTemplate?.subject || "Previous subject"}
+                    {/* 1. Subject Line Input Box */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <label className="text-[10px] font-medium uppercase tracking-wider text-text-muted">
+                          {isInitial ? "Email Subject Line" : "Follow-Up Subject Line"}
+                        </label>
+                        {!isInitial && (
+                          <span className="text-[10px] text-text-muted">
+                            Leave empty for in-thread <code className="text-text-secondary">Re: [Original]</code>
                           </span>
                         )}
                       </div>
-                      {!isInitial && (
-                        <div className="text-[10px] text-text-muted leading-relaxed">
-                          Keeps replies in the same Gmail thread using RFC 5322 In-Reply-To and References.
-                        </div>
-                      )}
+                      <input
+                        type="text"
+                        value={step.templateSubject || ""}
+                        onChange={(e) => handleStepChange(idx, "templateSubject", e.target.value)}
+                        placeholder={
+                          isInitial
+                            ? "e.g. A 30-sec concept for {{channel_name}}"
+                            : "Leave blank to keep inside original email thread (Recommended)"
+                        }
+                        className="w-full bg-surface-200 border border-border text-xs text-text-main rounded-lg px-3 py-2.5 sm:py-2 outline-none focus:border-primary font-mono placeholder:text-text-muted min-h-[40px] sm:min-h-0"
+                      />
                     </div>
+
+                    {/* 2. Message Body Input Box (Textarea) */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <label className="text-[10px] font-medium uppercase tracking-wider text-text-muted">
+                          {isInitial ? "Email Message Body" : "Follow-Up Message Copy"}
+                        </label>
+                        <div className="flex items-center gap-2 font-mono text-[10px] text-text-muted">
+                          {hasSpintax && (
+                            <span className="text-primary flex items-center gap-1">
+                              <Shuffle className="w-3 h-3" />
+                              Spintax Active
+                            </span>
+                          )}
+                          <span>{wordCount} words</span>
+                        </div>
+                      </div>
+
+                      <textarea
+                        ref={(el) => {
+                          bodyRefs.current[idx] = el;
+                        }}
+                        rows={6}
+                        value={step.templateBody || ""}
+                        onChange={(e) => handleStepChange(idx, "templateBody", e.target.value)}
+                        placeholder={
+                          isInitial
+                            ? "Hey {{channel_name}},\n\nSaw your video on {{video_title}}..."
+                            : "Hey {{channel_name}},\n\nJust wanted to float my previous email to the top of your inbox in case it got buried. Are you open to taking a look?\n\nBest,\n[Your Name]"
+                        }
+                        className="w-full bg-surface-200 border border-border text-xs text-text-main rounded-lg p-3 outline-none focus:border-primary font-sans leading-relaxed resize-y placeholder:text-text-muted"
+                      />
+
+                      {/* Merge Tag & Spintax Insert Bar */}
+                      <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                        <span className="text-[10px] text-text-muted shrink-0 mr-1">Insert:</span>
+                        <button
+                          type="button"
+                          onClick={() => insertTokenIntoBody(idx, "{{channel_name}}")}
+                          className="text-[10px] font-mono px-2 py-1 rounded bg-surface-300 hover:bg-surface-200 text-text-secondary hover:text-text-main border border-border/80 active:scale-95 transition-all"
+                        >
+                          + {"{{channel_name}}"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => insertTokenIntoBody(idx, "{{first_name}}")}
+                          className="text-[10px] font-mono px-2 py-1 rounded bg-surface-300 hover:bg-surface-200 text-text-secondary hover:text-text-main border border-border/80 active:scale-95 transition-all"
+                        >
+                          + {"{{first_name}}"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => insertTokenIntoBody(idx, "{{subscriber_count}}")}
+                          className="text-[10px] font-mono px-2 py-1 rounded bg-surface-300 hover:bg-surface-200 text-text-secondary hover:text-text-main border border-border/80 active:scale-95 transition-all"
+                        >
+                          + {"{{subscriber_count}}"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => insertTokenIntoBody(idx, "{Hi|Hey|Hello}")}
+                          className="text-[10px] font-mono px-2 py-1 rounded bg-surface-300 hover:bg-surface-200 text-primary border border-border/80 active:scale-95 transition-all flex items-center gap-1"
+                        >
+                          <Shuffle className="w-2.5 h-2.5" />
+                          <span>{"{Hi|Hey|Hello}"}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* In-Thread Continuity Notice for Follow-Ups */}
+                    {!isInitial && (
+                      <div className="px-3 py-2 rounded-lg bg-surface-200/40 border border-border/30 text-[10px] text-text-muted flex items-start gap-1.5">
+                        <CornerDownRight className="w-3 h-3 text-primary shrink-0 mt-0.5" />
+                        <span>
+                          Dispatched from the exact same connected Gmail account with RFC 5322 In-Reply-To headers, bumping the existing conversation naturally.
+                        </span>
+                      </div>
+                    )}
                   </Card>
                 </div>
               );

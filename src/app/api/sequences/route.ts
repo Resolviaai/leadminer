@@ -74,13 +74,41 @@ export async function POST(req: NextRequest) {
       // Delete existing steps
       await tx.delete(sequenceSteps).where(eq(sequenceSteps.sequenceId, Number(sequenceId)));
 
-      // Re-insert new steps
+      // Re-insert new steps and persist template content
       for (let i = 0; i < newSteps.length; i++) {
         const step = newSteps[i];
+        let targetTemplateId = Number(step.templateId) || 0;
+
+        // If template content (subject or body) is passed, update or create the template
+        if (step.templateSubject !== undefined || step.templateBody !== undefined) {
+          if (targetTemplateId > 0) {
+            await tx
+              .update(templates)
+              .set({
+                name: step.templateName || `Sequence Step ${i + 1}`,
+                subject: (step.templateSubject || "Follow-up").trim(),
+                body: (step.templateBody || "").trim(),
+                updatedAt: new Date(),
+              })
+              .where(eq(templates.id, targetTemplateId));
+          } else {
+            const [newTpl] = await tx
+              .insert(templates)
+              .values({
+                name: step.templateName || `Sequence Step ${i + 1}`,
+                subject: (step.templateSubject || (i === 0 ? "Outreach Pitch" : "Follow-Up")).trim(),
+                body: (step.templateBody || "Hey {{channel_name}},\n\nFollowing up on my previous note!").trim(),
+                isActive: true,
+              })
+              .returning();
+            targetTemplateId = newTpl.id;
+          }
+        }
+
         await tx.insert(sequenceSteps).values({
           sequenceId: Number(sequenceId),
           stepNumber: i + 1,
-          templateId: Number(step.templateId),
+          templateId: targetTemplateId,
           delayDays: i === 0 ? 0 : Math.max(1, Number(step.delayDays || 2)),
           delayHours: Number(step.delayHours || 0),
         });

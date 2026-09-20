@@ -187,7 +187,7 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
 
     // Resolve Step Template
     let templateId = item.campaignTemplateId || 1;
-    if (item.sequenceId && item.stepNumber > 1) {
+    if (item.sequenceId) {
       const stepRow = await db
         .select({ templateId: sequenceSteps.templateId })
         .from(sequenceSteps)
