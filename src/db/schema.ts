@@ -8,6 +8,7 @@ import {
   boolean,
   timestamp,
   date,
+  numeric,
   jsonb,
   pgEnum,
   uniqueIndex,
@@ -16,6 +17,22 @@ import {
 import { relations } from 'drizzle-orm';
 
 // Enums
+export const sequenceStatusEnum = pgEnum('sequence_status', [
+  'DRAFT',
+  'ACTIVE',
+  'PAUSED',
+  'ARCHIVED',
+]);
+
+export const leadSequenceStatusEnum = pgEnum('lead_sequence_status', [
+  'ACTIVE',
+  'PAUSED',
+  'COMPLETED',
+  'CANCELLED_REPLY',
+  'CANCELLED_OPT_OUT',
+  'CANCELLED_BOUNCED',
+]);
+
 export const keywordStatusEnum = pgEnum('keyword_status', [
   'PENDING',
   'PROCESSING',
@@ -285,6 +302,72 @@ export const campaigns = pgTable(
   (table) => [index('idx_campaigns_status').on(table.status)]
 );
 
+// 5b. sequences
+export const sequences = pgTable(
+  'sequences',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    campaignId: bigint('campaign_id', { mode: 'number' }).notNull().references(() => campaigns.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 255 }).notNull(),
+    weekendPolicy: varchar('weekend_policy', { length: 30 }).notNull().default('SKIP_WEEKENDS'),
+    capacityBias: numeric('capacity_bias', { precision: 5, scale: 2 }).notNull().default('0.00'),
+    priorityWeights: jsonb('priority_weights').default({ overdue: 10, step: 1, subs: 2 }),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_sequences_campaign_id').on(table.campaignId),
+    index('idx_sequences_is_active').on(table.isActive),
+  ]
+);
+
+// 5c. sequence_steps
+export const sequenceSteps = pgTable(
+  'sequence_steps',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    sequenceId: bigint('sequence_id', { mode: 'number' }).notNull().references(() => sequences.id, { onDelete: 'cascade' }),
+    stepNumber: integer('step_number').notNull(),
+    templateId: bigint('template_id', { mode: 'number' }).notNull().references(() => templates.id, { onDelete: 'restrict' }),
+    delayDays: integer('delay_days').notNull().default(2),
+    delayHours: integer('delay_hours').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('uq_sequence_steps_seq_num').on(table.sequenceId, table.stepNumber),
+    index('idx_sequence_steps_template_id').on(table.templateId),
+  ]
+);
+
+// 5d. lead_sequence_progress (State Machine)
+export const leadSequenceProgress = pgTable(
+  'lead_sequence_progress',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    leadId: bigint('lead_id', { mode: 'number' }).notNull().references(() => leads.id, { onDelete: 'cascade' }),
+    campaignId: bigint('campaign_id', { mode: 'number' }).notNull().references(() => campaigns.id, { onDelete: 'cascade' }),
+    contactId: bigint('contact_id', { mode: 'number' }).notNull().references(() => contacts.id, { onDelete: 'cascade' }),
+    sequenceId: bigint('sequence_id', { mode: 'number' }).notNull().references(() => sequences.id, { onDelete: 'cascade' }),
+    currentStep: integer('current_step').notNull().default(1),
+    status: leadSequenceStatusEnum('status').notNull().default('ACTIVE'),
+    pinnedGmailAccountId: bigint('pinned_gmail_account_id', { mode: 'number' }).references(() => gmailAccounts.id, { onDelete: 'set null' }),
+    lastSentAt: timestamp('last_sent_at', { withTimezone: true }),
+    nextStepDueAt: timestamp('next_step_due_at', { withTimezone: true }),
+    threadId: varchar('thread_id', { length: 255 }),
+    lastRfc822MessageId: varchar('last_rfc822_message_id', { length: 255 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('uq_lead_seq_progress_contact_seq').on(table.contactId, table.sequenceId),
+    index('idx_lead_seq_progress_status_due').on(table.status, table.nextStepDueAt),
+    index('idx_lead_seq_progress_lead_status').on(table.leadId, table.status),
+    index('idx_lead_seq_progress_account_due').on(table.pinnedGmailAccountId, table.status, table.nextStepDueAt),
+  ]
+);
+
 // 6. gmail_accounts
 export const gmailAccounts = pgTable(
   'gmail_accounts',
@@ -322,6 +405,8 @@ export const messages = pgTable(
     recipientEmail: varchar('recipient_email', { length: 255 }).notNull(),
     subject: varchar('subject', { length: 500 }).notNull(),
     body: text('body').notNull(),
+    stepNumber: integer('step_number').notNull().default(1),
+    rfc822MessageId: varchar('rfc822_message_id', { length: 255 }),
     personalizationStatus: personalizationStatusEnum('personalization_status').notNull().default('NONE'),
     personalizationModel: varchar('personalization_model', { length: 100 }),
     personalizationError: text('personalization_error'),
@@ -335,11 +420,12 @@ export const messages = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex('uq_messages_lead_campaign_contact').on(table.leadId, table.campaignId, table.contactId),
+    uniqueIndex('uq_messages_lead_campaign_contact_step').on(table.leadId, table.campaignId, table.contactId, table.stepNumber),
     uniqueIndex('uq_messages_idempotency').on(table.idempotencyKey),
     index('idx_messages_send_status').on(table.sendStatus),
     index('idx_messages_thread_id').on(table.threadId),
     index('idx_messages_contact_id').on(table.contactId),
+    index('idx_messages_rfc822_id').on(table.rfc822MessageId),
   ]
 );
 
@@ -375,6 +461,8 @@ export const scheduledEmails = pgTable(
     leadId: bigint('lead_id', { mode: 'number' }).notNull().references(() => leads.id, { onDelete: 'cascade' }),
     contactId: bigint('contact_id', { mode: 'number' }).notNull().references(() => contacts.id, { onDelete: 'cascade' }),
     gmailAccountId: bigint('gmail_account_id', { mode: 'number' }).notNull().references(() => gmailAccounts.id, { onDelete: 'cascade' }),
+    stepNumber: integer('step_number').notNull().default(1),
+    inReplyToRfcId: varchar('in_reply_to_rfc_id', { length: 255 }),
     scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
     scheduledDate: date('scheduled_date').notNull(),
     status: scheduledEmailStatusEnum('status').notNull().default('PENDING'),
@@ -388,7 +476,7 @@ export const scheduledEmails = pgTable(
     index('idx_scheduled_emails_dispatch').on(table.scheduledAt, table.status),
     index('idx_scheduled_emails_lead_status').on(table.leadId, table.status),
     index('idx_scheduled_emails_account').on(table.gmailAccountId, table.scheduledAt),
-    uniqueIndex('uq_scheduled_emails_contact_date').on(table.contactId, table.campaignId, table.scheduledDate),
+    uniqueIndex('uq_scheduled_emails_contact_step').on(table.contactId, table.campaignId, table.stepNumber),
   ]
 );
 

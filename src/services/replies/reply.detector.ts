@@ -3,6 +3,7 @@ import { messages, replies, leads, campaigns, gmailAccounts, suppressions, sched
 import { eq, and, sql, inArray } from 'drizzle-orm';
 import { telegramService } from '../notifications/telegram.service';
 import { env } from '../../config/env';
+import { sequenceService } from '../outreach/sequence.service';
 
 export const OPT_OUT_REGEX =
   /\b(stop|unsubscribe|opt[- ]?out|remove\s+me|take\s+me\s+off|please\s+remove|don'?t\s+contact|leave\s+me\s+alone)\b/i;
@@ -105,21 +106,9 @@ export class ReplyDetectorService {
 
       // Automatically cancel any remaining pending scheduled emails for this lead (e.g. secondary contacts)
       try {
-        await db
-          .update(scheduledEmails)
-          .set({
-            status: 'CANCELLED',
-            error: isOptOut ? 'Lead opted out / unsubscribed' : 'Lead replied on another contact thread',
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(scheduledEmails.leadId, match.leadId),
-              inArray(scheduledEmails.status, ['PENDING', 'SENDING'])
-            )
-          );
+        await sequenceService.cancelSequenceForLead(match.leadId, isOptOut ? 'CANCELLED_OPT_OUT' : 'CANCELLED_REPLY');
       } catch (cancelErr: any) {
-        console.warn(`[Reply Detector] Non-fatal: could not cancel scheduled emails for lead ${match.leadId}:`, cancelErr.message);
+        console.warn(`[Reply Detector] Non-fatal: could not cancel sequence for lead ${match.leadId}:`, cancelErr.message);
       }
 
       // 4. Send high-signal Telegram notification with isolated failure protection

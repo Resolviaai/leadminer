@@ -6,11 +6,16 @@ import {
   templates,
   scheduledEmails,
   systemSettings,
+  sequences,
+  sequenceSteps,
+  leadSequenceProgress,
 } from '../db/schema';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { eq, inArray, sql, and } from 'drizzle-orm';
 import { templateEngine } from '../services/outreach/template.engine';
 import { geminiService } from '../services/ai/gemini.service';
 import { gmailSendingService } from '../services/outreach/gmail.service';
+import { runReplySync } from './replies.worker';
+import { sequenceService } from '../services/outreach/sequence.service';
 
 export interface DispatcherResult {
   dispatched: number;
@@ -20,18 +25,18 @@ export interface DispatcherResult {
 }
 
 /**
- * Lightweight Dispatcher Worker
- * Invoked every 10–15 minutes (via cron-job.org or timer).
+ * Lightweight Dispatcher Worker (Sequence v2)
+ * Invoked every 15 minutes (via cron-job.org).
  *
  * Responsibilities:
- * 1. Claims up to 2 due emails atomically using PostgreSQL FOR UPDATE SKIP LOCKED.
- * 2. Applies Gemini personalization (if enabled) & renders template with Spintax rotation.
- * 3. Sends email via Gmail API.
- * 4. Applies in-flight micro-delay (15-30s) if sending multiple emails in the same invocation.
- * 5. Updates scheduled_emails table to SENT or FAILED.
- * 6. Finishes execution quickly (< 5s for 1 email, < 25s for 2 emails).
+ * 1. Pre-dispatch Reply Sync: Runs reply sync first to guarantee < 15m reply cancellation window.
+ * 2. Claims due emails atomically using PostgreSQL FOR UPDATE SKIP LOCKED.
+ * 3. Enforces in-flight safety check against lead outreach status (REPLIED, UNSUBSCRIBED, BOUNCED).
+ * 4. Resolves step-specific template from sequence_steps.
+ * 5. Handles in-thread email bumping (Re: Subject, In-Reply-To, References, threadId).
+ * 6. Dispatches via pinned Gmail account and advances the state machine.
  */
-export async function runDispatcher(batchLimit = 2): Promise<DispatcherResult> {
+export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
   // 1. Mandatory Kill Switch Check
   const killSwitchRecord = await db
     .select()
@@ -44,8 +49,17 @@ export async function runDispatcher(batchLimit = 2): Promise<DispatcherResult> {
     return { dispatched: 0, failed: 0, skipped: 0, details: 'Kill switch active' };
   }
 
-  // 2. Atomic Row Claiming via FOR UPDATE SKIP LOCKED
-  // Finds emails where scheduled_at <= NOW() and status = 'PENDING'
+  // 2. Pre-Dispatch Inbound Reply Sync (Shrinks cancellation latency to < 15m)
+  try {
+    const syncRes = await runReplySync();
+    if (syncRes && syncRes.repliesDetected > 0) {
+      console.log(`📥 [Dispatcher Pre-Sync] Detected and processed ${syncRes.repliesDetected} new replies.`);
+    }
+  } catch (e: any) {
+    console.warn('[Dispatcher Pre-Sync Non-Fatal]:', e.message);
+  }
+
+  // 3. Atomic Row Claiming via FOR UPDATE SKIP LOCKED
   const claimedRows = await db.transaction(async (tx) => {
     const candidateIdsResult = await tx.execute<{ id: number }>(sql`
       SELECT id FROM ${scheduledEmails}
@@ -102,7 +116,6 @@ export async function runDispatcher(batchLimit = 2): Promise<DispatcherResult> {
       .limit(1);
     if (activeKill.length > 0 && (activeKill[0].value as any)?.enabled) {
       console.warn('⛔ [Kill Switch Active] Mid-dispatch emergency stop.');
-      // Revert this row to PENDING
       await db
         .update(scheduledEmails)
         .set({ status: 'PENDING', updatedAt: new Date() })
@@ -115,6 +128,9 @@ export async function runDispatcher(batchLimit = 2): Promise<DispatcherResult> {
       .select({
         scheduledId: scheduledEmails.id,
         attempts: scheduledEmails.attempts,
+        stepNumber: scheduledEmails.stepNumber,
+        inReplyToRfcId: scheduledEmails.inReplyToRfcId,
+        gmailAccountId: scheduledEmails.gmailAccountId,
         leadId: leads.id,
         channelTitle: leads.channelTitle,
         channelUrl: leads.channelUrl,
@@ -125,13 +141,23 @@ export async function runDispatcher(batchLimit = 2): Promise<DispatcherResult> {
         contactId: contacts.id,
         recipientEmail: contacts.email,
         campaignId: campaigns.id,
+        campaignTemplateId: campaigns.templateId,
         enableGeminiPersonalization: campaigns.enableGeminiPersonalization,
-        templateId: campaigns.templateId,
+        sequenceId: leadSequenceProgress.sequenceId,
+        threadId: leadSequenceProgress.threadId,
+        lastRfc822Id: leadSequenceProgress.lastRfc822MessageId,
       })
       .from(scheduledEmails)
       .innerJoin(leads, eq(scheduledEmails.leadId, leads.id))
       .innerJoin(contacts, eq(scheduledEmails.contactId, contacts.id))
       .innerJoin(campaigns, eq(scheduledEmails.campaignId, campaigns.id))
+      .leftJoin(
+        leadSequenceProgress,
+        and(
+          eq(scheduledEmails.contactId, leadSequenceProgress.contactId),
+          eq(scheduledEmails.leadId, leadSequenceProgress.leadId)
+        )
+      )
       .where(eq(scheduledEmails.id, scheduledId))
       .limit(1);
 
@@ -148,9 +174,9 @@ export async function runDispatcher(batchLimit = 2): Promise<DispatcherResult> {
 
     const recipientEmail: string = item.recipientEmail;
 
-    // If lead has already replied or unsubscribed, cancel this email
-    if (item.leadOutreachStatus === 'REPLIED' || item.leadOutreachStatus === 'UNSUBSCRIBED') {
-      console.log(`ℹ️ [Dispatcher] Lead ${item.leadId} is ${item.leadOutreachStatus}. Cancelling scheduled email.`);
+    // In-Flight Safety Check: If lead has already replied, unsubscribed, or bounced, abort!
+    if (['REPLIED', 'UNSUBSCRIBED', 'BOUNCED'].includes(item.leadOutreachStatus)) {
+      console.log(`ℹ️ [Dispatcher] Lead #${item.leadId} is ${item.leadOutreachStatus}. Cancelling scheduled email.`);
       await db
         .update(scheduledEmails)
         .set({ status: 'CANCELLED', error: `Lead status is ${item.leadOutreachStatus}`, updatedAt: new Date() })
@@ -159,15 +185,33 @@ export async function runDispatcher(batchLimit = 2): Promise<DispatcherResult> {
       continue;
     }
 
-    // Fetch template
+    // Resolve Step Template
+    let templateId = item.campaignTemplateId || 1;
+    if (item.sequenceId && item.stepNumber > 1) {
+      const stepRow = await db
+        .select({ templateId: sequenceSteps.templateId })
+        .from(sequenceSteps)
+        .where(
+          and(
+            eq(sequenceSteps.sequenceId, item.sequenceId),
+            eq(sequenceSteps.stepNumber, item.stepNumber)
+          )
+        )
+        .limit(1);
+
+      if (stepRow.length > 0 && stepRow[0].templateId) {
+        templateId = stepRow[0].templateId;
+      }
+    }
+
     const templateRecord = await db
       .select()
       .from(templates)
-      .where(eq(templates.id, item.templateId || 1))
+      .where(eq(templates.id, templateId))
       .limit(1);
 
     if (templateRecord.length === 0) {
-      console.error(`❌ Template ID ${item.templateId} not found.`);
+      console.error(`❌ Template ID ${templateId} not found.`);
       await db
         .update(scheduledEmails)
         .set({ status: 'FAILED', error: 'Template not found', updatedAt: new Date() })
@@ -178,13 +222,13 @@ export async function runDispatcher(batchLimit = 2): Promise<DispatcherResult> {
 
     const template = templateRecord[0];
 
-    // Gemini Personalization (if enabled)
+    // Gemini Personalization (if enabled and on Step 1)
     const DEFAULT_CUSTOM_LINE = 'I really enjoy the direction of your channel content.';
     let customLine = DEFAULT_CUSTOM_LINE;
     let personalizationStatus: 'NONE' | 'CUSTOMIZED' | 'FALLBACK' | 'FAILED' = 'NONE';
     let modelUsed: string | undefined;
 
-    if (item.enableGeminiPersonalization) {
+    if (item.enableGeminiPersonalization && item.stepNumber === 1) {
       try {
         const aiRes = await geminiService.generateCustomLine({
           channelTitle: item.channelTitle,
@@ -194,16 +238,8 @@ export async function runDispatcher(batchLimit = 2): Promise<DispatcherResult> {
 
         modelUsed = aiRes.model;
         let candidate = (aiRes.customLine || '').trim();
-
-        // Clean quotes and linebreaks
         candidate = candidate.replace(/^["'“”‘’`]+|["'“”‘’`]+$/g, '').trim();
         candidate = candidate.replace(/[\r\n]+/g, ' ').trim();
-        candidate = candidate
-          .replace(/\s*[—–]\s*/g, ', ')
-          .replace(/--+/g, ', ')
-          .replace(/,\s*,/g, ', ')
-          .replace(/,\s*\./g, '.')
-          .trim();
 
         if (candidate.length > 0 && candidate.length <= 120) {
           customLine = candidate;
@@ -236,19 +272,33 @@ export async function runDispatcher(batchLimit = 2): Promise<DispatcherResult> {
       custom_line: customLine,
     });
 
-    const idempotencyKey = `sched_${item.scheduledId}_c_${item.campaignId}_l_${item.leadId}_cnt_${item.contactId}`;
+    // In-Thread Subject Bumping for Follow-Up Steps (2..N)
+    let finalSubject = renderedSubject;
+    if (item.stepNumber > 1) {
+      const isAlreadyRe = finalSubject.toLowerCase().startsWith('re:');
+      finalSubject = isAlreadyRe ? finalSubject : `Re: ${finalSubject}`;
+    }
 
-    // Send via Gmail Service
-    console.log(`✉️ [Dispatcher] Sending to "${item.channelTitle}" (${item.recipientEmail})...`);
+    const idempotencyKey = `camp_${item.campaignId}_lead_${item.leadId}_cnt_${item.contactId}_step_${item.stepNumber}`;
+
+    // Send via Gmail Service with strict inbox affinity and threading headers
+    console.log(
+      `✉️ [Dispatcher] Sending Step ${item.stepNumber} to "${item.channelTitle}" (${item.recipientEmail}) via Account #${item.gmailAccountId}...`
+    );
+
     const sendResult = await gmailSendingService.sendEmail({
       leadId: item.leadId,
       campaignId: item.campaignId,
       templateId: template.id,
       contactId: item.contactId,
       recipientEmail,
-      subject: renderedSubject,
+      subject: finalSubject,
       body: renderedBody,
       idempotencyKey,
+      stepNumber: item.stepNumber,
+      pinnedAccountId: item.gmailAccountId,
+      inReplyToRfcId: item.inReplyToRfcId || item.lastRfc822Id || undefined,
+      threadId: item.threadId || undefined,
       personalizationStatus,
       personalizationModel: modelUsed,
     });
@@ -264,7 +314,25 @@ export async function runDispatcher(batchLimit = 2): Promise<DispatcherResult> {
         })
         .where(eq(scheduledEmails.id, scheduledId));
 
-      console.log(`  ✅ Dispatched successfully (ID: ${sendResult.messageId || 'simulated'})`);
+      console.log(`  ✅ Dispatched Step ${item.stepNumber} successfully (ID: ${sendResult.messageId || 'simulated'})`);
+
+      // Advance State Machine in Sequence Engine
+      if (item.sequenceId) {
+        try {
+          await sequenceService.advanceLeadSequence({
+            leadId: item.leadId,
+            contactId: item.contactId,
+            campaignId: item.campaignId,
+            sequenceId: item.sequenceId,
+            stepNumber: item.stepNumber,
+            pinnedAccountId: item.gmailAccountId,
+            threadId: sendResult.threadId || item.threadId || '',
+            rfc822MessageId: sendResult.rfc822MessageId || '',
+          });
+        } catch (advErr: any) {
+          console.warn(`  ⚠️ Could not advance sequence for Lead #${item.leadId}:`, advErr.message);
+        }
+      }
     } else {
       failedCount++;
       const errorMessage = sendResult.error || sendResult.skippedReason || 'Send failed';

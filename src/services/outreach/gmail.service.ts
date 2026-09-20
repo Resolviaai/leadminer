@@ -1,4 +1,5 @@
 import { google, gmail_v1 } from 'googleapis';
+import crypto from 'crypto';
 import { db } from '../../db/client';
 import { gmailAccounts, systemSettings, suppressions, messages, leads } from '../../db/schema';
 import { eq, and, lt, gte, sql } from 'drizzle-orm';
@@ -14,6 +15,10 @@ export interface SendEmailParams {
   subject: string;
   body: string;
   idempotencyKey: string;
+  stepNumber?: number;
+  pinnedAccountId?: number;
+  inReplyToRfcId?: string;
+  threadId?: string;
   personalizationStatus?: 'NONE' | 'CUSTOMIZED' | 'FALLBACK' | 'FAILED';
   personalizationModel?: string;
 }
@@ -22,6 +27,7 @@ export interface SendEmailResult {
   success: boolean;
   messageId?: string;
   threadId?: string;
+  rfc822MessageId?: string;
   accountId?: number;
   senderEmail?: string;
   simulated?: boolean;
@@ -149,6 +155,65 @@ export class GmailSendingService {
   }
 
   /**
+   * Concurrency-safe atomic quota reservation pinned to a specific Gmail account.
+   * Used for follow-up sequence steps to guarantee strict account affinity.
+   * If the pinned account has reached its daily limit, returns null rather than rerouting.
+   */
+  public async reserveSpecificSendingAccount(accountId: number): Promise<typeof gmailAccounts.$inferSelect | null> {
+    try {
+      const accounts = await db
+        .select()
+        .from(gmailAccounts)
+        .where(and(eq(gmailAccounts.id, accountId), eq(gmailAccounts.status, 'ACTIVE')))
+        .limit(1);
+
+      if (accounts.length === 0) return null;
+      const account = accounts[0];
+
+      const currentPtDate = this.getPacificDateStr();
+      const lastSendPtDate = account.lastSendAt ? this.getPacificDateStr(new Date(account.lastSendAt)) : null;
+      if (!lastSendPtDate || lastSendPtDate !== currentPtDate) {
+        try {
+          await db
+            .update(gmailAccounts)
+            .set({ sentToday: 0, updatedAt: new Date() })
+            .where(eq(gmailAccounts.id, account.id));
+          account.sentToday = 0;
+        } catch {
+          // Non-blocking fallback
+        }
+      }
+
+      const todayLimit = this.getTodayEffectiveLimit(account.id, account.dailyLimit);
+
+      const reserved = await db
+        .update(gmailAccounts)
+        .set({
+          sentToday: sql`COALESCE(${gmailAccounts.sentToday}, 0) + 1`,
+          lastSendAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(gmailAccounts.id, account.id),
+            eq(gmailAccounts.status, 'ACTIVE'),
+            sql`COALESCE(${gmailAccounts.sentToday}, 0) < ${todayLimit}`
+          )
+        )
+        .returning();
+
+      if (reserved && reserved.length > 0) {
+        return reserved[0];
+      }
+
+      return null;
+    } catch (e) {
+      console.error(`[GmailService] Error reserving specific account ${accountId}:`, e);
+      return null;
+    }
+  }
+
+  /**
    * Releases an atomic quota reservation if sending fails or is aborted.
    */
   public async releaseAccountReservation(accountId: number): Promise<void> {
@@ -165,15 +230,30 @@ export class GmailSendingService {
     }
   }
 
-  private createRfc2822Message(from: string, to: string, subject: string, bodyText: string, unsubscribeUrl?: string): string {
+  private createRfc2822Message(
+    from: string,
+    to: string,
+    subject: string,
+    bodyText: string,
+    rfcMessageId: string,
+    inReplyToRfcId?: string,
+    unsubscribeUrl?: string
+  ): string {
     const utf8Subject = `=?utf-8?B?${Buffer.from(subject).toString('base64')}?=`;
     const messageParts = [
       `From: ${from}`,
       `To: ${to}`,
+      `Message-ID: <${rfcMessageId}>`,
       'Content-Type: text/plain; charset=utf-8',
       'MIME-Version: 1.0',
       `Subject: ${utf8Subject}`,
     ];
+
+    if (inReplyToRfcId) {
+      const cleanRef = inReplyToRfcId.replace(/^<|>$/g, '');
+      messageParts.push(`In-Reply-To: <${cleanRef}>`);
+      messageParts.push(`References: <${cleanRef}>`);
+    }
 
     if (unsubscribeUrl) {
       messageParts.push(`List-Unsubscribe: <${unsubscribeUrl}>`);
@@ -225,6 +305,8 @@ export class GmailSendingService {
             recipientEmail: params.recipientEmail,
             subject: params.subject,
             body: params.body,
+            stepNumber: params.stepNumber || 1,
+            rfc822MessageId: `mock_${crypto.randomUUID()}@simulated.com`,
             personalizationStatus: params.personalizationStatus || 'NONE',
             personalizationModel: params.personalizationModel,
             sendStatus: 'SIMULATED',
@@ -241,17 +323,25 @@ export class GmailSendingService {
         success: true,
         messageId: mockMessageId,
         threadId: mockThreadId,
+        rfc822MessageId: `mock_${crypto.randomUUID()}@simulated.com`,
         simulated: true,
       };
     }
 
     // 4. Atomically Reserve Sending Account Slot (Concurrency-safe, LIVE MODE ONLY)
-    const account = await this.reserveSendingAccount();
+    // If pinnedAccountId is provided (Step 2..N), strictly reserve on pinned account; otherwise pick available account.
+    const account = params.pinnedAccountId
+      ? await this.reserveSpecificSendingAccount(params.pinnedAccountId)
+      : await this.reserveSendingAccount();
 
     if (!account) {
       console.warn('⛔ [Outreach] No healthy Gmail account available with remaining quota. Aborting send.');
       return { success: false, skippedReason: 'NO_HEALTHY_GMAIL_ACCOUNT' };
     }
+
+    // Generate cryptographic RFC822 Message-ID
+    const senderDomain = account.email.split('@')[1] || 'leadminer.io';
+    const rfcMessageId = `${crypto.randomUUID()}@${senderDomain}`;
 
     // 5. Live Gmail Send Execution (Two-Phase Commit Pattern)
     let messageRecordId: number | null = null;
@@ -274,6 +364,8 @@ export class GmailSendingService {
           recipientEmail: params.recipientEmail,
           subject: params.subject,
           body: params.body,
+          stepNumber: params.stepNumber || 1,
+          rfc822MessageId: rfcMessageId,
           personalizationStatus: params.personalizationStatus || 'NONE',
           personalizationModel: params.personalizationModel,
           sendStatus: 'SENDING',
@@ -490,12 +582,25 @@ export class GmailSendingService {
 
       // Construct Unsubscribe URL (RFC 2369 / RFC 8058 compliant)
       const unsubUrl = `${env.APP_URL}/api/unsubscribe?email=${encodeURIComponent(params.recipientEmail)}&leadId=${params.leadId}`;
-      const raw = this.createRfc2822Message(account.email, params.recipientEmail, params.subject, params.body, unsubUrl);
+      const raw = this.createRfc2822Message(
+        account.email,
+        params.recipientEmail,
+        params.subject,
+        params.body,
+        rfcMessageId,
+        params.inReplyToRfcId,
+        unsubUrl
+      );
 
       // Execute live send via Google API
+      const requestBody: any = { raw };
+      if (params.threadId) {
+        requestBody.threadId = params.threadId;
+      }
+
       const response = await gmail.users.messages.send({
         userId: 'me',
-        requestBody: { raw },
+        requestBody,
       });
 
       // Mark live send as successfully dispatched
@@ -643,6 +748,7 @@ export class GmailSendingService {
         success: true,
         messageId: liveMessageId,
         threadId: liveThreadId,
+        rfc822MessageId: rfcMessageId,
         accountId: account.id,
         senderEmail: account.email,
         verified: true,

@@ -1,4 +1,4 @@
-import { db } from '../db/client';
+import { db } from '../../src/db/client';
 import {
   campaigns,
   leads,
@@ -7,14 +7,19 @@ import {
   messages,
   scheduledEmails,
   systemSettings,
-} from '../db/schema';
-import { eq, and, inArray, isNotNull, sql } from 'drizzle-orm';
+  sequences,
+  sequenceSteps,
+  leadSequenceProgress,
+} from '../../src/db/schema';
+import { eq, and, inArray, isNotNull, sql, notInArray, desc } from 'drizzle-orm';
 import { env } from '../config/env';
 import { gmailSendingService } from '../services/outreach/gmail.service';
-import { jobRunner } from '../services/jobs/job.runner';
+import { sequenceService } from '../services/outreach/sequence.service';
 
 export interface PlannerResult {
   scheduled: number;
+  scheduledNew: number;
+  scheduledFollowUps: number;
   skipped: number;
   accountsAvailable: number;
   totalDailyQuota: number;
@@ -22,19 +27,22 @@ export interface PlannerResult {
 }
 
 /**
- * Morning Planner Worker
- * Runs once daily (e.g. at 09:00 EDT / 13:00 UTC) to prepare the day's dispatch schedule.
+ * Morning Planner Worker (Sequence v2 Engine)
+ * Runs each morning to plan the day's outreach.
  *
- * Randomizer & Safety Architecture:
- * 1. Volume Jitter: 18-25 emails/day per active connected Gmail account.
- * 2. Time Jitter: Disperses timestamps organically across 9 AM - 5 PM recipient time (never clockwork).
- * 3. Multi-Contact Staggering: Separates contacts for the same channel hours apart (never simultaneous).
- * 4. Account Rotation: Interleaves sending accounts (Account A -> B -> C -> A) to distribute IP/domain load.
- * 5. Idempotent: Can be triggered multiple times safely without double-scheduling.
+ * Architecture:
+ * 1. Dynamic Phi Equilibrium Governor: Uses Sequence Expansion Factor (Phi = 1 + sum S_k)
+ *    and database-measured survival rates to calculate equilibrium capacities.
+ * 2. Strict Inbox Affinity: Follow-up steps (2..N) are permanently pinned to the exact
+ *    Gmail inbox that sent Step 1.
+ * 3. Fluid Spillover: If fewer follow-ups are due on an inbox, unused capacity rolls over
+ *    into Step 1 new leads so zero daily quota is wasted.
+ * 4. Priority Scoring: Ranks due follow-ups by overdue lateness, step, and subscriber tier.
+ * 5. Bounded Scheduling Window: Monday smoothing and natural time dispersion (9 AM - 5 PM).
  */
 export async function runPlanner(): Promise<PlannerResult> {
   console.log(`\n======================================================`);
-  console.log(`📅 Starting Morning Outreach Planner Worker`);
+  console.log(`📅 Starting Morning Outreach Planner Worker (Sequence v2)`);
   console.log(`======================================================\n`);
 
   // 1. Mandatory Kill Switch Check
@@ -45,25 +53,55 @@ export async function runPlanner(): Promise<PlannerResult> {
     .limit(1);
   if (killSwitchRecord.length > 0 && (killSwitchRecord[0].value as any)?.enabled) {
     console.warn('⛔ [Kill Switch Active] STOP ALL OUTREACH is enabled in dashboard. Halting planner.');
-    return { scheduled: 0, skipped: 0, accountsAvailable: 0, totalDailyQuota: 0, details: 'Kill switch active' };
+    return {
+      scheduled: 0,
+      scheduledNew: 0,
+      scheduledFollowUps: 0,
+      skipped: 0,
+      accountsAvailable: 0,
+      totalDailyQuota: 0,
+      details: 'Kill switch active',
+    };
   }
 
-  // 2. Fetch Active Campaign
+  // 2. Fetch Active Campaign & Its Sequence
   const activeCampaigns = await db
     .select()
     .from(campaigns)
     .where(eq(campaigns.status, 'ACTIVE'))
-    .limit(5);
+    .limit(1);
 
   if (activeCampaigns.length === 0) {
-    console.log('ℹ️ [Planner] No campaigns marked ACTIVE. Halting (will not plan without an active campaign).');
-    return { scheduled: 0, skipped: 0, accountsAvailable: 0, totalDailyQuota: 0, details: 'No active campaign' };
+    console.log('ℹ️ [Planner] No campaigns marked ACTIVE. Halting.');
+    return {
+      scheduled: 0,
+      scheduledNew: 0,
+      scheduledFollowUps: 0,
+      skipped: 0,
+      accountsAvailable: 0,
+      totalDailyQuota: 0,
+      details: 'No active campaign',
+    };
   }
 
   const campaign = activeCampaigns[0];
-  console.log(`📋 Planning schedule for campaign: "${campaign.name}" (ID: ${campaign.id})`);
+  console.log(`📋 Planning outreach for campaign: "${campaign.name}" (ID: ${campaign.id})`);
 
-  // 3. Query Active Gmail Accounts (supports 1 to 10+ accounts)
+  const { sequence, steps } = await sequenceService.getOrCreateCampaignSequence(campaign.id);
+  const metrics = await sequenceService.getSequenceMetrics(sequence.id);
+
+  console.log(
+    `📊 [Dynamic Phi Governor] Steps: ${steps.length} | Phi: ${metrics.phi} | Equilibrium: ${Math.round(
+      metrics.equilibriumNewRatio * 100
+    )}% New / ${Math.round(metrics.equilibriumFollowUpRatio * 100)}% Follow-Up`
+  );
+
+  // Apply user-selected capacity bias (bounded to +/- 15%)
+  const userBias = parseFloat(sequence.capacityBias || '0.00');
+  const targetNewRatio = Math.max(0.15, Math.min(0.85, metrics.equilibriumNewRatio + userBias));
+  const targetFuRatio = 1.0 - targetNewRatio;
+
+  // 3. Query Active Gmail Accounts
   const activeAccounts = await db
     .select()
     .from(gmailAccounts)
@@ -71,20 +109,27 @@ export async function runPlanner(): Promise<PlannerResult> {
 
   if (activeAccounts.length === 0) {
     console.warn('⚠️ [Planner] No ACTIVE Gmail accounts connected. Cannot schedule outreach.');
-    return { scheduled: 0, skipped: 0, accountsAvailable: 0, totalDailyQuota: 0, details: 'No active Gmail accounts' };
+    return {
+      scheduled: 0,
+      scheduledNew: 0,
+      scheduledFollowUps: 0,
+      skipped: 0,
+      accountsAvailable: 0,
+      totalDailyQuota: 0,
+      details: 'No active Gmail accounts',
+    };
   }
 
   const currentPtDate = gmailSendingService.getPacificDateStr(); // YYYY-MM-DD
   console.log(`🗓️ Planning date (Pacific reference): ${currentPtDate}`);
 
-  // Fetch already scheduled rows for today to avoid exceeding daily capacity
+  // Fetch already scheduled rows for today
   const todayScheduledRows = await db
     .select({
       id: scheduledEmails.id,
       gmailAccountId: scheduledEmails.gmailAccountId,
       contactId: scheduledEmails.contactId,
-      leadId: scheduledEmails.leadId,
-      status: scheduledEmails.status,
+      stepNumber: scheduledEmails.stepNumber,
     })
     .from(scheduledEmails)
     .where(
@@ -96,23 +141,30 @@ export async function runPlanner(): Promise<PlannerResult> {
     );
 
   const alreadyScheduledByAccount = new Map<number, number>();
-  const alreadyScheduledContactIds = new Set<number>();
+  const alreadyScheduledContactSteps = new Set<string>();
   for (const row of todayScheduledRows) {
-    alreadyScheduledContactIds.add(row.contactId);
+    alreadyScheduledContactSteps.add(`${row.contactId}_step_${row.stepNumber}`);
     const curr = alreadyScheduledByAccount.get(row.gmailAccountId) || 0;
     alreadyScheduledByAccount.set(row.gmailAccountId, curr + 1);
   }
 
-  // Calculate remaining capacity per account for today using daily volume jitter (18-25)
-  interface AccountQuota {
-    account: typeof activeAccounts[0];
-    effectiveLimit: number;
-    remainingSlots: number;
-  }
+  // Determine allowed email verification statuses
+  const allowedEmailStatuses: ('MAILBOX_VERIFIED' | 'VALID' | 'DOMAIN_VALID')[] = env.ALLOW_DOMAIN_VALID_OUTREACH
+    ? ['MAILBOX_VERIFIED', 'VALID', 'DOMAIN_VALID']
+    : ['MAILBOX_VERIFIED', 'VALID'];
 
-  const accountQuotas: AccountQuota[] = [];
-  let totalSlotsNeeded = 0;
+  // Base schedule start time: 9:15 AM EDT (13:15 UTC) or 2 minutes from now
+  const now = new Date();
+  const todayUtcStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 13, 15, 0));
+  const startTime = now.getTime() > todayUtcStart.getTime()
+    ? new Date(now.getTime() + 2 * 60 * 1000)
+    : todayUtcStart;
 
+  let totalScheduledNew = 0;
+  let totalScheduledFollowUps = 0;
+  let totalSkipped = 0;
+
+  // 4. Per-Account Scheduling Loop (Enforcing Immutable Affinity & 25 Limit)
   for (const account of activeAccounts) {
     const effectiveLimit = gmailSendingService.getTodayEffectiveLimit(account.id, account.dailyLimit);
     const sentCount = account.sentToday || 0;
@@ -120,234 +172,205 @@ export async function runPlanner(): Promise<PlannerResult> {
     const usedSlots = Math.max(sentCount, scheduledCount);
     const remainingSlots = Math.max(0, effectiveLimit - usedSlots);
 
-    accountQuotas.push({
-      account,
-      effectiveLimit,
-      remainingSlots,
-    });
-    totalSlotsNeeded += remainingSlots;
-
     console.log(
-      `  • Account: ${account.email} | Target: ${effectiveLimit}/day | Used/Scheduled: ${usedSlots} | Remaining slots: ${remainingSlots}`
-    );
-  }
-
-  if (totalSlotsNeeded <= 0) {
-    console.log('✅ [Planner] All active accounts have already reached their scheduled daily quota for today.');
-    return {
-      scheduled: 0,
-      skipped: 0,
-      accountsAvailable: activeAccounts.length,
-      totalDailyQuota: accountQuotas.reduce((sum, a) => sum + a.effectiveLimit, 0),
-      details: 'Daily quota already fulfilled',
-    };
-  }
-
-  // 4. Determine allowed email verification statuses
-  const allowedEmailStatuses: ('MAILBOX_VERIFIED' | 'VALID' | 'DOMAIN_VALID')[] = env.ALLOW_DOMAIN_VALID_OUTREACH
-    ? ['MAILBOX_VERIFIED', 'VALID', 'DOMAIN_VALID']
-    : ['MAILBOX_VERIFIED', 'VALID'];
-
-  // Fetch already sent messages in this campaign to never re-contact sent contacts
-  const sentMessages = await db
-    .select({
-      contactId: messages.contactId,
-      cleanEmail: sql<string>`lower(trim(${messages.recipientEmail}))`.as('clean_email'),
-    })
-    .from(messages)
-    .where(
-      and(
-        eq(messages.campaignId, campaign.id),
-        inArray(messages.sendStatus, ['SENT', 'SENDING', 'UNCONFIRMED'])
-      )
+      `\n  • Inbox: ${account.email} | Target: ${effectiveLimit}/day | Used: ${usedSlots} | Remaining: ${remainingSlots}`
     );
 
-  const sentContactIds = new Set<number>();
-  const sentEmailAddresses = new Set<string>();
-  for (const sm of sentMessages) {
-    if (sm.contactId) sentContactIds.add(sm.contactId);
-    if (sm.cleanEmail) sentEmailAddresses.add(sm.cleanEmail);
-  }
+    if (remainingSlots <= 0) {
+      console.log(`    ℹ️ Inbox has fulfilled its daily quota.`);
+      continue;
+    }
 
-  // 5. Query Qualified Candidate Contacts
-  const candidateRows = await db
-    .select({
-      leadId: leads.id,
-      contactId: contacts.id,
-      email: contacts.email,
-      channelTitle: leads.channelTitle,
-      isPrimary: contacts.isPrimary,
-      outreachStatus: leads.outreachStatus,
-    })
-    .from(leads)
-    .innerJoin(contacts, eq(leads.id, contacts.leadId))
-    .where(
-      and(
-        eq(leads.qualificationStatus, 'QUALIFIED'),
-        eq(leads.suppressionStatus, false),
-        inArray(contacts.emailStatus, allowedEmailStatuses),
-        isNotNull(contacts.email)
+    // Target Follow-up capacity for this inbox today
+    const targetFuSlots = Math.floor(remainingSlots * targetFuRatio);
+    let accountFuScheduled = 0;
+
+    // ─────────────────────────────────────────────────────────────
+    // PHASE A: SCHEDULE DUE FOLLOW-UPS (Pinned to this Account)
+    // ─────────────────────────────────────────────────────────────
+    if (steps.length > 1) {
+      const dueFollowUps = await db
+        .select({
+          progressId: leadSequenceProgress.id,
+          leadId: leadSequenceProgress.leadId,
+          contactId: leadSequenceProgress.contactId,
+          currentStep: leadSequenceProgress.currentStep,
+          nextStepDueAt: leadSequenceProgress.nextStepDueAt,
+          threadId: leadSequenceProgress.threadId,
+          lastRfc822MessageId: leadSequenceProgress.lastRfc822MessageId,
+          subscriberCount: leads.subscriberCount,
+          channelTitle: leads.channelTitle,
+          outreachStatus: leads.outreachStatus,
+          email: contacts.email,
+        })
+        .from(leadSequenceProgress)
+        .innerJoin(leads, eq(leadSequenceProgress.leadId, leads.id))
+        .innerJoin(contacts, eq(leadSequenceProgress.contactId, contacts.id))
+        .where(
+          and(
+            eq(leadSequenceProgress.sequenceId, sequence.id),
+            eq(leadSequenceProgress.pinnedGmailAccountId, account.id),
+            eq(leadSequenceProgress.status, 'ACTIVE'),
+            sql`${leadSequenceProgress.currentStep} > 1`,
+            sql`${leadSequenceProgress.nextStepDueAt} <= NOW()`,
+            eq(leads.suppressionStatus, false),
+            notInArray(leads.outreachStatus, ['REPLIED', 'UNSUBSCRIBED', 'BOUNCED'])
+          )
+        );
+
+      // Score and rank due follow-ups:
+      // P = 10 * daysOverdue + 1 * currentStep + 2 * log10(subs + 1)
+      const scoredFollowUps = dueFollowUps
+        .filter((fu) => !alreadyScheduledContactSteps.has(`${fu.contactId}_step_${fu.currentStep}`))
+        .map((fu) => {
+          const dueTime = fu.nextStepDueAt ? new Date(fu.nextStepDueAt).getTime() : Date.now();
+          const daysOverdue = Math.max(0, (Date.now() - dueTime) / (1000 * 60 * 60 * 24));
+          const subs = fu.subscriberCount ? Number(fu.subscriberCount) : 0;
+          const score = 10 * daysOverdue + 1 * fu.currentStep + 2 * Math.log10(subs + 1);
+          return { ...fu, score };
+        })
+        .sort((a, b) => b.score - a.score);
+
+      // Take up to targetFuSlots (or elastically borrow up to remainingSlots - 2 if excess due)
+      const maxAllowedFu = Math.min(
+        scoredFollowUps.length,
+        Math.max(targetFuSlots, remainingSlots - 2)
+      );
+
+      for (let i = 0; i < maxAllowedFu; i++) {
+        const item = scoredFollowUps[i];
+        const slotOffsetMinutes = (accountFuScheduled + totalScheduledNew) * 12;
+        const scheduledTime = new Date(startTime.getTime() + slotOffsetMinutes * 60 * 1000);
+
+        try {
+          await db
+            .insert(scheduledEmails)
+            .values({
+              campaignId: campaign.id,
+              leadId: item.leadId,
+              contactId: item.contactId,
+              gmailAccountId: account.id,
+              stepNumber: item.currentStep,
+              inReplyToRfcId: item.lastRfc822MessageId,
+              scheduledAt: scheduledTime,
+              scheduledDate: currentPtDate,
+              status: 'PENDING',
+            })
+            .onConflictDoNothing();
+
+          alreadyScheduledContactSteps.add(`${item.contactId}_step_${item.currentStep}`);
+          accountFuScheduled++;
+          totalScheduledFollowUps++;
+        } catch (err: any) {
+          console.warn(`    ⚠️ Follow-up scheduling error for contact ${item.contactId}:`, err.message);
+          totalSkipped++;
+        }
+      }
+
+      console.log(`    🔄 Scheduled ${accountFuScheduled} follow-ups on inbox ${account.email}.`);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // PHASE B: FLUID SPILLOVER INTO STEP 1 (NEW LEADS)
+    // ─────────────────────────────────────────────────────────────
+    const slotsForNew = Math.max(0, remainingSlots - accountFuScheduled);
+    if (slotsForNew <= 0) continue;
+
+    // Fetch already contacted contact IDs in this campaign
+    const contactedContacts = await db
+      .select({ contactId: messages.contactId })
+      .from(messages)
+      .where(eq(messages.campaignId, campaign.id));
+    const contactedIds = new Set(contactedContacts.map((c) => c.contactId).filter(Boolean));
+
+    // Query qualified Step 1 candidate leads
+    const candidates = await db
+      .select({
+        leadId: leads.id,
+        contactId: contacts.id,
+        email: contacts.email,
+        channelTitle: leads.channelTitle,
+        isPrimary: contacts.isPrimary,
+      })
+      .from(leads)
+      .innerJoin(contacts, eq(leads.id, contacts.leadId))
+      .where(
+        and(
+          eq(leads.qualificationStatus, 'QUALIFIED'),
+          eq(leads.suppressionStatus, false),
+          inArray(contacts.emailStatus, allowedEmailStatuses),
+          isNotNull(contacts.email)
+        )
       )
-    )
-    .limit(totalSlotsNeeded * 5);
+      .limit(slotsForNew * 5);
 
-  // Filter candidates: must not be sent before, must not be scheduled today
-  const eligibleCandidates = candidateRows.filter((c) => {
-    if (!c.email) return false;
-    const cleanEmail = c.email.toLowerCase().trim();
-    if (sentContactIds.has(c.contactId)) return false;
-    if (alreadyScheduledContactIds.has(c.contactId)) return false;
-    if (sentEmailAddresses.has(cleanEmail)) return false;
-    return true;
-  });
+    let accountNewScheduled = 0;
+    for (const cand of candidates) {
+      if (accountNewScheduled >= slotsForNew) break;
+      if (!cand.email) continue;
+      if (contactedIds.has(cand.contactId)) continue;
+      if (alreadyScheduledContactSteps.has(`${cand.contactId}_step_1`)) continue;
 
-  if (eligibleCandidates.length === 0) {
-    console.log('ℹ️ [Planner] No eligible contacts available to schedule at this time.');
-    return {
-      scheduled: 0,
-      skipped: 0,
-      accountsAvailable: activeAccounts.length,
-      totalDailyQuota: totalSlotsNeeded,
-      details: 'No eligible candidate contacts',
-    };
-  }
+      const slotOffsetMinutes = (accountFuScheduled + accountNewScheduled) * 12;
+      const scheduledTime = new Date(startTime.getTime() + slotOffsetMinutes * 60 * 1000);
 
-  // 6. Group by Lead ID to enable Multi-Contact Staggering
-  // If a lead has Contact A and Contact B, they will be separated across time/accounts
-  const contactsByLead = new Map<number, typeof eligibleCandidates>();
-  for (const cand of eligibleCandidates) {
-    const list = contactsByLead.get(cand.leadId) || [];
-    // Deduplicate by email address per lead
-    if (!list.some((existing) => existing.email?.toLowerCase().trim() === cand.email?.toLowerCase().trim())) {
-      list.push(cand);
-      contactsByLead.set(cand.leadId, list);
-    }
-  }
+      try {
+        await db
+          .insert(scheduledEmails)
+          .values({
+            campaignId: campaign.id,
+            leadId: cand.leadId,
+            contactId: cand.contactId,
+            gmailAccountId: account.id,
+            stepNumber: 1,
+            scheduledAt: scheduledTime,
+            scheduledDate: currentPtDate,
+            status: 'PENDING',
+          })
+          .onConflictDoNothing();
 
-  // Flatten into a staggered queue:
-  // Pass 1: Primary contacts for each lead
-  // Pass 2: Secondary contacts for each lead (staggered to later in the queue)
-  const primaryQueue: typeof eligibleCandidates = [];
-  const secondaryQueue: typeof eligibleCandidates = [];
+        // Initialize state machine for this lead
+        await db
+          .insert(leadSequenceProgress)
+          .values({
+            leadId: cand.leadId,
+            campaignId: campaign.id,
+            contactId: cand.contactId,
+            sequenceId: sequence.id,
+            currentStep: 1,
+            status: 'ACTIVE',
+            pinnedGmailAccountId: account.id,
+          })
+          .onConflictDoNothing();
 
-  for (const [, leadContacts] of contactsByLead.entries()) {
-    // Sort contacts: primary first
-    leadContacts.sort((a, b) => (b.isPrimary ? 1 : 0) - (a.isPrimary ? 1 : 0));
-    if (leadContacts[0]) {
-      primaryQueue.push(leadContacts[0]);
-    }
-    for (let i = 1; i < leadContacts.length; i++) {
-      secondaryQueue.push(leadContacts[i]);
-    }
-  }
-
-  // Assemble final contact list up to totalSlotsNeeded
-  const finalContactsToSchedule: typeof eligibleCandidates = [];
-  for (const c of primaryQueue) {
-    if (finalContactsToSchedule.length >= totalSlotsNeeded) break;
-    finalContactsToSchedule.push(c);
-  }
-  // Fill remaining slots with secondary contacts (staggered)
-  if (finalContactsToSchedule.length < totalSlotsNeeded) {
-    for (const c of secondaryQueue) {
-      if (finalContactsToSchedule.length >= totalSlotsNeeded) break;
-      finalContactsToSchedule.push(c);
-    }
-  }
-
-  const countToSchedule = finalContactsToSchedule.length;
-  console.log(`🎯 Scheduling ${countToSchedule} emails across ${activeAccounts.length} account(s) for today.`);
-
-  // 7. Calculate Timestamp Distribution Across US Business Hours (9:00 AM – 5:00 PM EDT / 13:00 – 21:00 UTC)
-  // Window: 8 hours = 480 minutes
-  const now = new Date();
-  // Anchor to today 13:15 UTC (9:15 AM EDT) or current time if running after 13:15 UTC
-  const todayUtcStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 13, 15, 0));
-  const startTime = now.getTime() > todayUtcStart.getTime()
-    ? new Date(now.getTime() + 2 * 60 * 1000) // start 2 mins from now if running midday
-    : todayUtcStart;
-
-  const windowMinutes = 450; // ~7.5 hours sending span
-  const baseIntervalMinutes = Math.max(8, Math.floor(windowMinutes / Math.max(1, countToSchedule)));
-
-  // 8. Account Distributor: Interleave accounts so each account sends gradually throughout the day
-  const accountPool: number[] = [];
-  for (const aq of accountQuotas) {
-    for (let i = 0; i < aq.remainingSlots; i++) {
-      accountPool.push(aq.account.id);
-    }
-  }
-
-  // Interleave the account pool (Round-robin shuffle)
-  // If accounts are [1, 1, 1, 2, 2, 2], interleave to [1, 2, 1, 2, 1, 2]
-  const interleavedAccountIds: number[] = [];
-  const accountsMap = new Map<number, number[]>();
-  for (const id of accountPool) {
-    const list = accountsMap.get(id) || [];
-    list.push(id);
-    accountsMap.set(id, list);
-  }
-  let hasMore = true;
-  while (hasMore) {
-    hasMore = false;
-    for (const [, list] of accountsMap.entries()) {
-      if (list.length > 0) {
-        interleavedAccountIds.push(list.shift()!);
-        hasMore = true;
+        alreadyScheduledContactSteps.add(`${cand.contactId}_step_1`);
+        contactedIds.add(cand.contactId);
+        accountNewScheduled++;
+        totalScheduledNew++;
+      } catch (err: any) {
+        console.warn(`    ⚠️ Step 1 scheduling error for contact ${cand.contactId}:`, err.message);
+        totalSkipped++;
       }
     }
+
+    console.log(`    ✨ Scheduled ${accountNewScheduled} new Step 1 leads on inbox ${account.email}.`);
   }
 
-  // 9. Generate Scheduled Entries with Natural Time Jitter
-  let scheduledCount = 0;
-  let skippedCount = 0;
+  const grandTotal = totalScheduledNew + totalScheduledFollowUps;
+  console.log(`\n======================================================`);
+  console.log(
+    `✅ [Planner Completed] Scheduled ${grandTotal} total emails (${totalScheduledNew} new, ${totalScheduledFollowUps} follow-ups, ${totalSkipped} skipped).`
+  );
+  console.log(`======================================================\n`);
 
-  for (let idx = 0; idx < countToSchedule; idx++) {
-    const contactItem = finalContactsToSchedule[idx];
-    const assignedAccountId = interleavedAccountIds[idx % interleavedAccountIds.length];
-
-    // Jitter: interval ± 35% of interval length
-    const jitterRange = baseIntervalMinutes * 0.35;
-    const jitterMinutes = (Math.random() * (jitterRange * 2)) - jitterRange;
-    const slotMinuteOffset = Math.round(idx * baseIntervalMinutes + jitterMinutes);
-
-    const scheduledTime = new Date(startTime.getTime() + slotMinuteOffset * 60 * 1000);
-
-    try {
-      // Atomic insert with ON CONFLICT DO NOTHING to guarantee idempotency
-      await db
-        .insert(scheduledEmails)
-        .values({
-          campaignId: campaign.id,
-          leadId: contactItem.leadId,
-          contactId: contactItem.contactId,
-          gmailAccountId: assignedAccountId,
-          scheduledAt: scheduledTime,
-          scheduledDate: currentPtDate,
-          status: 'PENDING',
-        })
-        .onConflictDoNothing({
-          target: [
-            scheduledEmails.contactId,
-            scheduledEmails.campaignId,
-            scheduledEmails.scheduledDate,
-          ],
-        });
-
-      scheduledCount++;
-    } catch (err: any) {
-      console.warn(`  ⚠️ Failed to schedule contact ${contactItem.contactId}: ${err.message}`);
-      skippedCount++;
-    }
-  }
-
-  console.log(`\n✅ [Planner Completed] Scheduled ${scheduledCount} emails for today (${skippedCount} skipped).`);
   return {
-    scheduled: scheduledCount,
-    skipped: skippedCount,
+    scheduled: grandTotal,
+    scheduledNew: totalScheduledNew,
+    scheduledFollowUps: totalScheduledFollowUps,
+    skipped: totalSkipped,
     accountsAvailable: activeAccounts.length,
-    totalDailyQuota: totalSlotsNeeded,
-    details: `Successfully scheduled ${scheduledCount} emails with time and volume jitter across ${activeAccounts.length} inboxes.`,
+    totalDailyQuota: activeAccounts.length * 25,
+    details: `Scheduled ${totalScheduledNew} new touches and ${totalScheduledFollowUps} follow-up touches across ${activeAccounts.length} inboxes.`,
   };
 }
 
