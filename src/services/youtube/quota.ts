@@ -4,16 +4,26 @@ import { eq, sql } from 'drizzle-orm';
 import { env } from '../../config/env';
 import { QuotaState } from './types';
 
+export function getAvailableYouTubeKeys(): string[] {
+  return [
+    env.YOUTUBE_API_KEY,
+    env.YOUTUBE_API_KEY_2,
+    env.YOUTUBE_API_KEY_3,
+    env.YOUTUBE_API_KEY_4,
+  ].filter((k): k is string => Boolean(k && k.trim().length > 0));
+}
+
 export class YouTubeQuotaManager {
   private inMemoryQuota: QuotaState;
   private inMemoryOnly: boolean;
 
   constructor(inMemoryOnly?: boolean) {
     this.inMemoryOnly = inMemoryOnly ?? (process.env.NODE_ENV === 'test' || env.NODE_ENV === 'test');
+    const keyCount = Math.max(1, getAvailableYouTubeKeys().length);
     this.inMemoryQuota = {
-      searchCallsDailyLimit: env.YOUTUBE_DAILY_SEARCH_LIMIT,
+      searchCallsDailyLimit: env.YOUTUBE_DAILY_SEARCH_LIMIT * keyCount,
       searchCallsUsedToday: 0,
-      generalQuotaDailyLimit: env.YOUTUBE_DAILY_GENERAL_LIMIT,
+      generalQuotaDailyLimit: env.YOUTUBE_DAILY_GENERAL_LIMIT * keyCount,
       generalQuotaUsedToday: 0,
       lastResetPt: new Date().toISOString(),
     };
@@ -23,7 +33,25 @@ export class YouTubeQuotaManager {
     return date.toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles' });
   }
 
+  public getActiveKeyIndex(): number {
+    const keys = getAvailableYouTubeKeys();
+    if (keys.length <= 1) return 0;
+    const used = this.inMemoryQuota.searchCallsUsedToday;
+    const index = Math.min(Math.floor(used / env.YOUTUBE_DAILY_SEARCH_LIMIT), keys.length - 1);
+    return Math.max(0, index);
+  }
+
+  public markActiveKeyExhausted(): void {
+    const currentIdx = this.getActiveKeyIndex();
+    const nextTarget = (currentIdx + 1) * env.YOUTUBE_DAILY_SEARCH_LIMIT;
+    this.inMemoryQuota.searchCallsUsedToday = Math.max(this.inMemoryQuota.searchCallsUsedToday, nextTarget);
+  }
+
   public async syncQuotaState(): Promise<QuotaState> {
+    const keyCount = Math.max(1, getAvailableYouTubeKeys().length);
+    const expectedSearchLimit = env.YOUTUBE_DAILY_SEARCH_LIMIT * keyCount;
+    const expectedGeneralLimit = env.YOUTUBE_DAILY_GENERAL_LIMIT * keyCount;
+
     if (!this.inMemoryOnly) {
       try {
         const record = await db.select().from(systemSettings).where(eq(systemSettings.key, 'youtube_quota')).limit(1);
@@ -31,9 +59,9 @@ export class YouTubeQuotaManager {
         if (record.length > 0 && record[0].value) {
           const val = record[0].value as any;
           this.inMemoryQuota = {
-            searchCallsDailyLimit: val.search_calls_daily_limit ?? env.YOUTUBE_DAILY_SEARCH_LIMIT,
+            searchCallsDailyLimit: expectedSearchLimit,
             searchCallsUsedToday: val.search_calls_used_today ?? 0,
-            generalQuotaDailyLimit: val.general_quota_daily_limit ?? env.YOUTUBE_DAILY_GENERAL_LIMIT,
+            generalQuotaDailyLimit: expectedGeneralLimit,
             generalQuotaUsedToday: val.general_quota_used_today ?? 0,
             lastResetPt: val.last_reset_pt ?? new Date().toISOString(),
           };

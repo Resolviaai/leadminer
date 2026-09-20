@@ -26,6 +26,7 @@ export interface YouTubeChannelDetails {
   viewCount: number;
   website?: string;
   country?: string;
+  uploadsPlaylistId?: string;
   rawPayload: any;
 }
 

@@ -1,6 +1,25 @@
+export type ExtractedEmailSource = 'description' | 'custom_url' | 'links' | 'video_description' | 'link_page';
+
 export interface ExtractedEmail {
   email: string;
-  source: 'description' | 'custom_url' | 'links';
+  source: ExtractedEmailSource;
+  category?: EmailCategory;
+}
+
+export type EmailCategory = 'CREATOR_DIRECT' | 'BUSINESS_INQUIRIES' | 'MANAGEMENT' | 'GENERIC_SUPPORT';
+
+export function categorizeEmail(email: string): EmailCategory {
+  const localPart = email.split('@')[0]?.toLowerCase() || '';
+  if (/^(business|booking|bookings|inquiries|inquiry|sponsor|sponsors|partnerships|collab|collabs|contact)/i.test(localPart)) {
+    return 'BUSINESS_INQUIRIES';
+  }
+  if (/^(management|mgmt|manager|agent|agency|talent|press|media)/i.test(localPart)) {
+    return 'MANAGEMENT';
+  }
+  if (/^(support|help|info|admin|billing|team|office|hello|hi)/i.test(localPart)) {
+    return 'GENERIC_SUPPORT';
+  }
+  return 'CREATOR_DIRECT';
 }
 
 const BLOCKED_DOMAINS = new Set([
@@ -14,6 +33,12 @@ const BLOCKED_DOMAINS = new Set([
   'googlemail.com',
   'gmail.con',
   'gamil.com',
+  'patreon.com',
+  'spotify.com',
+  'linktr.ee',
+  'beacons.ai',
+  'sentry.io',
+  'wixpress.com',
 ]);
 
 const BLOCKED_PREFIXES = new Set([
@@ -34,7 +59,7 @@ export class EmailExtractor {
   // RFC-compliant email regex pattern with boundary detection
   private emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
 
-  public extractEmails(text: string, source: 'description' | 'custom_url' | 'links' = 'description'): ExtractedEmail[] {
+  public extractEmails(text: string, source: ExtractedEmailSource = 'description'): ExtractedEmail[] {
     if (!text || typeof text !== 'string') {
       return [];
     }

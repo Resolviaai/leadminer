@@ -1,18 +1,27 @@
 import { google, youtube_v3 } from 'googleapis';
 import { env } from '../../config/env';
-import { quotaManager } from './quota';
+import { quotaManager, getAvailableYouTubeKeys } from './quota';
 import { YouTubeSearchParams, YouTubeChannelDetails } from './types';
 
 export class YouTubeDiscoveryService {
-  private youtube: youtube_v3.Youtube | null = null;
+  private clients: youtube_v3.Youtube[] = [];
 
   constructor() {
-    if (env.YOUTUBE_API_KEY) {
-      this.youtube = google.youtube({
-        version: 'v3',
-        auth: env.YOUTUBE_API_KEY,
-      });
+    const keys = getAvailableYouTubeKeys();
+    for (const key of keys) {
+      this.clients.push(
+        google.youtube({
+          version: 'v3',
+          auth: key,
+        })
+      );
     }
+  }
+
+  private getClient(): youtube_v3.Youtube | null {
+    if (this.clients.length === 0) return null;
+    const idx = quotaManager.getActiveKeyIndex();
+    return this.clients[idx] || this.clients[0] || null;
   }
 
   private async sleep(ms: number): Promise<void> {
@@ -27,6 +36,7 @@ export class YouTubeDiscoveryService {
       } catch (error: any) {
         const isQuota = error?.status === 403 && (error?.message?.includes('quota') || error?.errors?.[0]?.reason === 'quotaExceeded');
         if (isQuota) {
+          quotaManager.markActiveKeyExhausted();
           throw error; // Don't retry quota exhaustion
         }
 
@@ -51,7 +61,8 @@ export class YouTubeDiscoveryService {
       return { channelIds: [], quotaReached: true };
     }
 
-    if (!this.youtube) {
+    const client = this.getClient();
+    if (!client) {
       const cleanQuery = params.query.replace(/[^a-zA-Z0-9]/g, '');
       const count = Math.min(params.maxResults || 3, 3);
       const mockIds: string[] = [];
@@ -63,7 +74,7 @@ export class YouTubeDiscoveryService {
 
     try {
       const searchResponse = await this.executeWithRetry(async () => {
-        return await this.youtube!.search.list({
+        return await client.search.list({
           part: ['snippet'],
           q: params.query,
           type: ['channel'],
@@ -113,7 +124,8 @@ export class YouTubeDiscoveryService {
       return { channels: [], quotaReached: true };
     }
 
-    if (!this.youtube) {
+    const client = this.getClient();
+    if (!client) {
       const mockChannels: YouTubeChannelDetails[] = uniqueChannelIds.map((id, index) => ({
         channelId: id,
         title: `Creator ${id.slice(-8)}`,
@@ -126,6 +138,7 @@ export class YouTubeDiscoveryService {
         viewCount: 1500000 * (index + 1),
         website: `https://${id.toLowerCase().slice(-6)}.com`,
         country: 'US',
+        uploadsPlaylistId: `UU${id.slice(2)}`,
         rawPayload: { mock: true, channelId: id },
       }));
       return { channels: mockChannels, quotaReached: false };
@@ -138,8 +151,8 @@ export class YouTubeDiscoveryService {
       for (let i = 0; i < uniqueChannelIds.length; i += CHUNK_SIZE) {
         const chunk = uniqueChannelIds.slice(i, i + CHUNK_SIZE);
         const channelsResponse = await this.executeWithRetry(async () => {
-          return await this.youtube!.channels.list({
-            part: ['snippet', 'statistics'],
+          return await client.channels.list({
+            part: ['snippet', 'statistics', 'contentDetails'],
             id: chunk,
           });
         });
@@ -148,6 +161,7 @@ export class YouTubeDiscoveryService {
         for (const c of channelItems) {
           const snippet = c.snippet || {};
           const stats = c.statistics || {};
+          const contentDetails = c.contentDetails || {};
 
           allChannels.push({
             channelId: c.id!,
@@ -160,6 +174,7 @@ export class YouTubeDiscoveryService {
             videoCount: Number(stats.videoCount) || 0,
             viewCount: Number(stats.viewCount) || 0,
             country: snippet.country || undefined,
+            uploadsPlaylistId: contentDetails.relatedPlaylists?.uploads || undefined,
             rawPayload: c,
           });
         }
@@ -169,13 +184,44 @@ export class YouTubeDiscoveryService {
     } catch (error: any) {
       const isQuota = error?.status === 403 && (error?.message?.includes('quota') || error?.errors?.[0]?.reason === 'quotaExceeded');
       if (isQuota) {
-        console.warn(`[YouTube API] 403 quotaExceeded received. Marking daily quota full.`);
+        console.warn(`[YouTube API] 403 quotaExceeded received. Marking active key exhausted.`);
+        quotaManager.markActiveKeyExhausted();
         const quota = await quotaManager.syncQuotaState();
-        quota.generalQuotaUsedToday = quota.generalQuotaDailyLimit;
-        await quotaManager.persistQuotaState();
-        return { channels: [], quotaReached: true };
+        return { channels: [], quotaReached: quota.generalQuotaUsedToday >= quota.generalQuotaDailyLimit };
       }
       throw error;
+    }
+  }
+
+  public async getRecentVideoDescriptions(uploadsPlaylistId: string, maxResults = 5): Promise<string[]> {
+    if (!uploadsPlaylistId) return [];
+
+    const claimed = await quotaManager.tryClaimGeneralQuota(1);
+    if (!claimed) return [];
+
+    const client = this.getClient();
+    if (!client) return [];
+
+    try {
+      const res = await this.executeWithRetry(async () => {
+        return await client.playlistItems.list({
+          part: ['snippet'],
+          playlistId: uploadsPlaylistId,
+          maxResults,
+        });
+      });
+
+      const items = res.data.items || [];
+      return items
+        .map((item) => item.snippet?.description || '')
+        .filter((desc) => Boolean(desc && desc.trim().length > 0));
+    } catch (err: any) {
+      const isQuota = err?.status === 403 && (err?.message?.includes('quota') || err?.errors?.[0]?.reason === 'quotaExceeded');
+      if (isQuota) {
+        quotaManager.markActiveKeyExhausted();
+      }
+      console.warn(`[YouTube API] Failed to fetch video descriptions for playlist ${uploadsPlaylistId}:`, err?.message);
+      return [];
     }
   }
 

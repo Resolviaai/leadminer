@@ -188,7 +188,29 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
           const extractedEmails = emailExtractor.extractEmails(ch.description || '');
           const extractedSocials = socialExtractor.extractSocials(ch.description || '');
 
-          // If no email found in description, try lightweight internal website scraper
+          // Video Description Mining: If no email found in channel description, check latest 5 video descriptions
+          if (extractedEmails.length === 0 && ch.uploadsPlaylistId) {
+            try {
+              const videoDescriptions = await youtubeDiscoveryService.getRecentVideoDescriptions(ch.uploadsPlaylistId, 5);
+              for (const vDesc of videoDescriptions) {
+                const vEmails = emailExtractor.extractEmails(vDesc, 'video_description');
+                for (const ve of vEmails) {
+                  if (!extractedEmails.some((e) => e.email.toLowerCase() === ve.email.toLowerCase())) {
+                    extractedEmails.push(ve);
+                  }
+                }
+                const vSocials = socialExtractor.extractSocials(vDesc);
+                if (!extractedSocials.linktree && vSocials.linktree) extractedSocials.linktree = vSocials.linktree;
+                if (!extractedSocials.beacons && vSocials.beacons) extractedSocials.beacons = vSocials.beacons;
+                if (!extractedSocials.website && vSocials.website) extractedSocials.website = vSocials.website;
+                if (!extractedSocials.instagram && vSocials.instagram) extractedSocials.instagram = vSocials.instagram;
+              }
+            } catch (videoErr: any) {
+              console.warn(`[Discovery Worker] Error checking video descriptions for ${ch.channelId}:`, videoErr?.message);
+            }
+          }
+
+          // If still no email found, try lightweight internal website scraper
           const targetScrapeUrl = ch.website || extractedSocials.website || extractedSocials.linktree || extractedSocials.beacons;
           let scrapedResult: Awaited<ReturnType<typeof websiteScraper.scrapeUrl>> | null = null;
           if (extractedEmails.length === 0 && targetScrapeUrl) {
@@ -273,6 +295,7 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
             for (const item of extractedSocials.items) {
               if (item.type === 'EMAIL') continue;
 
+              const isLinkPage = item.type === 'LINKTREE' || item.type === 'BEACONS' || item.type === 'WEBSITE' || item.type === 'INSTAGRAM';
               await tx
                 .insert(contacts)
                 .values({
@@ -282,6 +305,7 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
                   normalizedValue: item.normalizedValue,
                   source: item.source,
                   isPrimary: false,
+                  linkScrapeStatus: isLinkPage ? 'PENDING' : null,
                   instagram: item.type === 'INSTAGRAM' ? item.normalizedValue : undefined,
                   twitter: item.type === 'TWITTER_X' ? item.normalizedValue : undefined,
                   discord: item.type === 'DISCORD' ? item.value : undefined,

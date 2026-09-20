@@ -239,6 +239,8 @@ export const contacts = pgTable(
     tiktok: varchar('tiktok', { length: 255 }),
     linkedin: varchar('linkedin', { length: 255 }),
     otherSocial: jsonb('other_social'),
+    linkScrapeStatus: varchar('link_scrape_status', { length: 20 }),
+    emailCategory: varchar('email_category', { length: 30 }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -247,6 +249,7 @@ export const contacts = pgTable(
     index('idx_contacts_lead_type').on(table.leadId, table.contactType),
     index('idx_contacts_email_status').on(table.emailStatus),
     index('idx_contacts_email').on(table.email),
+    index('idx_contacts_link_scrape_status').on(table.linkScrapeStatus),
   ]
 );
 

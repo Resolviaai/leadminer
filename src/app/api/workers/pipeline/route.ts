@@ -32,10 +32,10 @@ async function executePipeline() {
     results.replies = { error: err.message };
   }
 
-  // 2. Discover new YouTube channels using keyword queue (quota safe: 15 searches / 100 daily limit, ~5 general units / 10,000)
+  // 2. Discover new YouTube channels using keyword queue (quota safe: up to 30 searches / run)
   try {
-    console.log('[Pipeline] Step 2/5: Running channel discovery batch (15 keywords)...');
-    results.discovery = await runDiscoveryBatch(15);
+    console.log('[Pipeline] Step 2/5: Running channel discovery batch (30 keywords)...');
+    results.discovery = await runDiscoveryBatch(30);
   } catch (err: any) {
     console.error('[Pipeline] Error in discovery step:', err);
     results.discovery = { error: err.message };

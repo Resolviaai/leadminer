@@ -28,8 +28,11 @@ const envSchema = z.object({
 
   // YouTube Data API
   YOUTUBE_API_KEY: z.string().optional().default(''),
-  YOUTUBE_DAILY_SEARCH_LIMIT: z.coerce.number().default(100),
-  YOUTUBE_DAILY_GENERAL_LIMIT: z.coerce.number().default(10000),
+  YOUTUBE_API_KEY_2: z.string().optional().default(''),
+  YOUTUBE_API_KEY_3: z.string().optional().default(''),
+  YOUTUBE_API_KEY_4: z.string().optional().default(''),
+  YOUTUBE_DAILY_SEARCH_LIMIT: z.coerce.number().default(80),
+  YOUTUBE_DAILY_GENERAL_LIMIT: z.coerce.number().default(9020),
   YOUTUBE_BATCH_SIZE: z.coerce.number().default(10),
   YOUTUBE_MAX_RESULTS_PER_SEARCH: z.coerce.number().default(50),
   YOUTUBE_TARGET_REGION: z.string().default('TIER_1'),
@@ -62,6 +65,7 @@ const envSchema = z.object({
   SESSION_SECRET: z.string().default('default-session-secret-change-in-production'),
   ENCRYPTION_KEY: z.string().default('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'),
   CRON_SECRET: z.string().optional(),
+  CRON_JOB_API_KEY: z.string().optional().default(''),
 
   // Discovery Quality Filter Thresholds (n8n Reintegration)
   MIN_DISCOVERY_SUBSCRIBERS: z.coerce.number().default(10),

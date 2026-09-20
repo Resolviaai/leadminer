@@ -87,9 +87,9 @@ export async function runDispatcher(batchLimit = 2): Promise<DispatcherResult> {
   for (let i = 0; i < claimedRows.length; i++) {
     const scheduledId = claimedRows[i];
 
-    // In-Flight Micro-Delay between emails in the same batch (30–45 seconds)
+    // In-Flight Micro-Delay between emails in the same batch (10–18 seconds natural jitter)
     if (i > 0) {
-      const pauseMs = Math.round(30000 + Math.random() * 15000);
+      const pauseMs = Math.round(10000 + Math.random() * 8000);
       console.log(`⏳ [Micro-Delay] Pausing natural ${Math.round(pauseMs / 1000)}s between consecutive sends...`);
       await new Promise((resolve) => setTimeout(resolve, pauseMs));
     }
