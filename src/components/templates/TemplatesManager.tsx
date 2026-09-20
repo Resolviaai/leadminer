@@ -51,8 +51,10 @@ function subjectLengthColor(len: number) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export function TemplatesManager({
   initialTemplates,
+  showPageHeader = true,
 }: {
   initialTemplates: Template[];
+  showPageHeader?: boolean;
 }) {
   const router = useRouter();
 
@@ -269,23 +271,70 @@ export function TemplatesManager({
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto w-full">
-      {/* ── Page Header Card ── */}
-      <Card className="p-4 sm:p-5 border-border">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center space-x-2">
-              <FileText className="w-5 h-5 text-primary" />
-              <h1 className="text-base sm:text-lg font-semibold text-text-main tracking-tight">
-                Outreach Email Templates
-              </h1>
+      {/* ── Page Header or Compact Action Toolbar Card ── */}
+      {showPageHeader ? (
+        <Card className="p-4 sm:p-5 border-border">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center space-x-2">
+                <FileText className="w-5 h-5 text-primary" />
+                <h1 className="text-base sm:text-lg font-semibold text-text-main tracking-tight">
+                  Outreach Email Templates
+                </h1>
+              </div>
+              <p className="text-xs text-text-secondary mt-0.5">
+                Create and manage outreach sequences. Merge tags personalize each
+                email with verified channel data.
+              </p>
             </div>
-            <p className="text-xs text-text-secondary mt-0.5">
-              Create and manage outreach sequences. Merge tags personalize each
-              email with verified channel data.
-            </p>
-          </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 w-full sm:w-auto">
+              {/* Quick Stats */}
+              <div className="px-3 py-1.5 rounded-lg bg-surface-200 border border-border text-xs flex items-center justify-between sm:justify-start gap-2">
+                <span className="text-text-muted">Templates:</span>
+                <span className="font-mono font-semibold text-text-main">
+                  {initialTemplates.length} total
+                </span>
+                <span className="text-border">|</span>
+                <span className="font-mono font-semibold text-emerald-400">
+                  {activeCount} active
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                {/* Selection Toggle Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMultiSelectMode((v) => !v);
+                    setSelectedIds(new Set());
+                  }}
+                  title={multiSelectMode ? "Cancel selection" : "Select multiple templates"}
+                  aria-label={multiSelectMode ? "Cancel selection" : "Select multiple templates"}
+                  className={`p-2.5 rounded-lg text-xs font-medium border transition-all active:scale-95 min-h-[40px] min-w-[40px] flex items-center justify-center shrink-0 ${
+                    multiSelectMode
+                      ? "bg-primary/15 border-primary/40 text-primary font-semibold"
+                      : "bg-surface-200 border-border text-text-secondary hover:text-text-main hover:bg-surface-300"
+                  }`}
+                >
+                  <CheckSquare className="w-4 h-4" />
+                </button>
+
+                {/* + New Template Button */}
+                <button
+                  onClick={() => setIsCreating(true)}
+                  className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-brand-hover active:scale-95 shadow-sm transition-all min-h-[40px] flex-1 sm:flex-initial"
+                >
+                  <Plus className="w-4 h-4 stroke-[2.5]" />
+                  <span>New Template</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </Card>
+      ) : (
+        <Card className="p-3 sm:p-4 border-border">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             {/* Quick Stats */}
             <div className="px-3 py-1.5 rounded-lg bg-surface-200 border border-border text-xs flex items-center justify-between sm:justify-start gap-2">
               <span className="text-text-muted">Templates:</span>
@@ -308,7 +357,7 @@ export function TemplatesManager({
                 }}
                 title={multiSelectMode ? "Cancel selection" : "Select multiple templates"}
                 aria-label={multiSelectMode ? "Cancel selection" : "Select multiple templates"}
-                className={`p-2.5 rounded-lg text-xs font-medium border transition-all active:scale-95 min-h-[40px] min-w-[40px] flex items-center justify-center shrink-0 ${
+                className={`p-2 rounded-lg text-xs font-medium border transition-all active:scale-95 min-h-[36px] min-w-[36px] flex items-center justify-center shrink-0 ${
                   multiSelectMode
                     ? "bg-primary/15 border-primary/40 text-primary font-semibold"
                     : "bg-surface-200 border-border text-text-secondary hover:text-text-main hover:bg-surface-300"
@@ -320,15 +369,15 @@ export function TemplatesManager({
               {/* + New Template Button */}
               <button
                 onClick={() => setIsCreating(true)}
-                className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-brand-hover active:scale-95 shadow-sm transition-all min-h-[40px] flex-1 sm:flex-initial"
+                className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-brand-hover active:scale-95 shadow-sm transition-all min-h-[36px] flex-1 sm:flex-initial"
               >
                 <Plus className="w-4 h-4 stroke-[2.5]" />
                 <span>New Template</span>
               </button>
             </div>
           </div>
-        </div>
-      </Card>
+        </Card>
+      )}
 
       {/* ── Batch Notification Message ── */}
       {batchMsg && (
