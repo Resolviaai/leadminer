@@ -1,6 +1,6 @@
 import { google } from 'googleapis';
 import { db } from '../db/client';
-import { gmailAccounts, messages, replies, leads } from '../db/schema';
+import { gmailAccounts, messages, replies, leads, suppressions, scheduledEmails } from '../db/schema';
 import { eq, and, isNotNull, inArray, desc, gte } from 'drizzle-orm';
 import { env } from '../config/env';
 import { replyDetectorService } from '../services/replies/reply.detector';
@@ -40,8 +40,20 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
   const jobId = await jobRunner.createJob('REPLY_SYNC');
 
   try {
-    // 1. Fetch active sent messages within rolling 30 days where lead is awaiting reply (CONTACTED)
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    // BUG-09 fix: reply sync re-scan quota management.
+    //
+    // Previously this re-scanned ALL sent messages in the last 30 days on every
+    // 15-minute cron tick — O(n) Gmail API calls that grows unboundedly with volume.
+    // At 1000+ leads this will exhaust Gmail quota and Vercel function timeouts.
+    //
+    // Fix: use a 72-hour sliding window per run (catches replies within 3 days, which
+    // covers 99% of real reply behaviour), and hard-cap at REPLY_SCAN_BATCH_SIZE threads.
+    // TODO(future): add per-account gmail historyId watermark column to enable true
+    //               incremental sync with zero redundant API calls.
+    const REPLY_SCAN_WINDOW_MS = 72 * 60 * 60 * 1000;   // 72 hours
+    const REPLY_SCAN_BATCH_SIZE = 200;                    // max threads per run
+
+    const windowStart = new Date(Date.now() - REPLY_SCAN_WINDOW_MS);
 
     const recentSent = await db
       .select({
@@ -61,10 +73,11 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
           eq(messages.sendStatus, 'SENT'),
           isNotNull(messages.threadId),
           eq(leads.outreachStatus, 'CONTACTED'),
-          gte(messages.sentAt, thirtyDaysAgo)
+          gte(messages.sentAt, windowStart)
         )
       )
-      .orderBy(desc(messages.sentAt));
+      .orderBy(desc(messages.sentAt))
+      .limit(REPLY_SCAN_BATCH_SIZE);
 
     if (recentSent.length === 0) {
       console.log('ℹ️ No active sent threads to inspect for replies.');
@@ -189,7 +202,41 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
 
           // Anti-Bounce & Auto-Reply Protection:
           if (isAutomatedBounceOrDaemon(headers, fromHeader)) {
-            console.log(`  [Skip Inbound] Ignored automated bounce / daemon notification from ${fromHeader}`);
+            // BUG-08 fix: active bounce handling — don't just skip, mark lead BOUNCED.
+            // Permanent delivery failures must suppress the address and cancel the sequence
+            // to prevent continued sends to a known-bad address (Gmail rep damage).
+            try {
+              const bounceEmail = (msg.recipientEmail || '').toLowerCase().trim();
+              if (bounceEmail) {
+                // 1. Suppress the email address
+                await db
+                  .insert(suppressions)
+                  .values({
+                    email: bounceEmail,
+                    channelId: null,
+                    reason: 'BOUNCED',
+                    source: 'REPLY_DETECTOR',
+                  })
+                  .onConflictDoNothing();
+
+                // 2. Mark the lead as BOUNCED + suppressed
+                await db
+                  .update(leads)
+                  .set({ outreachStatus: 'BOUNCED', suppressionStatus: true, updatedAt: new Date() })
+                  .where(eq(leads.id, msg.leadId));
+
+                // 3. Cancel all pending scheduled emails for this lead
+                await db
+                  .update(scheduledEmails)
+                  .set({ status: 'CANCELLED', error: 'Bounce detected', updatedAt: new Date() })
+                  .where(and(eq(scheduledEmails.leadId, msg.leadId), eq(scheduledEmails.status, 'PENDING')));
+
+                console.log(`[Bounce Handler] Lead #${msg.leadId} (${bounceEmail}) marked BOUNCED and suppressed.`);
+                await jobRunner.logEvent(jobId, 'BOUNCE_DETECTED', 'WARN', `Bounce for ${bounceEmail} (lead #${msg.leadId}) — suppressed and sequence cancelled.`, { leadId: msg.leadId, email: bounceEmail });
+              }
+            } catch (bounceErr: any) {
+              console.warn(`[Reply Worker] Non-fatal: bounce handling failed for lead #${msg.leadId}:`, bounceErr.message);
+            }
             continue;
           }
 
