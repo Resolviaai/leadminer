@@ -43,8 +43,10 @@ export class GmailSendingService {
       if (record.length > 0 && record[0].value) {
         return Boolean((record[0].value as any).enabled);
       }
-    } catch (e) {
-      // In-memory fallback: false
+    } catch (e: any) {
+      // BUG-02: Fail-closed on DB error! Halt sends if safety settings cannot be verified.
+      console.error('⛔ [Kill Switch DB Error - Failing Closed]:', e?.message || e);
+      return true;
     }
     return false;
   }
@@ -58,8 +60,10 @@ export class GmailSendingService {
         .where(sql`lower(${suppressions.email}) = ${cleanEmail}`)
         .limit(1);
       return supp.length > 0;
-    } catch (e) {
-      return false;
+    } catch (e: any) {
+      // BUG-02: Fail-closed on DB error! Treat as suppressed if suppression table cannot be verified.
+      console.error(`⛔ [Suppression DB Error for ${email} - Failing Closed]:`, e?.message || e);
+      return true;
     }
   }
 
@@ -405,6 +409,24 @@ export class GmailSendingService {
               messageId: row.messageId || undefined,
               threadId: row.threadId || undefined,
               accountId: row.gmailAccountId || account.id,
+            };
+          }
+
+          if (row.sendStatus === 'UNCONFIRMED') {
+            // BUG-01: Already dispatched to Gmail in an unconfirmed state.
+            // Release reservation and confirm lead is CONTACTED. Never resend to prevent duplicates!
+            await this.releaseAccountReservation(account.id);
+            await db
+              .update(leads)
+              .set({ outreachStatus: 'CONTACTED', updatedAt: new Date() })
+              .where(eq(leads.id, params.leadId));
+            return {
+              success: false,
+              messageId: row.messageId || undefined,
+              threadId: row.threadId || undefined,
+              accountId: row.gmailAccountId || account.id,
+              skippedReason: 'POST_SEND_VERIFICATION_FAILED',
+              error: 'Message was previously dispatched to Gmail in UNCONFIRMED state. Resend blocked to prevent duplicate emails.',
             };
           }
 

@@ -1,5 +1,5 @@
 import { db } from '../../db/client';
-import { jobs, keywords, logs, leads, messages } from '../../db/schema';
+import { jobs, keywords, logs, leads, messages, scheduledEmails } from '../../db/schema';
 import { eq, and, lt, sql } from 'drizzle-orm';
 import { env } from '../../config/env';
 
@@ -221,6 +221,77 @@ export class JobRunner {
       return recovered;
     } catch (e: any) {
       console.warn('[Recovery] Warning during stale lead recovery:', e.message);
+      return 0;
+    }
+  }
+
+  /**
+   * BUG-03: Watchdog Recovery for scheduled_emails stuck in SENDING
+   * Recovers rows left stranded in SENDING due to serverless execution timeouts (120s maxDuration).
+   */
+  public async recoverStaleScheduledEmails(timeoutMinutes = 30): Promise<number> {
+    try {
+      const staleThreshold = new Date(Date.now() - timeoutMinutes * 60 * 1000);
+
+      const staleSending = await db
+        .select({
+          id: scheduledEmails.id,
+          leadId: scheduledEmails.leadId,
+          campaignId: scheduledEmails.campaignId,
+          contactId: scheduledEmails.contactId,
+          stepNumber: scheduledEmails.stepNumber,
+        })
+        .from(scheduledEmails)
+        .where(
+          and(
+            eq(scheduledEmails.status, 'SENDING'),
+            lt(scheduledEmails.updatedAt, staleThreshold)
+          )
+        );
+
+      if (staleSending.length === 0) return 0;
+
+      let recovered = 0;
+
+      for (const item of staleSending) {
+        const stepNum = item.stepNumber || 1;
+        const idempotencyKey = `camp_${item.campaignId}_lead_${item.leadId}_cnt_${item.contactId}_step_${stepNum}`;
+
+        const existingMsg = await db
+          .select({ id: messages.id, sendStatus: messages.sendStatus })
+          .from(messages)
+          .where(eq(messages.idempotencyKey, idempotencyKey))
+          .limit(1);
+
+        if (existingMsg.length > 0 && existingMsg[0].sendStatus === 'SENT') {
+          // Delivered before timeout recorded: mark SENT
+          await db
+            .update(scheduledEmails)
+            .set({
+              status: 'SENT',
+              updatedAt: new Date(),
+            })
+            .where(eq(scheduledEmails.id, item.id));
+        } else {
+          // Abandoned in SENDING without delivery: reset back to PENDING for retry
+          await db
+            .update(scheduledEmails)
+            .set({
+              status: 'PENDING',
+              error: 'Recovered by watchdog from orphaned SENDING state',
+              updatedAt: new Date(),
+            })
+            .where(eq(scheduledEmails.id, item.id));
+        }
+        recovered++;
+      }
+
+      if (recovered > 0) {
+        console.log(`[Watchdog] Recovered ${recovered} stale SENDING scheduled email(s).`);
+      }
+      return recovered;
+    } catch (e: any) {
+      console.warn('[Watchdog] Warning during stale scheduled emails recovery:', e.message);
       return 0;
     }
   }

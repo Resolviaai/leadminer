@@ -338,9 +338,16 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
       const errorMessage = sendResult.error || sendResult.skippedReason || 'Send failed';
       console.error(`  ❌ Send failed: ${errorMessage}`);
 
-      // Retry policy: if attempts < 3 and error is transient, postpone 10 minutes
+      // Retry policy: if attempts < 3 and error is transient, postpone 10 minutes.
+      // BUG-01: Treat post-send verification failure and unconfirmed states as terminal to prevent duplicate sends!
+      const isTerminalFailure =
+        sendResult.skippedReason === 'POST_SEND_VERIFICATION_FAILED' ||
+        sendResult.skippedReason === 'RECIPIENT_SUPPRESSED' ||
+        sendResult.skippedReason === 'MESSAGE_PREVIOUSLY_UNCONFIRMED' ||
+        sendResult.skippedReason === 'RECIPIENT_ALREADY_CONTACTED';
+
       const maxAttempts = 3;
-      if (item.attempts < maxAttempts && sendResult.skippedReason !== 'RECIPIENT_SUPPRESSED') {
+      if (item.attempts < maxAttempts && !isTerminalFailure) {
         const retryTime = new Date(Date.now() + 10 * 60 * 1000);
         await db
           .update(scheduledEmails)

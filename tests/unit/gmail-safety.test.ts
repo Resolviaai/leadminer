@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../src/config/env', () => ({
   env: {
@@ -450,5 +450,128 @@ describe('Gmail Safety & Edge-Case Protection Suite', () => {
     // Lead row marked CONTACTED
     const leadUpdate = setCalls.find((c) => c.outreachStatus === 'CONTACTED');
     expect(leadUpdate).toBeDefined();
+  });
+
+  it('9. BUG-01 Duplicate Protection: existing UNCONFIRMED message row must never call Gmail API and return skippedReason POST_SEND_VERIFICATION_FAILED', async () => {
+    (env as any).DRY_RUN = false;
+    mockMessagesSend.mockClear();
+
+    vi.spyOn(gmailSendingService, 'reserveSendingAccount').mockResolvedValue({
+      id: 14,
+      email: 'verified-sender@agency.com',
+      status: 'ACTIVE',
+      encryptedRefreshToken: 'enc_token_123',
+    } as any);
+
+    // Conflict on insert (row already exists)
+    mockDbInsert.mockReturnValue({
+      values: vi.fn().mockReturnValue({
+        onConflictDoNothing: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([]),
+        }),
+      }),
+    });
+
+    // Existing row is UNCONFIRMED on 3rd select (1st is kill switch, 2nd is suppression)
+    let selectCall = 0;
+    mockDbSelect.mockImplementation(() => ({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockImplementation(() => {
+          selectCall++;
+          if (selectCall < 3) {
+            return { limit: vi.fn().mockResolvedValue([]) };
+          }
+          return {
+            limit: vi.fn().mockResolvedValue([
+              {
+                id: 555,
+                sendStatus: 'UNCONFIRMED',
+                messageId: 'prior_unconfirmed_msg_1',
+                threadId: 'prior_thread_1',
+                gmailAccountId: 14,
+                createdAt: new Date(),
+              },
+            ]),
+          };
+        }),
+      }),
+    }));
+
+    const releaseSpy = vi.spyOn(gmailSendingService, 'releaseAccountReservation').mockResolvedValue();
+
+    const result = await gmailSendingService.sendEmail({
+      leadId: 9,
+      campaignId: 1,
+      recipientEmail: 'creator@domain.com',
+      subject: 'Pitch Retry',
+      body: 'Body Retry',
+      idempotencyKey: 'camp_1_lead_9',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.skippedReason).toBe('POST_SEND_VERIFICATION_FAILED');
+    expect(result.error).toContain('UNCONFIRMED');
+    // Critical: Gmail API send is NEVER called!
+    expect(mockMessagesSend).not.toHaveBeenCalled();
+    // Reservation is released
+    expect(releaseSpy).toHaveBeenCalledWith(14);
+  });
+
+  it('10. BUG-02 Fail-Closed Invariant: DB error during kill switch check halts sends immediately with KILL_SWITCH_ACTIVE', async () => {
+    (env as any).DRY_RUN = false;
+    mockMessagesSend.mockClear();
+
+    // Simulate DB connection drop / pool timeout on kill switch query
+    mockDbSelect.mockImplementation(() => {
+      throw new Error('Postgres connection pool exhausted (timeout 15000ms)');
+    });
+
+    const result = await gmailSendingService.sendEmail({
+      leadId: 10,
+      campaignId: 1,
+      recipientEmail: 'creator@domain.com',
+      subject: 'Pitch',
+      body: 'Body',
+      idempotencyKey: 'camp_1_lead_10',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.skippedReason).toBe('KILL_SWITCH_ACTIVE');
+    expect(mockMessagesSend).not.toHaveBeenCalled();
+  });
+
+  it('11. BUG-02 Fail-Closed Invariant: DB error during suppression check halts sends with RECIPIENT_SUPPRESSED', async () => {
+    (env as any).DRY_RUN = false;
+    mockMessagesSend.mockClear();
+
+    let callCount = 0;
+    mockDbSelect.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        // Kill switch check succeeds (kill switch off)
+        return {
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              limit: vi.fn().mockResolvedValue([]),
+            }),
+          }),
+        };
+      }
+      // Suppression check throws DB error
+      throw new Error('Supabase database connection reset by peer');
+    });
+
+    const result = await gmailSendingService.sendEmail({
+      leadId: 11,
+      campaignId: 1,
+      recipientEmail: 'creator@domain.com',
+      subject: 'Pitch',
+      body: 'Body',
+      idempotencyKey: 'camp_1_lead_11',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.skippedReason).toBe('RECIPIENT_SUPPRESSED');
+    expect(mockMessagesSend).not.toHaveBeenCalled();
   });
 });

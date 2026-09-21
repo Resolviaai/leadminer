@@ -22,8 +22,9 @@ export async function runCleanup(): Promise<{
     // 1. Recover stale keywords and abandoned jobs (> 30m timeout)
     const recovery = await jobRunner.recoverStaleJobsAndKeywords(30);
 
-    // 2. Recover any stale QUEUED or SENDING leads
+    // 2. Recover any stale QUEUED v1 leads and stale SENDING scheduled emails (BUG-03)
     const recoveredLeads = await jobRunner.recoverStaleOutreachLeads(30);
+    const recoveredScheduledEmails = await jobRunner.recoverStaleScheduledEmails(30);
 
     // 3. Reconcile pending lead qualifications against active campaigns
     const requalifiedLeads = await reconcilePendingLeadQualifications();
