@@ -38,17 +38,58 @@ describe('Sequence Math & Calendar Dispersion', () => {
     expect(target.getUTCDay()).toBe(0); // 0 = Sunday
   });
 
-  it('should bound intraday dispatch time within US Eastern business hours (9 AM - 4 PM)', () => {
+  // ── BUG-05 / BUG-06 acceptance criteria ──
+
+  it('BUG-05: scheduled time falls within 09:00-16:45 America/New_York regardless of server TZ', () => {
     const monday = new Date(Date.UTC(2026, 8, 21, 10, 0, 0));
 
-    for (let leadId = 1; leadId <= 50; leadId++) {
-      const target = sequenceService.calculateNextStepDue(monday, 1, 0, 'SKIP_WEEKENDS', leadId);
-      const hour = target.getHours();
+    const toEtMinutes = (d: Date): number => {
+      const etStr = d.toLocaleString('en-US', {
+        timeZone: 'America/New_York',
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: false,
+      });
+      const [h, m] = etStr.split(':').map(Number);
+      return h * 60 + m;
+    };
 
-      // Hours must be between 9 (9:00 AM) and 16 (4:59 PM)
-      expect(hour).toBeGreaterThanOrEqual(9);
-      expect(hour).toBeLessThanOrEqual(16);
+    for (let leadId = 1; leadId <= 60; leadId++) {
+      const target = sequenceService.calculateNextStepDue(monday, 1, 0, 'SKIP_WEEKENDS', leadId);
+      const etMinutes = toEtMinutes(target);
+
+      expect(etMinutes).toBeGreaterThanOrEqual(9 * 60);
+      expect(etMinutes).toBeLessThanOrEqual(16 * 60 + 45);
     }
+  });
+
+  it('BUG-06: delayHours shifts scheduled time forward within ET window, capped at 16:45 ET', () => {
+    const monday = new Date(Date.UTC(2026, 8, 21, 10, 0, 0));
+
+    const toEtMinutes = (d: Date): number => {
+      const etStr = d.toLocaleString('en-US', {
+        timeZone: 'America/New_York',
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: false,
+      });
+      const [h, m] = etStr.split(':').map(Number);
+      return h * 60 + m;
+    };
+
+    const t0 = sequenceService.calculateNextStepDue(monday, 1, 0, 'SKIP_WEEKENDS', 42);
+    const t4 = sequenceService.calculateNextStepDue(monday, 1, 4, 'SKIP_WEEKENDS', 42);
+    const m0 = toEtMinutes(t0);
+    const m4 = toEtMinutes(t4);
+
+    // delayHours = 4 must push delivery later or hold at cap
+    expect(m4).toBeGreaterThanOrEqual(m0);
+    expect(m0).toBeGreaterThanOrEqual(9 * 60);
+    expect(m4).toBeLessThanOrEqual(16 * 60 + 45);
+
+    // Huge delayHours must be capped at 16:45 ET
+    const tBig = sequenceService.calculateNextStepDue(monday, 1, 99, 'SKIP_WEEKENDS', 42);
+    expect(toEtMinutes(tBig)).toBeLessThanOrEqual(16 * 60 + 45);
   });
 
   it('should calculate analytical equilibrium ratios accurately from Expansion Factor Phi', () => {

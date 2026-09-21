@@ -224,13 +224,63 @@ export class SequenceService {
       }
     }
 
-    // Bounded intra-day jitter within US Eastern business hours (9:00 AM - 5:00 PM)
-    // Deterministic hash based on leadId prevents thrashing while distributing load
-    const hash = Math.abs((leadId * 2654435761) ^ (leadId >> 16));
-    const hourOffset = (hash % 7); // 0 to 6 hours after 9:00 AM => 9 AM to 3 PM
-    const minuteOffset = (hash % 60);
+    // ── BUG-05 fix: pin scheduled time to America/New_York, not server TZ ──
+    // ── BUG-06 fix: delayHours is honoured as an offset within ET window ──
+    //
+    // Strategy:
+    //   1. Determine the UTC offset for America/New_York on the target date
+    //      (handles DST automatically via Intl.DateTimeFormat).
+    //   2. Choose a base ET hour: 9 AM + deterministic jitter (0–5 h),
+    //      then add delayHours inside the window, capped at 16:45 ET.
+    //   3. Convert that ET wall-clock time to a UTC timestamp and set it on target.
 
-    target.setHours(9 + hourOffset, minuteOffset, 0, 0);
+    // Step 1 – get the UTC offset for New York on this calendar date.
+    // We do this by formatting a reference UTC midnight of the target date
+    // and reading back the local hour/minute offsets via Intl.
+    const etFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York',
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: false,
+    });
+
+    // Build a UTC midnight for the current target date so we can measure offset.
+    const utcMidnight = new Date(
+      Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), target.getUTCDate(), 0, 0, 0)
+    );
+    const parts = etFormatter.formatToParts(utcMidnight);
+    const etHourAtMidnight = parseInt(parts.find(p => p.type === 'hour')?.value ?? '0', 10);
+    const etMinuteAtMidnight = parseInt(parts.find(p => p.type === 'minute')?.value ?? '0', 10);
+
+    // UTC offset in minutes: how many minutes ahead of UTC is New York at midnight UTC.
+    // If ET midnight is "19:00" it means ET is UTC-5 (utcMidnight maps to 7 PM prev day ET).
+    // We use the sign convention: utcOffsetMinutes = ET_hour*60+ET_min  (could be negative).
+    // Simpler: offsetMinutes = etHour*60 + etMin (this is the ET clock reading at UTC 00:00,
+    // which directly tells us how many minutes to subtract from UTC to get ET).
+    const etMinutesAtUtcMidnight = etHourAtMidnight * 60 + etMinuteAtMidnight;
+    // ET offset from UTC (minutes): negative in winter (UTC-5→-300), negative in summer (UTC-4→-240)
+    const etOffsetMinutes = etMinutesAtUtcMidnight === 0 ? 0 : etMinutesAtUtcMidnight - 24 * 60;
+
+    // Step 2 – choose target ET time.
+    // Deterministic jitter: 0–5 h based on leadId hash.
+    const hash = Math.abs((leadId * 2654435761) ^ (leadId >> 16));
+    const jitterHours = hash % 6;        // 0–5 h  → base window 9:00–14:59 ET
+    const jitterMinutes = hash % 60;     // 0–59 min
+
+    // delayHours shifts within the window; total capped at 16:45 ET (1005 min from midnight ET).
+    const baseEtMinutes = 9 * 60 + jitterHours * 60 + jitterMinutes + delayHours * 60;
+    const cappedEtMinutes = Math.min(baseEtMinutes, 16 * 60 + 45); // never past 16:45 ET
+
+    const targetEtHour = Math.floor(cappedEtMinutes / 60);
+    const targetEtMinute = cappedEtMinutes % 60;
+
+    // Step 3 – convert ET wall-clock to UTC and apply to target.
+    // targetUTCMinutesFromMidnight = targetEtMinutes - etOffsetMinutes
+    const targetUtcMinutes = cappedEtMinutes - etOffsetMinutes;
+    const targetUtcHour = Math.floor(targetUtcMinutes / 60) % 24;
+    const targetUtcMinute = targetUtcMinutes % 60;
+
+    target.setUTCHours(targetUtcHour, targetUtcMinute, 0, 0);
 
     return target;
   }
