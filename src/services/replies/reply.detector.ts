@@ -13,6 +13,7 @@ export interface InboundReplyPayload {
   messageId: string;
   senderEmail: string;
   snippet: string;
+  bodyText?: string;
   receivedAt: Date;
   gmailAccountId?: number;
 }
@@ -67,7 +68,8 @@ export class ReplyDetectorService {
       }
 
       // 3. Detect unsubscribe / opt-out intent
-      const isOptOut = OPT_OUT_REGEX.test(payload.snippet);
+      const searchableReplyText = `${payload.snippet}\n${payload.bodyText || ''}`;
+      const isOptOut = OPT_OUT_REGEX.test(searchableReplyText);
 
       if (isOptOut) {
         // Automatically insert into suppressions table

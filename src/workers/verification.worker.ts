@@ -2,7 +2,7 @@ import { db } from '../db/client';
 import { contacts, leads, keywords, suppressions, campaigns } from '../db/schema';
 import { eq, and, isNotNull, inArray, sql } from 'drizzle-orm';
 import { emailVerificationService } from '../services/verification/verifier.service';
-import { leadQualificationService } from '../services/qualification/qualification.service';
+import { aggregateQualificationStatus, leadQualificationService } from '../services/qualification/qualification.service';
 import { jobRunner } from '../services/jobs/job.runner';
 
 export async function runVerificationBatch(limit = 25): Promise<{ verified: number; qualified: number }> {
@@ -24,6 +24,7 @@ export async function runVerificationBatch(limit = 25): Promise<{ verified: numb
         category: keywords.category,
         suppressionStatus: leads.suppressionStatus,
         country: leads.country,
+        outreachStatus: leads.outreachStatus,
       })
       .from(contacts)
       .innerJoin(leads, eq(contacts.leadId, leads.id))
@@ -56,6 +57,7 @@ export async function runVerificationBatch(limit = 25): Promise<{ verified: numb
 
     let verifiedCount = 0;
     let qualifiedCount = 0;
+    const qualificationResultsByLead = new Map<number, ReturnType<typeof leadQualificationService.qualify>[]>();
 
     // 4. Map results back to contact IDs and persist checkpoints immediately
     for (let i = 0; i < unverified.length; i++) {
@@ -112,7 +114,7 @@ export async function runVerificationBatch(limit = 25): Promise<{ verified: numb
           category: item.category,
           country: item.country || undefined,
           isSuppressed: item.suppressionStatus,
-          alreadyContacted: false,
+          alreadyContacted: ['CONTACTED', 'REPLIED', 'UNSUBSCRIBED', 'BOUNCED'].includes(item.outreachStatus),
         },
         {
           minSubscribers: minSubs,
@@ -123,23 +125,27 @@ export async function runVerificationBatch(limit = 25): Promise<{ verified: numb
         }
       );
 
-      const newQualStatus = qResult.qualified ? 'QUALIFIED' : 'DISQUALIFIED';
-      await db
-        .update(leads)
-        .set({
-          qualificationStatus: newQualStatus,
-          updatedAt: new Date(),
-        })
-        .where(eq(leads.id, item.leadId));
-
-      if (qResult.qualified) {
-        qualifiedCount++;
-        await jobRunner.logEvent(jobId, 'LEAD_QUALIFIED', 'INFO', `Lead ${item.channelTitle} marked QUALIFIED`, {
-          leadId: item.leadId,
-        });
-      }
+      const results = qualificationResultsByLead.get(item.leadId) || [];
+      results.push(qResult);
+      qualificationResultsByLead.set(item.leadId, results);
 
       verifiedCount++;
+    }
+
+    // Aggregate at lead level after all contacts in this batch have been
+    // evaluated. A valid secondary contact must never be overwritten by a
+    // later invalid contact result.
+    for (const [leadId, results] of qualificationResultsByLead.entries()) {
+      const aggregateStatus = aggregateQualificationStatus(results);
+      await db
+        .update(leads)
+        .set({ qualificationStatus: aggregateStatus, updatedAt: new Date() })
+        .where(eq(leads.id, leadId));
+
+      if (aggregateStatus === 'QUALIFIED') {
+        qualifiedCount++;
+        await jobRunner.logEvent(jobId, 'LEAD_QUALIFIED', 'INFO', `Lead #${leadId} marked QUALIFIED`, { leadId });
+      }
     }
 
     const requalified = await reconcilePendingLeadQualifications();
@@ -173,6 +179,7 @@ export async function reconcilePendingLeadQualifications(): Promise<number> {
         country: leads.country,
         suppressionStatus: leads.suppressionStatus,
         qualificationStatus: leads.qualificationStatus,
+        outreachStatus: leads.outreachStatus,
         email: contacts.email,
         emailStatus: contacts.emailStatus,
       })
@@ -198,7 +205,7 @@ export async function reconcilePendingLeadQualifications(): Promise<number> {
           category: item.category,
           country: item.country || undefined,
           isSuppressed: item.suppressionStatus,
-          alreadyContacted: false,
+          alreadyContacted: ['CONTACTED', 'REPLIED', 'UNSUBSCRIBED', 'BOUNCED'].includes(item.outreachStatus),
         },
         {
           minSubscribers: minSubs,

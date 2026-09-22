@@ -141,6 +141,7 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
         contactId: contacts.id,
         recipientEmail: contacts.email,
         campaignId: campaigns.id,
+        campaignStatus: campaigns.status,
         campaignTemplateId: campaigns.templateId,
         enableGeminiPersonalization: campaigns.enableGeminiPersonalization,
         sequenceId: leadSequenceProgress.sequenceId,
@@ -173,6 +174,17 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
     }
 
     const recipientEmail: string = item.recipientEmail;
+
+    // A campaign can be paused after rows were planned. Re-check its state at
+    // dispatch time so the Pause control stops already-queued sends too.
+    if (item.campaignStatus && item.campaignStatus !== 'ACTIVE') {
+      await db
+        .update(scheduledEmails)
+        .set({ status: 'CANCELLED', error: `Campaign status is ${item.campaignStatus}`, updatedAt: new Date() })
+        .where(eq(scheduledEmails.id, scheduledId));
+      skippedCount++;
+      continue;
+    }
 
     // In-Flight Safety Check: If lead has already replied, unsubscribed, or bounced, abort!
     if (['REPLIED', 'UNSUBSCRIBED', 'BOUNCED'].includes(item.leadOutreachStatus)) {
@@ -256,12 +268,13 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
     }
 
     // Render Template (resolves variables and applies Spintax word rotation)
+    // BUG-10: pass leadId as seed so retries produce identical wording for the same lead
     const firstName = templateEngine.extractFirstName(item.channelTitle);
     const renderedSubject = templateEngine.render(template.subject, {
       first_name: firstName,
       channel_name: item.channelTitle,
       subscriber_count: item.subscriberCount || 0,
-    });
+    }, item.leadId);
 
     const renderedBody = templateEngine.render(template.body, {
       first_name: firstName,
@@ -270,7 +283,7 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
       subscriber_count: item.subscriberCount || 0,
       website: item.website || '',
       custom_line: customLine,
-    });
+    }, item.leadId);
 
     // In-Thread Subject Bumping for Follow-Up Steps (2..N)
     let finalSubject = renderedSubject;

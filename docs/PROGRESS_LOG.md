@@ -109,3 +109,25 @@ All development activities, audits, architectural decisions, and milestones are 
   - **Quality Gates:**
     - All 42 Vitest unit tests passing across 8 test suites (100% pass rate).
     - Next.js production build (`npm run build`) succeeded with 0 errors across 25 routes.
+
+---
+
+## 2026-09-22 — Session 6 (Codex takeover: review hardening batch)
+- **Agent:** Codex
+- **Context:** Continued from Antigravity's stopped run and revalidated the 2026-09-21 code-review findings against the current checkout. No worker, discovery, database migration, deployment, or live email send was executed.
+- **Completed in this batch:**
+  - Fixed planner slot accounting to subtract sent and already-scheduled messages cumulatively, preventing overscheduling.
+  - Added planner defense-in-depth filtering so CONTACTED, REPLIED, UNSUBSCRIBED, and BOUNCED leads cannot receive a new Step 1 pitch.
+  - Changed verification qualification to aggregate at lead level: any deliverable contact keeps the lead QUALIFIED, while invalid-only contacts become DISQUALIFIED; existing outreach state is now respected.
+  - Added dispatcher-time campaign status checking so pausing a campaign cancels already-queued sends before Gmail is called.
+  - Extended reply synchronization to continue scanning recent REPLIED threads, retrieve full Gmail message bodies, and scan body text for opt-out phrases beyond the short snippet.
+  - Strengthened bounce handling to mark the matching contact INVALID and cancel the sequence in addition to suppressing the lead and pending scheduled rows.
+  - Added focused safety tests for cumulative quota slots, contact qualification aggregation, and Gmail MIME-body decoding.
+- **Validation:** `npm run test` passes **115/115 tests** across 20 files. `npm run build` passes with type-checking and route generation successful.
+- **Next work, in severity order:**
+  1. Make dispatch rendering deterministic across retries (persist rendered subject/body or equivalent idempotent render key).
+  2. Add sequence identity to scheduled/message joins and correct per-sequence metrics/thread affinity.
+  3. Add Gmail rate-limit backoff and OAuth token-age/auth-expiry alerting.
+  4. Add pipeline step budgets and bounded reconciliation/linkpage recovery.
+  5. Harden public worker authentication and remove/rotate the tracked cron credential before any deployment.
+  6. Keep the YouTube sourcing/compliance blocker explicit; do not run discovery or outreach from legacy workbook contacts.

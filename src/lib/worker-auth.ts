@@ -1,9 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { env } from '../config/env';
 
 export interface WorkerAuthResult {
   authorized: boolean;
   response?: NextResponse;
+}
+
+/** BUG-12: Constant-time string comparison to prevent timing oracle attacks. */
+function timingSafeStringEqual(a: string, b: string): boolean {
+  try {
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    if (bufA.length !== bufB.length) {
+      // Length mismatch leaks length info, but that's unavoidable — at least
+      // the content comparison is constant-time even though we short-circuit on length.
+      return false;
+    }
+    return crypto.timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
 }
 
 export function verifyWorkerAuth(req: NextRequest): WorkerAuthResult {
@@ -23,14 +40,14 @@ export function verifyWorkerAuth(req: NextRequest): WorkerAuthResult {
     return { authorized: true };
   }
 
-  // 3. Authorization Bearer Token check (CRON_SECRET or SESSION_SECRET)
+  // 3. Authorization Bearer Token check — BUG-12: constant-time compare
   const authHeader = req.headers.get('authorization');
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.slice(7).trim();
-    if (env.CRON_SECRET && token === env.CRON_SECRET) {
+    if (env.CRON_SECRET && timingSafeStringEqual(token, env.CRON_SECRET)) {
       return { authorized: true };
     }
-    if (env.SESSION_SECRET && token === env.SESSION_SECRET) {
+    if (env.SESSION_SECRET && timingSafeStringEqual(token, env.SESSION_SECRET)) {
       return { authorized: true };
     }
   }

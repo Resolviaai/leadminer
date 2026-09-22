@@ -197,30 +197,27 @@ export class SequenceService {
     const target = new Date(lastSentAt.getTime());
 
     if (weekendPolicy === 'SKIP_WEEKENDS') {
-      // Advance by business days
+      // Advance by business days (BUG-18: use UTC methods to be server-TZ independent)
       let daysRemaining = delayDays;
       while (daysRemaining > 0) {
-        target.setDate(target.getDate() + 1);
-        const dayOfWeek = target.getDay(); // 0 = Sun, 6 = Sat
+        target.setUTCDate(target.getUTCDate() + 1);
+        const dayOfWeek = target.getUTCDay(); // 0 = Sun, 6 = Sat
         if (dayOfWeek !== 0 && dayOfWeek !== 6) {
           daysRemaining--;
         }
       }
     } else {
-      target.setDate(target.getDate() + delayDays);
-    }
-
-    if (delayHours > 0) {
-      target.setHours(target.getHours() + delayHours);
+      target.setUTCDate(target.getUTCDate() + delayDays);
     }
 
     // If target lands on Saturday or Sunday under SKIP_WEEKENDS, shift to Monday
+    // BUG-18: use getUTCDay() — consistent with UTC-based arithmetic above
     if (weekendPolicy === 'SKIP_WEEKENDS') {
-      const day = target.getDay();
+      const day = target.getUTCDay();
       if (day === 6) {
-        target.setDate(target.getDate() + 2); // Sat -> Mon
+        target.setUTCDate(target.getUTCDate() + 2); // Sat → Mon
       } else if (day === 0) {
-        target.setDate(target.getDate() + 1); // Sun -> Mon
+        target.setUTCDate(target.getUTCDate() + 1); // Sun → Mon
       }
     }
 

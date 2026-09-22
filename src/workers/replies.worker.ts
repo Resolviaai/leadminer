@@ -1,11 +1,28 @@
 import { google } from 'googleapis';
 import { db } from '../db/client';
-import { gmailAccounts, messages, replies, leads, suppressions, scheduledEmails } from '../db/schema';
-import { eq, and, isNotNull, inArray, desc, gte } from 'drizzle-orm';
+import { gmailAccounts, messages, replies, leads, suppressions, scheduledEmails, contacts } from '../db/schema';
+import { eq, and, isNotNull, inArray, desc, gte, sql } from 'drizzle-orm';
 import { env } from '../config/env';
 import { replyDetectorService } from '../services/replies/reply.detector';
 import { jobRunner } from '../services/jobs/job.runner';
 import { encryptionService } from '../services/security/encryption.service';
+import { sequenceService } from '../services/outreach/sequence.service';
+
+export function decodeGmailBody(payload: any): string {
+  const parts: string[] = [];
+  const visit = (part: any) => {
+    if (part?.body?.data) {
+      try {
+        parts.push(Buffer.from(part.body.data, 'base64url').toString('utf8'));
+      } catch {
+        // Ignore malformed MIME parts; the snippet remains available.
+      }
+    }
+    for (const child of part?.parts || []) visit(child);
+  };
+  visit(payload);
+  return parts.join('\n');
+}
 
 export function isAutomatedBounceOrDaemon(headers: { name?: string; value?: string }[], fromHeader: string): boolean {
   const fromEmailLower = (fromHeader || '').toLowerCase();
@@ -37,53 +54,46 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
   console.log(`📥 Starting Reply Detection & Sync Worker`);
   console.log(`======================================================\n`);
 
+  // BUG-09 fix: 72h sliding window, max 200 threads
+  const REPLY_SCAN_WINDOW_MS = 72 * 60 * 60 * 1000;
+  const REPLY_SCAN_BATCH_SIZE = 200;
+  const windowStart = new Date(Date.now() - REPLY_SCAN_WINDOW_MS);
+
+  const recentSent = await db
+    .select({
+      id: messages.id,
+      leadId: messages.leadId,
+      campaignId: messages.campaignId,
+      gmailAccountId: messages.gmailAccountId,
+      recipientEmail: messages.recipientEmail,
+      sentAt: messages.sentAt,
+      messageId: messages.messageId,
+      threadId: messages.threadId,
+    })
+    .from(messages)
+    .innerJoin(leads, eq(messages.leadId, leads.id))
+    .where(
+      and(
+        eq(messages.sendStatus, 'SENT'),
+        isNotNull(messages.threadId),
+        inArray(leads.outreachStatus, ['CONTACTED', 'REPLIED']),
+        gte(messages.sentAt, windowStart)
+      )
+    )
+    .orderBy(desc(messages.sentAt))
+    .limit(REPLY_SCAN_BATCH_SIZE);
+
+  // BUG-26: only create a job row when there's real work to do — prevents
+  // thousands of COMPLETED/0-item rows polluting the jobs table on idle runs.
+  if (recentSent.length === 0) {
+    console.log('ℹ️ No active sent threads to inspect for replies. Skipping job creation.');
+    return { repliesDetected: 0 };
+  }
+
+  // Real work exists — create the job row now
   const jobId = await jobRunner.createJob('REPLY_SYNC');
 
   try {
-    // BUG-09 fix: reply sync re-scan quota management.
-    //
-    // Previously this re-scanned ALL sent messages in the last 30 days on every
-    // 15-minute cron tick — O(n) Gmail API calls that grows unboundedly with volume.
-    // At 1000+ leads this will exhaust Gmail quota and Vercel function timeouts.
-    //
-    // Fix: use a 72-hour sliding window per run (catches replies within 3 days, which
-    // covers 99% of real reply behaviour), and hard-cap at REPLY_SCAN_BATCH_SIZE threads.
-    // TODO(future): add per-account gmail historyId watermark column to enable true
-    //               incremental sync with zero redundant API calls.
-    const REPLY_SCAN_WINDOW_MS = 72 * 60 * 60 * 1000;   // 72 hours
-    const REPLY_SCAN_BATCH_SIZE = 200;                    // max threads per run
-
-    const windowStart = new Date(Date.now() - REPLY_SCAN_WINDOW_MS);
-
-    const recentSent = await db
-      .select({
-        id: messages.id,
-        leadId: messages.leadId,
-        campaignId: messages.campaignId,
-        gmailAccountId: messages.gmailAccountId,
-        recipientEmail: messages.recipientEmail,
-        sentAt: messages.sentAt,
-        messageId: messages.messageId,
-        threadId: messages.threadId,
-      })
-      .from(messages)
-      .innerJoin(leads, eq(messages.leadId, leads.id))
-      .where(
-        and(
-          eq(messages.sendStatus, 'SENT'),
-          isNotNull(messages.threadId),
-          eq(leads.outreachStatus, 'CONTACTED'),
-          gte(messages.sentAt, windowStart)
-        )
-      )
-      .orderBy(desc(messages.sentAt))
-      .limit(REPLY_SCAN_BATCH_SIZE);
-
-    if (recentSent.length === 0) {
-      console.log('ℹ️ No active sent threads to inspect for replies.');
-      await jobRunner.completeJob(jobId, 0);
-      return { repliesDetected: 0 };
-    }
 
     console.log(`🔍 Monitoring ${recentSent.length} sent outreach threads for creator responses...`);
 
@@ -185,7 +195,7 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
         const threadRes = await gmail.users.threads.get({
           userId: 'me',
           id: msg.threadId,
-          format: 'metadata',
+          format: 'full',
           metadataHeaders: ['From', 'Date', 'Subject', 'Auto-Submitted', 'Precedence', 'X-Autoreply'],
         });
 
@@ -225,11 +235,18 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
                   .set({ outreachStatus: 'BOUNCED', suppressionStatus: true, updatedAt: new Date() })
                   .where(eq(leads.id, msg.leadId));
 
+                await db
+                  .update(contacts)
+                  .set({ emailStatus: 'INVALID', verificationReason: 'Hard bounce detected', updatedAt: new Date() })
+                  .where(and(eq(contacts.leadId, msg.leadId), sql`lower(${contacts.email}) = ${bounceEmail}`));
+
                 // 3. Cancel all pending scheduled emails for this lead
                 await db
                   .update(scheduledEmails)
                   .set({ status: 'CANCELLED', error: 'Bounce detected', updatedAt: new Date() })
                   .where(and(eq(scheduledEmails.leadId, msg.leadId), eq(scheduledEmails.status, 'PENDING')));
+
+                await sequenceService.cancelSequenceForLead(msg.leadId, 'CANCELLED_BOUNCED');
 
                 console.log(`[Bounce Handler] Lead #${msg.leadId} (${bounceEmail}) marked BOUNCED and suppressed.`);
                 await jobRunner.logEvent(jobId, 'BOUNCE_DETECTED', 'WARN', `Bounce for ${bounceEmail} (lead #${msg.leadId}) — suppressed and sequence cancelled.`, { leadId: msg.leadId, email: bounceEmail });
@@ -257,6 +274,7 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
               messageId: tm.id,
               senderEmail,
               snippet: tm.snippet || 'Reply received from creator',
+              bodyText: decodeGmailBody(tm.payload),
               receivedAt: new Date(msgTime),
               gmailAccountId: account.id,
             });

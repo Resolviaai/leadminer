@@ -31,6 +31,14 @@ export interface QualificationResult {
   reason: string;
 }
 
+/** Aggregate contact-level results without allowing a later invalid contact
+ * to downgrade a lead that has another deliverable contact. */
+export function aggregateQualificationStatus(
+  results: QualificationResult[]
+): 'QUALIFIED' | 'DISQUALIFIED' {
+  return results.some((result) => result.qualified) ? 'QUALIFIED' : 'DISQUALIFIED';
+}
+
 export class LeadQualificationService {
   public qualify(candidate: QualificationCandidate, criteria: QualificationCriteria): QualificationResult {
     // 1. Suppression check

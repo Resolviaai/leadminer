@@ -155,7 +155,15 @@ export async function GET(req: NextRequest) {
   </div>
 </body>
 </html>`,
-    { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+    {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        // BUG-27: Security headers for raw HTML page
+        'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'",
+        'X-Frame-Options': 'DENY',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    }
   );
 }
 

@@ -27,6 +27,17 @@ export interface PlannerResult {
 }
 
 /**
+ * Return the number of daily sending slots still available after accounting
+ * for both messages already sent and rows already scheduled.
+ *
+ * Keeping this as a pure helper makes the quota arithmetic easy to test and
+ * prevents the planner from treating sent and scheduled work as overlapping.
+ */
+export function calculateRemainingSlots(sentCount: number, scheduledCount: number, effectiveLimit: number): number {
+  return Math.max(0, effectiveLimit - Math.max(0, sentCount) - Math.max(0, scheduledCount));
+}
+
+/**
  * Morning Planner Worker (Sequence v2 Engine)
  * Runs each morning to plan the day's outreach.
  *
@@ -169,8 +180,8 @@ export async function runPlanner(): Promise<PlannerResult> {
     const effectiveLimit = gmailSendingService.getTodayEffectiveLimit(account.id, account.dailyLimit);
     const sentCount = account.sentToday || 0;
     const scheduledCount = alreadyScheduledByAccount.get(account.id) || 0;
-    const usedSlots = Math.max(sentCount, scheduledCount);
-    const remainingSlots = Math.max(0, effectiveLimit - usedSlots);
+    const usedSlots = sentCount + scheduledCount;
+    const remainingSlots = calculateRemainingSlots(sentCount, scheduledCount, effectiveLimit);
 
     console.log(
       `\n  • Inbox: ${account.email} | Target: ${effectiveLimit}/day | Used: ${usedSlots} | Remaining: ${remainingSlots}`
@@ -298,6 +309,7 @@ export async function runPlanner(): Promise<PlannerResult> {
         and(
           eq(leads.qualificationStatus, 'QUALIFIED'),
           eq(leads.suppressionStatus, false),
+          notInArray(leads.outreachStatus, ['CONTACTED', 'REPLIED', 'UNSUBSCRIBED', 'BOUNCED']),
           inArray(contacts.emailStatus, allowedEmailStatuses),
           isNotNull(contacts.email)
         )

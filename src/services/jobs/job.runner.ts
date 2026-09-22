@@ -1,11 +1,31 @@
 import { db } from '../../db/client';
 import { jobs, keywords, logs, leads, messages, scheduledEmails } from '../../db/schema';
-import { eq, and, lt, sql } from 'drizzle-orm';
+import { eq, and, lt, sql, inArray } from 'drizzle-orm';
 import { env } from '../../config/env';
 
 export class JobRunner {
   public async createJob(jobType: string, parameters: Record<string, any> = {}): Promise<number> {
     try {
+      // BUG-24: Guard against runaway RUNNING rows — if >5 jobs of this type are already
+      // RUNNING (e.g. because serverless crashes left them stuck), supersede the oldest ones.
+      // This prevents the jobs table from accumulating thousands of ghost RUNNING rows.
+      const MAX_CONCURRENT = 5;
+      const stuck = await db
+        .select({ id: jobs.id })
+        .from(jobs)
+        .where(and(eq(jobs.jobType, jobType), eq(jobs.status, 'RUNNING')))
+        .orderBy(jobs.id) // oldest first
+        .limit(MAX_CONCURRENT + 1);
+
+      if (stuck.length >= MAX_CONCURRENT) {
+        const toSupersede = stuck.slice(0, stuck.length - MAX_CONCURRENT + 1).map((r) => r.id);
+        await db
+          .update(jobs)
+          .set({ status: 'FAILED', error: 'Superseded by new job (max concurrent limit)', updatedAt: new Date() })
+          .where(inArray(jobs.id, toSupersede));
+        console.warn(`[JobRunner] Superseded ${toSupersede.length} stuck RUNNING ${jobType} job(s).`);
+      }
+
       const [inserted] = await db
         .insert(jobs)
         .values({

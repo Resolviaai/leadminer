@@ -9,7 +9,15 @@ export interface TemplateVariables {
 }
 
 export class TemplateEngine {
-  public render(templateString: string, variables: TemplateVariables): string {
+  /**
+   * BUG-11: Strip CRLF from a variable value to prevent RFC 2822 header injection.
+   * All variable substitutions pass through this before being inserted into the template.
+   */
+  private sanitizeVar(val: string): string {
+    return val.replace(/[\r\n]+/g, ' ');
+  }
+
+  public render(templateString: string, variables: TemplateVariables, seed?: number): string {
     if (!templateString) return '';
 
     let rendered = templateString;
@@ -24,14 +32,14 @@ export class TemplateEngine {
 
     const rawCustomLine = variables.custom_line || 'I really enjoy the direction of your channel content.';
 
-    // Substitute standard variables
+    // BUG-11: sanitizeVar strips \r\n before substitution (CRLF injection guard)
     const cleanVars: Record<string, string> = {
-      first_name: variables.first_name || variables.channel_name || 'there',
-      channel_name: variables.channel_name || 'your channel',
-      channel_url: variables.channel_url || '',
+      first_name: this.sanitizeVar(variables.first_name || variables.channel_name || 'there'),
+      channel_name: this.sanitizeVar(variables.channel_name || 'your channel'),
+      channel_url: this.sanitizeVar(variables.channel_url || ''),
       subscriber_count: this.formatSubscribers(variables.subscriber_count),
-      website: variables.website || '',
-      custom_line: sanitizeNoEmDash(rawCustomLine),
+      website: this.sanitizeVar(variables.website || ''),
+      custom_line: sanitizeNoEmDash(this.sanitizeVar(rawCustomLine)),
     };
 
     for (const [key, val] of Object.entries(cleanVars)) {
@@ -43,23 +51,34 @@ export class TemplateEngine {
     for (const [key, val] of Object.entries(variables)) {
       if (val !== undefined && val !== null) {
         const regex = new RegExp(`{{\\s*${key}\\s*}}`, 'g');
-        rendered = rendered.replace(regex, String(val));
+        rendered = rendered.replace(regex, this.sanitizeVar(String(val)));
       }
     }
 
-    // Resolve Spintax rotation: {option1|option2|option3}
-    return this.spin(rendered);
+    // BUG-10: Resolve Spintax with optional deterministic seed (leadId)
+    return this.spin(rendered, seed);
   }
 
   /**
-   * Spintax processor: resolves {option1|option2|option3}, {|opt1|opt2|}, and {abtest|optA|optB}.
-   * Recursively resolves up to 5 levels of nesting, picking a random option for each block.
+   * Spintax processor: resolves {option1|option2|option3}.
+   * BUG-10: accepts an optional numeric seed so the same leadId always picks the
+   * same branch — prevents wording drift when a dispatch row is retried.
+   * Falls back to Math.random() when no seed is provided.
    */
-  public spin(text: string): string {
+  public spin(text: string, seed?: number): string {
     if (!text) return '';
     const spintaxRegex = /\{([^{}]*?\|[^{}]*?)\}/g;
     let spun = text;
     let iteration = 0;
+
+    // Simple seeded LCG (Knuth MMIX constants) — gives stable output per leadId
+    let lcgState = seed !== undefined ? (seed | 0) : -1;
+    const nextRand = (): number => {
+      if (lcgState < 0) return Math.random();
+      lcgState = Math.imul(lcgState, 6364136223846793005) + 1442695040888963407;
+      return (Math.abs(lcgState) % 1000000) / 1000000;
+    };
+
     while (spintaxRegex.test(spun) && iteration < 5) {
       spun = spun.replace(spintaxRegex, (_, optionsStr) => {
         let rawOptions: string[] = optionsStr.split('|');
@@ -82,8 +101,7 @@ export class TemplateEngine {
         const choices: string[] = cleaned.filter((o: string) => o.length > 0);
         const finalPool: string[] = choices.length > 0 ? choices : cleaned;
 
-        const chosen = finalPool[Math.floor(Math.random() * finalPool.length)];
-        return chosen;
+        return finalPool[Math.floor(nextRand() * finalPool.length)];
       });
       iteration++;
     }
