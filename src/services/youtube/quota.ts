@@ -275,6 +275,50 @@ export class YouTubeQuotaManager {
     await this.persistQuotaState();
   }
 
+  public async refundSearchCall(): Promise<void> {
+    if (this.inMemoryQuota.searchCallsUsedToday > 0) {
+      this.inMemoryQuota.searchCallsUsedToday -= 1;
+    }
+    if (!this.inMemoryOnly) {
+      try {
+        await db.execute(sql`
+          UPDATE system_settings
+          SET value = jsonb_set(
+            value,
+            '{search_calls_used_today}',
+            to_jsonb(GREATEST(0, COALESCE((value->>'search_calls_used_today')::int, 0) - 1))
+          ),
+          updated_at = NOW()
+          WHERE key = 'youtube_quota';
+        `);
+      } catch (e) {
+        // Non-fatal
+      }
+    }
+  }
+
+  public async refundGeneralQuota(units: number = 1): Promise<void> {
+    if (this.inMemoryQuota.generalQuotaUsedToday >= units) {
+      this.inMemoryQuota.generalQuotaUsedToday -= units;
+    }
+    if (!this.inMemoryOnly) {
+      try {
+        await db.execute(sql`
+          UPDATE system_settings
+          SET value = jsonb_set(
+            value,
+            '{general_quota_used_today}',
+            to_jsonb(GREATEST(0, COALESCE((value->>'general_quota_used_today')::int, 0) - ${units}))
+          ),
+          updated_at = NOW()
+          WHERE key = 'youtube_quota';
+        `);
+      } catch (e) {
+        // Non-fatal
+      }
+    }
+  }
+
   public async getRemainingSearchCalls(): Promise<number> {
     const quota = await this.syncQuotaState();
     return Math.max(0, quota.searchCallsDailyLimit - quota.searchCallsUsedToday);

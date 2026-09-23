@@ -16,7 +16,7 @@ export async function runLinkpageEnrichmentBatch(batchSize = 20): Promise<Linkpa
   console.log(`🔗 Starting Link-Page Enrichment Worker (batchSize=${batchSize})`);
   console.log(`======================================================\n`);
 
-  const jobId = await jobRunner.createJob('CLEANUP', { type: 'LINKPAGE_ENRICHMENT', batchSize });
+  const jobId = await jobRunner.createJob('LINKPAGE_ENRICHMENT', { batchSize });
 
   let processedCount = 0;
   let emailsFoundCount = 0;

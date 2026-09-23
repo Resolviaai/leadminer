@@ -13,11 +13,44 @@ export async function runVerificationBatch(limit = 25): Promise<{ verified: numb
   const jobId = await jobRunner.createJob('EMAIL_VERIFICATION', { limit });
 
   try {
-    // 1. Fetch unverified contacts with associated lead data
+    // 1. Atomically claim unverified contacts using FOR UPDATE SKIP LOCKED ordered by oldest first (P2-12)
+    const claimedContactIds = await db.transaction(async (tx) => {
+      const candidateIdsResult = await tx.execute<{ id: number }>(sql`
+        SELECT c.id FROM ${contacts} c
+        WHERE c.email_status = 'UNKNOWN' 
+          AND c.email IS NOT NULL
+          AND (c.verification_provider IS NULL OR c.verification_provider != 'IN_PROGRESS')
+        ORDER BY c.id ASC
+        LIMIT ${limit}
+        FOR UPDATE SKIP LOCKED
+      `);
+      const rows = (candidateIdsResult.rows || candidateIdsResult || []) as { id: number }[];
+      const ids = rows.map((r) => Number(r.id));
+      if (ids.length > 0) {
+        await tx
+          .update(contacts)
+          .set({
+            verificationProvider: 'IN_PROGRESS',
+            updatedAt: new Date(),
+          })
+          .where(inArray(contacts.id, ids));
+      }
+      return ids;
+    });
+
+    if (claimedContactIds.length === 0) {
+      const requalified = await reconcilePendingLeadQualifications();
+      console.log(`ℹ️ No unverified emails pending in database. Reconciled and qualified ${requalified} existing leads.`);
+      await jobRunner.completeJob(jobId, requalified);
+      return { verified: 0, qualified: requalified };
+    }
+
+    // Fetch full contact and lead data for claimed contacts
     const unverified = await db
       .select({
         contactId: contacts.id,
         email: contacts.email,
+        verificationReason: contacts.verificationReason,
         leadId: leads.id,
         channelTitle: leads.channelTitle,
         subscriberCount: leads.subscriberCount,
@@ -29,17 +62,10 @@ export async function runVerificationBatch(limit = 25): Promise<{ verified: numb
       .from(contacts)
       .innerJoin(leads, eq(contacts.leadId, leads.id))
       .leftJoin(keywords, eq(leads.sourceKeywordId, keywords.id))
-      .where(and(eq(contacts.emailStatus, 'UNKNOWN'), isNotNull(contacts.email)))
-      .limit(limit);
+      .where(inArray(contacts.id, claimedContactIds))
+      .orderBy(contacts.id);
 
-    if (unverified.length === 0) {
-      const requalified = await reconcilePendingLeadQualifications();
-      console.log(`ℹ️ No unverified emails pending in database. Reconciled and qualified ${requalified} existing leads.`);
-      await jobRunner.completeJob(jobId, requalified);
-      return { verified: 0, qualified: requalified };
-    }
-
-    console.log(`📋 Found ${unverified.length} unverified contacts to verify.`);
+    console.log(`📋 Atomically claimed ${unverified.length} unverified contacts (oldest first).`);
 
     // 2. Extract emails and run parallel batch verification
     const emailsToVerify = unverified.map((item) => item.email || '');
@@ -68,6 +94,35 @@ export async function runVerificationBatch(limit = 25): Promise<{ verified: numb
       console.log(
         `\n[Contact ${item.contactId}] Verified: ${item.email} -> ${vResult.status} [${vResult.reasonCode || ''}]`
       );
+
+      // DNS Timeout Re-queue Logic (P2-13): allow up to 3 transient timeouts before permanent failure
+      if (vResult.reasonCode === 'DNS_TIMEOUT') {
+        const timeoutMatch = (item.verificationReason || '').match(/DNS timeout \(attempt (\d+)\/3\)/);
+        const previousTimeouts = timeoutMatch ? parseInt(timeoutMatch[1], 10) : 0;
+
+        if (previousTimeouts < 2) {
+          const nextAttempt = previousTimeouts + 1;
+          console.warn(`  ⚠️ DNS lookup timed out for ${item.email}. Re-queuing (attempt ${nextAttempt}/3)...`);
+          await db
+            .update(contacts)
+            .set({
+              emailStatus: 'UNKNOWN',
+              verificationProvider: null,
+              verificationReason: `DNS timeout (attempt ${nextAttempt}/3)`,
+              updatedAt: new Date(),
+            })
+            .where(eq(contacts.id, item.contactId));
+
+          await jobRunner.logEvent(
+            jobId,
+            'EMAIL_VERIFIED',
+            'WARN',
+            `DNS timeout for ${item.email}. Re-queued for retry (${nextAttempt}/3).`,
+            { contactId: item.contactId, email: item.email, attempt: nextAttempt }
+          );
+          continue;
+        }
+      }
 
       // Build descriptive verification reason including role-based flag if applicable
       const reasonParts: string[] = [];
@@ -193,7 +248,8 @@ export async function reconcilePendingLeadQualifications(): Promise<number> {
           inArray(contacts.emailStatus, ['VALID', 'DOMAIN_VALID', 'MAILBOX_VERIFIED']),
           isNotNull(contacts.email)
         )
-      );
+      )
+      .limit(100);
 
     let newlyQualified = 0;
     for (const item of candidates) {

@@ -1,6 +1,6 @@
 import { db } from '../db/client';
-import { logs, jobs, gmailAccounts, leads, scheduledEmails, leadSequenceProgress } from '../db/schema';
-import { lt, and, inArray, eq } from 'drizzle-orm';
+import { logs, jobs, gmailAccounts, leads, scheduledEmails, leadSequenceProgress, contacts } from '../db/schema';
+import { lt, and, inArray, eq, isNotNull } from 'drizzle-orm';
 import { jobRunner } from '../services/jobs/job.runner';
 import { quotaManager } from '../services/youtube/quota';
 import { reconcilePendingLeadQualifications } from './verification.worker';
@@ -117,6 +117,72 @@ export async function runCleanup(): Promise<{
       }
     } catch (cancelErr: any) {
       console.warn('[Cleanup Watchdog] Error re-cancelling sequences for suppressed leads:', cancelErr.message);
+    }
+
+    // 9. Recover stale scraping link pages (> 15 minutes) and stuck verification contacts (TASK-35 / P2-25)
+    try {
+      const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+      const resetScraping = await db
+        .update(contacts)
+        .set({
+          linkScrapeStatus: 'PENDING',
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(contacts.linkScrapeStatus, 'SCRAPING'),
+            lt(contacts.updatedAt, fifteenMinutesAgo)
+          )
+        )
+        .returning({ id: contacts.id });
+
+      if (resetScraping.length > 0) {
+        console.warn(`[Cleanup Watchdog] Reset ${resetScraping.length} stale scraping link page contact(s) back to PENDING.`);
+      }
+
+      const resetVerifying = await db
+        .update(contacts)
+        .set({
+          verificationProvider: null,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(contacts.verificationProvider, 'IN_PROGRESS'),
+            lt(contacts.updatedAt, fifteenMinutesAgo)
+          )
+        )
+        .returning({ id: contacts.id });
+
+      if (resetVerifying.length > 0) {
+        console.warn(`[Cleanup Watchdog] Reset ${resetVerifying.length} stuck in-progress verification contact(s).`);
+      }
+    } catch (staleContactErr: any) {
+      console.warn('[Cleanup Watchdog] Error resetting stale contact statuses:', staleContactErr.message);
+    }
+
+    // 10. Comply with YouTube 30-day data retention: null rawPayload on leads older than 30 days (TASK-34 / P2-31 / P2-32)
+    try {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const prunedLeads = await db
+        .update(leads)
+        .set({
+          rawPayload: null,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            lt(leads.discoveredAt, thirtyDaysAgo),
+            isNotNull(leads.rawPayload)
+          )
+        )
+        .returning({ id: leads.id });
+
+      if (prunedLeads.length > 0) {
+        console.log(`[Cleanup Watchdog] Pruned raw YouTube payload for ${prunedLeads.length} leads older than 30 days.`);
+      }
+    } catch (pruneErr: any) {
+      console.warn('[Cleanup Watchdog] Error pruning 30-day raw lead payloads:', pruneErr.message);
     }
 
     const totalProcessed = recovery.recoveredKeywords + recovery.recoveredJobs + recoveredLeads + requalifiedLeads;

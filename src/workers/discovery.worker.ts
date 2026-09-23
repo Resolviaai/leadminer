@@ -183,10 +183,18 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
         if (enrichResult.quotaReached) {
           console.warn(`⚠️ [YouTube Quota Reached during enrichment] Pausing batch.`);
           quotaReached = true;
-          await pool
-            .update(keywords)
-            .set({ status: 'PENDING', updatedAt: new Date() })
-            .where(eq(keywords.id, kw.id));
+          const remainingKeywords = claimedKeywords.slice(i);
+          const remainingIds = remainingKeywords.map((k) => k.id);
+          if (remainingIds.length > 0) {
+            await pool
+              .update(keywords)
+              .set({
+                status: 'PENDING',
+                attemptCount: sql`GREATEST(0, ${keywords.attemptCount} - 1)`,
+                updatedAt: new Date(),
+              })
+              .where(inArray(keywords.id, remainingIds));
+          }
           break;
         }
 

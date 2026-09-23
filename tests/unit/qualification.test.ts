@@ -164,7 +164,7 @@ describe('Lead Qualification Service', () => {
     expect(res.reason).toBe('Channel country (GB) does not match target (US)');
   });
 
-  it('should not reject leads when country is undefined or null even if targetCountry is set', () => {
+  it('should reject leads when country is undefined or null if specific targetCountry is set (P2-9)', () => {
     const candidateUndefined = {
       subscriberCount: 25000,
       email: 'creator@podcasts.com',
@@ -179,7 +179,8 @@ describe('Lead Qualification Service', () => {
       ...defaultCriteria,
       targetCountry: 'US',
     });
-    expect(res1.qualified).toBe(true);
+    expect(res1.qualified).toBe(false);
+    expect(res1.reason).toContain('Channel country is unknown/unspecified');
 
     const candidateNull = {
       subscriberCount: 25000,
@@ -195,7 +196,8 @@ describe('Lead Qualification Service', () => {
       ...defaultCriteria,
       targetCountry: 'US',
     });
-    expect(res2.qualified).toBe(true);
+    expect(res2.qualified).toBe(false);
+    expect(res2.reason).toContain('Channel country is unknown/unspecified');
   });
 
   it('should qualify creators from all Tier 1 countries when targetCountry is TIER_1', () => {
@@ -247,7 +249,7 @@ describe('Lead Qualification Service', () => {
     }
   });
 
-  it('should allow creators with undefined country when targetCountry is TIER_1', () => {
+  it('should reject creators with undefined country when targetCountry is TIER_1 (P2-9 default-deny)', () => {
     const candidate = {
       subscriberCount: 25000,
       email: 'creator_global@channel.com',
@@ -262,6 +264,14 @@ describe('Lead Qualification Service', () => {
       ...defaultCriteria,
       targetCountry: 'TIER_1',
     });
-    expect(res.qualified).toBe(true);
+    expect(res.qualified).toBe(false);
+    expect(res.reason).toContain('Channel country is unknown/unspecified');
+
+    // But should allow when targetCountry is ALL
+    const resAll = leadQualificationService.qualify(candidate, {
+      ...defaultCriteria,
+      targetCountry: 'ALL',
+    });
+    expect(resAll.qualified).toBe(true);
   });
 });

@@ -82,9 +82,16 @@ export class LeadQualificationService {
       }
     }
 
-    // 7. Country match check
-    if (criteria.targetCountry && candidate.country) {
+    // 7. Country match check (P2-9: default-deny unknown country when targeting active)
+    if (criteria.targetCountry && criteria.targetCountry.toUpperCase() !== 'ALL') {
       const target = criteria.targetCountry.toUpperCase();
+      if (!candidate.country) {
+        return {
+          qualified: false,
+          reason: `Channel country is unknown/unspecified, but campaign requires '${criteria.targetCountry}'`,
+        };
+      }
+
       if (target === 'TIER_1' || target === 'TIER1') {
         if (!isTier1Country(candidate.country)) {
           return {
@@ -92,7 +99,7 @@ export class LeadQualificationService {
             reason: `Channel country (${candidate.country}) is not in Tier 1 target countries`,
           };
         }
-      } else if (target !== 'ALL') {
+      } else {
         if (candidate.country.toUpperCase() !== target) {
           return {
             qualified: false,

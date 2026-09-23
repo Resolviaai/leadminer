@@ -64,6 +64,7 @@ export class YouTubeDiscoveryService {
     const client = this.getClient();
     if (!client) {
       console.error('[YouTube API] No YouTube client available. YOUTUBE_API_KEY is not configured or all keys exhausted.');
+      await quotaManager.refundSearchCall();
       return { channelIds: [], quotaReached: false };
     }
 
@@ -100,6 +101,8 @@ export class YouTubeDiscoveryService {
         await quotaManager.persistQuotaState();
         return { channelIds: [], quotaReached: true };
       }
+      // Refund quota on non-quota transient or fatal failures (P2-15)
+      await quotaManager.refundSearchCall();
       throw error;
     }
   }
@@ -122,6 +125,7 @@ export class YouTubeDiscoveryService {
     const client = this.getClient();
     if (!client) {
       console.error('[YouTube API] No YouTube client available. YOUTUBE_API_KEY is not configured or all keys exhausted.');
+      await quotaManager.refundGeneralQuota(chunksCount);
       return { channels: [], quotaReached: false };
     }
 
@@ -170,6 +174,8 @@ export class YouTubeDiscoveryService {
         const quota = await quotaManager.syncQuotaState();
         return { channels: [], quotaReached: quota.generalQuotaUsedToday >= quota.generalQuotaDailyLimit };
       }
+      // Refund general quota on non-quota failure (P2-15)
+      await quotaManager.refundGeneralQuota(chunksCount);
       throw error;
     }
   }
