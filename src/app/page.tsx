@@ -28,9 +28,7 @@ import {
 
 export default function LandingPage() {
   const [emailInput, setEmailInput] = useState('');
-  const [newsletterEmail, setNewsletterEmail] = useState('');
   const [submittedWaitlist, setSubmittedWaitlist] = useState(false);
-  const [submittedNewsletter, setSubmittedNewsletter] = useState(false);
 
   // Active showcase step
   const [activeShowcase, setActiveShowcase] = useState(0);
@@ -51,12 +49,6 @@ export default function LandingPage() {
     e.preventDefault();
     if (!emailInput) return;
     setSubmittedWaitlist(true);
-  };
-
-  const handleNewsletterSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newsletterEmail) return;
-    setSubmittedNewsletter(true);
   };
 
   return (
@@ -1151,122 +1143,80 @@ export default function LandingPage() {
           {/* Center Copy */}
           <div className="relative z-10 max-w-xl mx-auto">
             <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight leading-tight">
-              Join Our Newsletter
+              Your next lead is already somewhere on the internet.
               <br />
-              <span className="font-serif italic font-normal text-purple-100">and Stay Updated</span>
+              <span className="font-serif italic font-normal text-purple-100">Go find it.</span>
             </h2>
             <p className="text-xs sm:text-sm text-purple-100/90 mt-3 leading-relaxed">
-              Get the latest insights, updates, and outreach strategies delivered to your inbox.
+              Autonomous creator discovery, 3-second DNS MX verification, and personalized cold outreach.
             </p>
 
-            {/* Input + Submit */}
+            {/* Input + Action */}
             <div className="mt-8 max-w-md mx-auto">
-              {submittedNewsletter ? (
-                <div className="bg-white/20 backdrop-blur-md text-white px-5 py-3 rounded-full text-sm font-semibold flex items-center justify-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-300" />
-                  <span>Subscribed! Check your inbox soon.</span>
-                </div>
-              ) : (
-                <form onSubmit={handleNewsletterSubmit} className="bg-white p-1.5 pl-5 rounded-full flex items-center justify-between gap-2 shadow-xl">
-                  <input
-                    type="email"
-                    required
-                    value={newsletterEmail}
-                    onChange={(e) => setNewsletterEmail(e.target.value)}
-                    placeholder="Enter your email"
-                    className="w-full bg-transparent text-sm text-neutral-800 placeholder-neutral-400 focus:outline-none"
-                  />
-                  <button
-                    type="submit"
-                    className="bg-neutral-900 hover:bg-neutral-800 text-white text-xs sm:text-sm font-semibold rounded-full px-5 py-2.5 shrink-0 flex items-center gap-1.5 transition-all"
-                  >
-                    <span>Join Newsletter</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </form>
-              )}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  window.location.href = '/overview';
+                }}
+                className="bg-white p-1.5 pl-5 rounded-full flex items-center justify-between gap-2 shadow-2xl"
+              >
+                <input
+                  type="email"
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  placeholder="Enter your work email"
+                  className="w-full bg-transparent text-sm text-neutral-800 placeholder-neutral-400 focus:outline-none"
+                />
+                <Link
+                  href="/overview"
+                  className="bg-neutral-900 hover:bg-neutral-800 text-white text-xs sm:text-sm font-semibold rounded-full px-5 py-2.5 shrink-0 flex items-center gap-1.5 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <span>Open LeadMiner</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </form>
+
+              {/* Trust badges */}
+              <div className="flex items-center justify-center gap-5 sm:gap-7 mt-4 text-xs text-purple-200/90 font-medium">
+                <span>✓ 25,391 Niche Keywords</span>
+                <span>✓ 100% Deliverable</span>
+                <span>✓ Autonomous Pipeline</span>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ─── 11. MINIMAL DARK FOOTER (EXACT MATCH TO REFERENCE PHOTO) ─── */}
-      <footer className="relative z-20 bg-[#161616] text-[#EDEDED] pt-16 pb-12 mt-12 border-t border-neutral-800">
+      {/* ─── 11. MINIMAL DARK FOOTER ─── */}
+      <footer className="relative z-20 bg-[#161616] text-[#EDEDED] py-12 mt-12 border-t border-neutral-800">
         <div className="max-w-6xl mx-auto px-6">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-8 pb-12 border-b border-neutral-800/80">
-            {/* Col 1: Brand & Tagline (2 cols on desktop) */}
-            <div className="col-span-2 space-y-4">
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-[#C46A3A] flex items-center justify-center text-white">
-                  <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5 stroke-white stroke-[2.2]">
-                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </div>
-                <span className="text-lg font-bold text-white tracking-tight">LeadMiner</span>
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6 pb-8 border-b border-neutral-800/80">
+            {/* Brand & Minimal Tagline */}
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 rounded-lg bg-[#C46A3A] flex items-center justify-center text-white">
+                <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5 stroke-white stroke-[2.2]">
+                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </div>
-              <p className="text-xs text-neutral-400 max-w-xs leading-relaxed">
-                Turn YouTube into your next client. Autonomous discovery, instant MX verification, and personalized cold outreach.
-              </p>
-
-              {/* Social Icons matching reference */}
-              <div className="flex items-center gap-3 pt-2 text-neutral-400">
-                <a href="https://youtube.com" target="_blank" rel="noreferrer" className="w-8 h-8 rounded-full bg-neutral-800/80 flex items-center justify-center hover:text-white transition-colors">
-                  <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
-                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
-                  </svg>
-                </a>
-                <a href="https://x.com" target="_blank" rel="noreferrer" className="w-8 h-8 rounded-full bg-neutral-800/80 flex items-center justify-center hover:text-white transition-colors">
-                  <span className="font-bold text-xs">𝕏</span>
-                </a>
-                <a href="https://linkedin.com" target="_blank" rel="noreferrer" className="w-8 h-8 rounded-full bg-neutral-800/80 flex items-center justify-center hover:text-white transition-colors">
-                  <span className="font-bold text-xs font-sans">in</span>
-                </a>
-                <a href="https://discord.com" target="_blank" rel="noreferrer" className="w-8 h-8 rounded-full bg-neutral-800/80 flex items-center justify-center hover:text-white transition-colors">
-                  <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
-                    <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.929 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.893.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028z" />
-                  </svg>
-                </a>
-              </div>
+              <span className="text-lg font-bold text-white tracking-tight">LeadMiner</span>
+              <span className="text-neutral-500 text-xs">·</span>
+              <span className="text-xs text-neutral-400 font-medium">Find. Verify. Reach.</span>
             </div>
 
-            {/* Col 2: Product */}
-            <div className="space-y-3">
-              <div className="text-xs font-semibold text-white tracking-wider">Product</div>
-              <ul className="space-y-2 text-xs text-neutral-400">
-                <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
-                <li><a href="#pricing" className="hover:text-white transition-colors">Pricing</a></li>
-                <li><a href="#use-cases" className="hover:text-white transition-colors">Use cases</a></li>
-                <li><Link href="/overview" className="hover:text-white transition-colors">Roadmap</Link></li>
-              </ul>
-            </div>
-
-            {/* Col 3: Resources */}
-            <div className="space-y-3">
-              <div className="text-xs font-semibold text-white tracking-wider">Resources</div>
-              <ul className="space-y-2 text-xs text-neutral-400">
-                <li><Link href="/overview" className="hover:text-white transition-colors">Blog</Link></li>
-                <li><Link href="/overview" className="hover:text-white transition-colors">Documentation</Link></li>
-                <li><Link href="/templates" className="hover:text-white transition-colors">Templates</Link></li>
-                <li><Link href="/overview" className="hover:text-white transition-colors">Community</Link></li>
-              </ul>
-            </div>
-
-            {/* Col 4: Company */}
-            <div className="space-y-3">
-              <div className="text-xs font-semibold text-white tracking-wider">Company</div>
-              <ul className="space-y-2 text-xs text-neutral-400">
-                <li><Link href="/overview" className="hover:text-white transition-colors">About</Link></li>
-                <li><Link href="/overview" className="hover:text-white transition-colors">Careers</Link></li>
-                <li><Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link></li>
-                <li><Link href="/terms" className="hover:text-white transition-colors">Terms</Link></li>
-              </ul>
-            </div>
+            {/* Essential Nav Links */}
+            <nav className="flex flex-wrap items-center justify-center gap-6 text-xs text-neutral-400 font-medium">
+              <a href="#product" className="hover:text-white transition-colors">Product</a>
+              <a href="#how-it-works" className="hover:text-white transition-colors">How it works</a>
+              <Link href="/overview" className="hover:text-white transition-colors">Sign in</Link>
+              <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>
+              <Link href="/terms" className="hover:text-white transition-colors">Terms</Link>
+              <a href="mailto:support@leadminer.io" className="hover:text-white transition-colors">Contact</a>
+            </nav>
           </div>
 
-          {/* Bottom Copyright & Built for Builders */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-8 text-xs text-neutral-500">
-            <div>© 2026 LeadMiner. All rights reserved.</div>
-            <div>Built for builders. Designed for growth.</div>
+          {/* Bottom Copyright */}
+          <div className="pt-6 text-center md:text-left text-xs text-neutral-500">
+            © 2026 LeadMiner. All rights reserved.
           </div>
         </div>
       </footer>
