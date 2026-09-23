@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 
 const mainNavItems = [
-  { name: 'Overview', href: '/', icon: LayoutDashboard },
+  { name: 'Overview', href: '/overview', icon: LayoutDashboard },
   { name: 'Keywords', href: '/keywords', icon: Layers },
   { name: 'Leads', href: '/leads', icon: Users },
   { name: 'Campaigns', href: '/campaigns', icon: Target },

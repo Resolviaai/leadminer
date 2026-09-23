@@ -6,6 +6,10 @@ on:
     - cron: '30 13 * * *'
   workflow_dispatch: # Allows manual trigger from GitHub UI anytime
 
+concurrency:
+  group: leadminer-daily-pipeline
+  cancel-in-progress: false
+
 jobs:
   trigger-pipeline:
     runs-on: ubuntu-latest
@@ -13,11 +17,18 @@ jobs:
 
     steps:
       - name: Trigger Live LeadMiner Autonomous Pipeline
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ secrets.APP_URL || 'https://leadminer-app.vercel.app' }}
         run: |
-          echo "Triggering autonomous pipeline on https://leadminer-app.vercel.app/api/workers/pipeline..."
-          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://leadminer-app.vercel.app/api/workers/pipeline" \
-            -H "Authorization: Bearer 7d3a8f1e5c2b9a4d6f8e0b1c3a5d7e9f" \
-            -H "User-Agent: vercel-cron/1.0" \
+          if [ -z "$CRON_SECRET" ]; then
+            echo "ERROR: CRON_SECRET secret is not set in GitHub repository secrets!"
+            exit 1
+          fi
+
+          echo "Triggering autonomous pipeline on $APP_URL/api/workers/pipeline..."
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$APP_URL/api/workers/pipeline" \
+            -H "Authorization: Bearer $CRON_SECRET" \
             -H "Content-Type: application/json")
 
           HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)

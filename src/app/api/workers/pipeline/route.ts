@@ -6,9 +6,10 @@ import { runVerificationBatch } from '@/workers/verification.worker';
 import { runPlanner } from '@/workers/planner.worker';
 import { runDispatcher } from '@/workers/dispatcher.worker';
 import { verifyWorkerAuth } from '@/lib/worker-auth';
+import { withAdvisoryLock, LOCK_KEYS } from '@/lib/pipeline-lock';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 300; // 300s max execution duration for batch processing
+export const maxDuration = 60; // 60s max execution duration for Vercel Hobby plan compatibility
 
 async function executePipeline() {
   const startedAt = new Date();
@@ -32,19 +33,19 @@ async function executePipeline() {
     results.replies = { error: err.message };
   }
 
-  // 2. Discover new YouTube channels using keyword queue (quota safe: up to 30 searches / run)
+  // 2. Discover new YouTube channels using keyword queue (lean batch: 12 keywords to stay under 15s)
   try {
-    console.log('[Pipeline] Step 2/5: Running channel discovery batch (30 keywords)...');
-    results.discovery = await runDiscoveryBatch(30);
+    console.log('[Pipeline] Step 2/5: Running channel discovery batch (12 keywords)...');
+    results.discovery = await runDiscoveryBatch(12);
   } catch (err: any) {
     console.error('[Pipeline] Error in discovery step:', err);
     results.discovery = { error: err.message };
   }
 
-  // 3. Verify extracted contact emails & auto-qualify eligible leads
+  // 3. Verify extracted contact emails & auto-qualify eligible leads (lean batch: 25 contacts)
   try {
-    console.log('[Pipeline] Step 3/5: Running email verification batch (up to 50 contacts)...');
-    results.verification = await runVerificationBatch(50);
+    console.log('[Pipeline] Step 3/5: Running email verification batch (25 contacts)...');
+    results.verification = await runVerificationBatch(25);
   } catch (err: any) {
     console.error('[Pipeline] Error in verification step:', err);
     results.verification = { error: err.message };
@@ -80,32 +81,35 @@ async function executePipeline() {
   };
 }
 
-// Vercel Cron sends GET requests
-export async function GET(req: NextRequest) {
+async function handlePipelineRequest(req: NextRequest) {
   const auth = verifyWorkerAuth(req);
   if (!auth.authorized) {
     return auth.response!;
   }
 
   try {
-    const summary = await executePipeline();
-    return NextResponse.json(summary);
+    const lockResult = await withAdvisoryLock(LOCK_KEYS.DAILY_PIPELINE, 'Daily Pipeline', async () => {
+      return await executePipeline();
+    });
+
+    if (!lockResult.executed) {
+      return NextResponse.json({
+        success: true,
+        skipped: true,
+        reason: lockResult.reason,
+      });
+    }
+
+    return NextResponse.json(lockResult.result);
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
-// Support manual POST trigger from buttons / curl
-export async function POST(req: NextRequest) {
-  const auth = verifyWorkerAuth(req);
-  if (!auth.authorized) {
-    return auth.response!;
-  }
+export async function GET(req: NextRequest) {
+  return handlePipelineRequest(req);
+}
 
-  try {
-    const summary = await executePipeline();
-    return NextResponse.json(summary);
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-  }
+export async function POST(req: NextRequest) {
+  return handlePipelineRequest(req);
 }

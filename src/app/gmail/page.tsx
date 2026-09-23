@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { db } from '../../db/client';
 import { gmailAccounts } from '../../db/schema';
 import { desc } from 'drizzle-orm';
@@ -18,6 +18,7 @@ async function getGmailAccounts(): Promise<GmailAccountItem[]> {
           dailyLimit: gmailAccounts.dailyLimit,
           sentToday: gmailAccounts.sentToday,
           lastSendAt: gmailAccounts.lastSendAt,
+          tokenGrantedAt: gmailAccounts.tokenGrantedAt,
           createdAt: gmailAccounts.createdAt,
         })
         .from(gmailAccounts)

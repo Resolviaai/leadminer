@@ -27,6 +27,7 @@ export interface GmailAccountItem {
   dailyLimit: number;
   sentToday: number;
   lastSendAt: string | Date | null;
+  tokenGrantedAt?: string | Date | null;
   createdAt: string | Date;
 }
 
@@ -231,6 +232,30 @@ export function GmailAccountsClient({
                     </Badge>
                   </div>
                 </div>
+
+                {/* Token Expiry Warning for Google Testing Mode (7-day lifecycle) */}
+                {acc.tokenGrantedAt && !isDisconnected && (() => {
+                  const daysOld = Math.floor((Date.now() - new Date(acc.tokenGrantedAt).getTime()) / (24 * 60 * 60 * 1000));
+                  const daysLeft = Math.max(0, 7 - daysOld);
+                  const isExpiringSoon = daysLeft <= 2;
+                  return (
+                    <div
+                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-mono flex items-center justify-between border ${
+                        isExpiringSoon
+                          ? 'bg-amber-950/40 border-amber-800/50 text-amber-300'
+                          : 'bg-surface-200 border-border/80 text-text-muted'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <Clock className={`w-3 h-3 ${isExpiringSoon ? 'text-amber-400 animate-pulse' : 'text-text-muted'}`} />
+                        <span>Google Testing Token:</span>
+                      </div>
+                      <span className={isExpiringSoon ? 'font-bold text-amber-400' : 'text-text-secondary'}>
+                        {daysLeft > 0 ? `${daysLeft} days remaining` : 'Expired — Reconnect Now'}
+                      </span>
+                    </div>
+                  );
+                })()}
 
                 {/* Quota Progress Bar */}
                 <div className="space-y-1.5">

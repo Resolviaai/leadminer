@@ -41,46 +41,20 @@ export const metadata: Metadata = {
   },
 };
 
+import { AppShell } from '../components/AppShell';
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
-      <body className="bg-studio text-text-main min-h-screen flex flex-col md:flex-row antialiased selection:bg-primary/20 selection:text-primary">
+      <body className="bg-studio text-text-main min-h-screen antialiased selection:bg-primary/20 selection:text-primary">
         {/* Top Navigation Progress Indicator */}
         <TopProgressBar />
 
         {/* Silent PWA Service Worker Registration */}
         <PwaRegister />
 
-        {/* Responsive Desktop Sidebar + Mobile Topbar & Floating Bottom Nav */}
-        <Navigation dryRun={env.DRY_RUN} />
-
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col min-w-0 md:h-screen md:overflow-hidden">
-          {/* Topbar (Desktop Only) */}
-          <header className="hidden md:flex h-14 border-b border-border bg-surface-100/90 backdrop-blur px-6 items-center justify-between shrink-0 relative z-40">
-            <div className="flex items-center space-x-3">
-              <div className="flex items-center space-x-2 text-xs text-primary font-medium">
-                <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-                <span>System Online</span>
-              </div>
-              <span className="text-border">|</span>
-              <span className="text-xs text-text-muted">Autopilot Active</span>
-            </div>
-
-            <div className="flex items-center space-x-4 text-xs">
-              <NotificationCenter />
-              <div className="flex items-center space-x-1.5 text-text-secondary">
-                <Radio className="w-3.5 h-3.5 text-primary" />
-                <span>Search Quota: 100/day</span>
-              </div>
-            </div>
-          </header>
-
-          {/* Page Content with safe mobile padding */}
-          <main className="flex-1 w-full px-3.5 py-3 sm:p-4 md:px-6 md:py-3.5 pb-[calc(5.25rem+env(safe-area-inset-bottom,0px))] md:pb-3.5 overflow-y-auto overflow-x-hidden min-h-0 flex flex-col items-stretch">
-            {children}
-          </main>
-        </div>
+        {/* Dynamic AppShell: handles public vs authenticated dashboard chrome */}
+        <AppShell dryRun={env.DRY_RUN}>{children}</AppShell>
       </body>
     </html>
   );

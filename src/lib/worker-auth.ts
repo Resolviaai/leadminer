@@ -7,73 +7,69 @@ export interface WorkerAuthResult {
   response?: NextResponse;
 }
 
-/** BUG-12: Constant-time string comparison to prevent timing oracle attacks. */
+/**
+ * Constant-time string comparison — prevents timing oracle attacks where
+ * response latency leaks secret length or content via === comparison.
+ */
 function timingSafeStringEqual(a: string, b: string): boolean {
   try {
     const bufA = Buffer.from(a);
     const bufB = Buffer.from(b);
-    if (bufA.length !== bufB.length) {
-      // Length mismatch leaks length info, but that's unavoidable — at least
-      // the content comparison is constant-time even though we short-circuit on length.
-      return false;
-    }
+    // Length mismatch still leaks length, but that's unavoidable at this layer.
+    // The critical thing is the content comparison is constant-time.
+    if (bufA.length !== bufB.length) return false;
     return crypto.timingSafeEqual(bufA, bufB);
   } catch {
     return false;
   }
 }
 
-export function verifyWorkerAuth(req: NextRequest): WorkerAuthResult {
-  // 1. In test or development environments, allow execution
-  if (process.env.NODE_ENV === 'test' || env.NODE_ENV === 'test' || env.NODE_ENV === 'development') {
+/**
+ * Worker route authentication — Bearer token ONLY.
+ *
+ * Previously this also trusted Vercel cron headers (User-Agent: vercel-cron),
+ * sec-fetch-site: same-origin, origin/referer matching — all of which can be
+ * trivially forged by any HTTP client. Those branches are permanently removed.
+ *
+ * Only the CRON_SECRET Bearer token is trusted. Every scheduler (GitHub Actions,
+ * cron-job.org) must send: Authorization: Bearer <CRON_SECRET>
+ *
+ * In test/development, auth is bypassed so local development works without secrets.
+ */
+export function verifyWorkerAuth(
+  req: NextRequest,
+  options?: { forceEnforce?: boolean }
+): WorkerAuthResult {
+  // Test / development bypass — can be overridden in tests via forceEnforce: true
+  if (!options?.forceEnforce && (env.NODE_ENV === 'test' || env.NODE_ENV === 'development')) {
     return { authorized: true };
   }
 
-  // 2. Vercel Cron header check (User-Agent: vercel-cron/1.0, x-vercel-cron-schedule, or x-vercel-cron)
-  const userAgent = req.headers.get('user-agent') || '';
-  const isVercelCron =
-    userAgent.includes('vercel-cron') ||
-    req.headers.has('x-vercel-cron-schedule') ||
-    Boolean(req.headers.get('x-vercel-cron'));
-
-  if (isVercelCron) {
-    return { authorized: true };
+  // Production: CRON_SECRET must be set — fail loud at startup if missing
+  if (!env.CRON_SECRET) {
+    console.error('[WorkerAuth] FATAL: CRON_SECRET is not set in production. All worker routes are locked.');
+    return {
+      authorized: false,
+      response: NextResponse.json(
+        { success: false, error: 'Server misconfiguration: authentication secret not configured' },
+        { status: 503 }
+      ),
+    };
   }
 
-  // 3. Authorization Bearer Token check — BUG-12: constant-time compare
+  // Bearer token check — only trusted auth method
   const authHeader = req.headers.get('authorization');
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.slice(7).trim();
-    if (env.CRON_SECRET && timingSafeStringEqual(token, env.CRON_SECRET)) {
-      return { authorized: true };
-    }
-    if (env.SESSION_SECRET && timingSafeStringEqual(token, env.SESSION_SECRET)) {
+    if (timingSafeStringEqual(token, env.CRON_SECRET)) {
       return { authorized: true };
     }
   }
 
-  // 4. Same-origin UI action check (dispatched from dashboard buttons)
-  const secFetchSite = req.headers.get('sec-fetch-site');
-  if (secFetchSite === 'same-origin') {
-    return { authorized: true };
-  }
-
-  const origin = req.headers.get('origin');
-  const host = req.headers.get('host');
-  if (origin && host && origin.includes(host)) {
-    return { authorized: true };
-  }
-
-  const referer = req.headers.get('referer');
-  if (referer && host && referer.includes(host)) {
-    return { authorized: true };
-  }
-
-  // 5. Unauthorized
   return {
     authorized: false,
     response: NextResponse.json(
-      { success: false, error: 'Unauthorized: Invalid worker credentials or untrusted origin' },
+      { success: false, error: 'Unauthorized: valid Bearer token required' },
       { status: 401 }
     ),
   };

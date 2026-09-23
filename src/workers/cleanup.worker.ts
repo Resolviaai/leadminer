@@ -1,9 +1,10 @@
 import { db } from '../db/client';
-import { logs, jobs } from '../db/schema';
-import { lt, and, inArray } from 'drizzle-orm';
+import { logs, jobs, gmailAccounts } from '../db/schema';
+import { lt, and, inArray, eq } from 'drizzle-orm';
 import { jobRunner } from '../services/jobs/job.runner';
 import { quotaManager } from '../services/youtube/quota';
 import { reconcilePendingLeadQualifications } from './verification.worker';
+import { telegramService } from '../services/notifications/telegram.service';
 
 export async function runCleanup(): Promise<{
   recoveredKeywords: number;
@@ -54,6 +55,33 @@ export async function runCleanup(): Promise<{
     // 6. Sync YouTube quota and check Pacific Time daily reset
     const quota = await quotaManager.syncQuotaState();
     console.log(`[Quota Check] Search calls today: ${quota.searchCallsUsedToday}/${quota.searchCallsDailyLimit}`);
+
+    // 7. Check for Gmail accounts nearing 7-day token expiration (Google Testing Mode)
+    try {
+      const activeInboxes = await db
+        .select({
+          id: gmailAccounts.id,
+          email: gmailAccounts.email,
+          tokenGrantedAt: gmailAccounts.tokenGrantedAt,
+        })
+        .from(gmailAccounts)
+        .where(eq(gmailAccounts.status, 'ACTIVE'));
+
+      for (const inbox of activeInboxes) {
+        if (inbox.tokenGrantedAt) {
+          const daysOld = Math.floor((Date.now() - new Date(inbox.tokenGrantedAt).getTime()) / (24 * 60 * 60 * 1000));
+          if (daysOld >= 5) {
+            console.warn(`⚠️ [Token Expiry Warning] Inbox ${inbox.email} token is ${daysOld} days old (Testing Mode)!`);
+            await telegramService.notifyCriticalError(
+              'Gmail OAuth Token Expiry Warning',
+              `Inbox ${inbox.email} token was granted ${daysOld} days ago. In Google Testing mode, refresh tokens expire after 7 days. Reconnect this account at /gmail to prevent outreach disruption.`
+            );
+          }
+        }
+      }
+    } catch (tokenWarnErr: any) {
+      console.warn('[Cleanup Watchdog] Error checking token expiry:', tokenWarnErr.message);
+    }
 
     const totalProcessed = recovery.recoveredKeywords + recovery.recoveredJobs + recoveredLeads + requalifiedLeads;
     await jobRunner.completeJob(jobId, totalProcessed);

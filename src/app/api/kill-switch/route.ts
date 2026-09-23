@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/client';
 import { systemSettings } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { verifyWorkerAuth } from '@/lib/worker-auth';
+import { verifyDashboardAuth } from '@/lib/api-auth';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = verifyDashboardAuth(req);
+  if (!auth.authorized) return auth.response!;
+
   try {
     const record = await db
       .select()
@@ -20,26 +23,31 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = verifyWorkerAuth(req);
-  if (!auth.authorized) {
-    return auth.response!;
+  const auth = verifyDashboardAuth(req);
+  if (!auth.authorized) return auth.response!;
+
+  let body: any;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { success: false, error: 'Invalid JSON body' },
+      { status: 400 }
+    );
   }
 
+  // TASK-03 / P0-4: Strict boolean validation — reject strings, numbers, missing fields.
+  // {"enabled":"false"} or {} must not arm/disarm the kill switch.
+  if (typeof body?.enabled !== 'boolean') {
+    return NextResponse.json(
+      { success: false, error: 'Invalid payload: "enabled" must be a JSON boolean (true or false), not a string or other type' },
+      { status: 400 }
+    );
+  }
+
+  const enabled: boolean = body.enabled;
+
   try {
-    let enabled = true;
-
-    // Handle form data or json
-    const contentType = req.headers.get('content-type') || '';
-    const isJson = contentType.includes('application/json');
-
-    if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
-      const formData = await req.formData();
-      enabled = formData.get('enabled') === 'true';
-    } else {
-      const body = await req.json().catch(() => ({}));
-      enabled = Boolean(body.enabled);
-    }
-
     await db
       .insert(systemSettings)
       .values({
@@ -55,14 +63,10 @@ export async function POST(req: NextRequest) {
         },
       });
 
-    console.log(`[Kill Switch] Outreach kill switch set to: ${enabled ? 'ARMED / ACTIVE' : 'DISARMED'}`);
-
-    if (isJson || req.headers.get('accept')?.includes('application/json')) {
-      return NextResponse.json({ success: true, enabled });
-    }
-
-    return NextResponse.redirect(new URL('/settings', req.url), { status: 303 });
+    console.log(`[Kill Switch] Set to: ${enabled ? 'ARMED / ACTIVE' : 'DISARMED'} by ${auth.email}`);
+    return NextResponse.json({ success: true, enabled });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+

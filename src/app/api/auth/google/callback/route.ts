@@ -45,6 +45,18 @@ export async function GET(req: NextRequest) {
     }
 
     const expiresAt = tokens.expiry_date ? new Date(tokens.expiry_date) : null;
+    const now = new Date();
+
+    // Extract stable Google user ID (sub) from token info if available
+    let googleAccountId: string | null = null;
+    if (tokens.access_token) {
+      try {
+        const tokenInfo = await oauth2Client.getTokenInfo(tokens.access_token);
+        googleAccountId = tokenInfo.sub || null;
+      } catch (e: any) {
+        console.warn('[OAuth Callback] Could not fetch tokenInfo.sub:', e.message);
+      }
+    }
 
     // Check if account already exists in database
     const existing = await db
@@ -64,8 +76,10 @@ export async function GET(req: NextRequest) {
           accessToken: encryptedAccessToken,
           refreshToken: encryptedRefreshToken || existing[0].refreshToken,
           tokenExpiresAt: expiresAt,
+          tokenGrantedAt: now,
+          googleAccountId: googleAccountId || existing[0].googleAccountId,
           lastError: null,
-          updatedAt: new Date(),
+          updatedAt: now,
         })
         .where(eq(gmailAccounts.id, existing[0].id));
     } else {
@@ -78,6 +92,8 @@ export async function GET(req: NextRequest) {
         accessToken: encryptedAccessToken,
         refreshToken: encryptedRefreshToken,
         tokenExpiresAt: expiresAt,
+        tokenGrantedAt: now,
+        googleAccountId: googleAccountId,
       });
     }
 

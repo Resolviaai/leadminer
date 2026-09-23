@@ -67,6 +67,10 @@ const envSchema = z.object({
   CRON_SECRET: z.string().optional(),
   CRON_JOB_API_KEY: z.string().optional().default(''),
 
+  // Dashboard login credentials (stored in env, never in code)
+  DASHBOARD_EMAIL: z.string().optional().default(''),
+  DASHBOARD_PASSWORD: z.string().optional().default(''),
+
   // Discovery Quality Filter Thresholds (n8n Reintegration)
   MIN_DISCOVERY_SUBSCRIBERS: z.coerce.number().default(10),
   MIN_DISCOVERY_VIDEOS: z.coerce.number().default(10),
@@ -104,6 +108,12 @@ if (parsedEnv.NODE_ENV === 'production') {
   }
   if (parsedEnv.DRY_RUN === true) {
     throw new Error('[FATAL] Production cannot run with DRY_RUN=true! Live outreach mode is required. Explicitly set DRY_RUN=false in production.');
+  }
+  if (!parsedEnv.CRON_SECRET) {
+    throw new Error('[FATAL] CRON_SECRET is required in production. All worker routes will be locked without it.');
+  }
+  if (!parsedEnv.DASHBOARD_EMAIL || !parsedEnv.DASHBOARD_PASSWORD) {
+    throw new Error('[FATAL] DASHBOARD_EMAIL and DASHBOARD_PASSWORD are required in production. The dashboard will be inaccessible without them.');
   }
 } else {
   if (!parsedEnv.SESSION_SECRET || parsedEnv.SESSION_SECRET === 'default-session-secret-change-in-production') {

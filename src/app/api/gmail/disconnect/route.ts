@@ -1,11 +1,15 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../db/client';
 import { gmailAccounts, messages, logs } from '../../../../db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { encryptionService } from '../../../../services/security/encryption.service';
 import { gmailSendingService } from '../../../../services/outreach/gmail.service';
+import { verifyDashboardAuth } from '../../../../lib/api-auth';
 
 export async function POST(req: NextRequest) {
+  const auth = verifyDashboardAuth(req);
+  if (!auth.authorized) return auth.response!;
+
   try {
     const body = await req.json().catch(() => ({}));
     const accountId = Number(body.accountId);

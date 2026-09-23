@@ -12,7 +12,6 @@
     "db:seed": "tsx src/scripts/seed-defaults.ts && tsx src/scripts/seed-keywords.ts",
     "worker:discovery": "tsx src/workers/discovery.worker.ts",
     "worker:verification": "tsx src/workers/verification.worker.ts",
-    "worker:outreach": "tsx src/workers/outreach.worker.ts",
     "worker:planner": "tsx src/workers/planner.worker.ts",
     "worker:dispatch": "tsx src/workers/dispatcher.worker.ts",
     "worker:replies": "tsx src/workers/replies.worker.ts",

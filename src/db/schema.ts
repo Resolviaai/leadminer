@@ -382,6 +382,8 @@ export const gmailAccounts = pgTable(
     refreshToken: text('refresh_token'),
     accessToken: text('access_token'),
     tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }),
+    tokenGrantedAt: timestamp('token_granted_at', { withTimezone: true }),
+    googleAccountId: varchar('google_account_id', { length: 255 }),
     lastError: text('last_error'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

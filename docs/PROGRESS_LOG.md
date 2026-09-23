@@ -131,3 +131,23 @@ All development activities, audits, architectural decisions, and milestones are 
   4. Add pipeline step budgets and bounded reconciliation/linkpage recovery.
   5. Harden public worker authentication and remove/rotate the tracked cron credential before any deployment.
   6. Keep the YouTube sourcing/compliance blocker explicit; do not run discovery or outreach from legacy workbook contacts.
+
+---
+
+## 2026-09-23 — Session 7 (Security Hardening, Scheduler Isolation & Public Compliance)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Context:** Full execution of Phase 0 & Phase 1 tasks from AUDIT_FINDINGS.md and Implementation Plan.
+- **Completed in this batch:**
+  - **Auth Hardening:** Removed all forged header trust in `worker-auth.ts`. Enforced constant-time Bearer token checking with production startup fail-closed guard.
+  - **Dashboard Login System:** Added HMAC-SHA256 signed session cookie mechanism (`api-auth.ts`), Next.js Edge Middleware (`middleware.ts`), clean dark-theme login page (`/login`), and credential verification from isolated environment variables.
+  - **API Route Security:** Added strict boolean validation to kill switch (P0-4 / BUG-04) and session auth checks to mutating routes (`gmail/disconnect`, `templates`).
+  - **Dead Code Cleanup:** Deleted legacy `outreach.worker.ts` and removed dead package.json scripts.
+  - **Scheduler Deconfliction & Advisory Locks:** Removed Vercel crons from `vercel.json` to eliminate double sending. Replaced hardcoded token in GitHub Actions with `${{ secrets.CRON_SECRET }}` and added workflow concurrency lock. Implemented PostgreSQL advisory locks (`pg_try_advisory_lock`) in `pipeline-lock.ts` for mutual exclusion between daily pipeline and 15-minute dispatcher.
+  - **Hobby Plan 60s Execution Budget:** Capped `maxDuration` to 60s in `vercel.json` and in pipeline/dispatch routes. Tuned pipeline batch sizes to finish comfortably in ~30s.
+  - **Google Testing Mode & Expiry Watchdog:** Added `token_granted_at` and `google_account_id` to schema and migration `0012`. Added step 7 to cleanup worker alerting via Telegram 5 days before the 7-day Google Testing token expiry. Added token lifespan indicator to `/gmail`.
+  - **Public Landing Page & Compliance:** Built public home page (`/`) with animated abstract background, hero section, 5-stage pipeline preview, and inline operator sign-in. Added comprehensive public Privacy Policy (`/privacy`) complying with Google API User Data Policy (Limited Use) and public Terms of Service (`/terms`) referencing YouTube ToS. Relocated authenticated overview to `/overview`.
+- **Validation:**
+  - `npx tsc --noEmit` exits 0 (clean TypeScript build).
+  - `npx vitest run` passes **121/121 tests** across 20 test files (100% pass rate).
+- **Next Step:** Begin Phase 2 (P1) starting with TASK-08 (P1-10: YouTube API key guard in discovery worker).
+

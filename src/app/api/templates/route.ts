@@ -1,8 +1,12 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "../../../db/client";
 import { templates } from "../../../db/schema";
+import { verifyDashboardAuth } from "../../../lib/api-auth";
 
 export async function POST(req: NextRequest) {
+  const auth = verifyDashboardAuth(req);
+  if (!auth.authorized) return auth.response!;
+
   let body: { name?: string; subject?: string; body?: string };
   try {
     body = await req.json();
