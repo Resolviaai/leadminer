@@ -40,6 +40,20 @@ function getLogLevelBadge(level: string) {
   }
 }
 
+function formatDateTime(dateVal: Date | string | null | undefined): string {
+  if (!dateVal) return "—";
+  const d = new Date(dateVal);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+}
+
 function SkeletonRow() {
   return (
     <TableRow>
@@ -149,7 +163,7 @@ export function LogsInfiniteList({ initialData, total }: Props) {
               </div>
               <p className="font-sans text-xs text-text-main leading-relaxed">{log.message}</p>
               <div className="text-[10px] text-text-muted">
-                {log.createdAt ? new Date(log.createdAt).toLocaleTimeString() : "—"}
+                {formatDateTime(log.createdAt)}
               </div>
             </Card>
           ))
@@ -181,7 +195,7 @@ export function LogsInfiniteList({ initialData, total }: Props) {
                 items.map((log) => (
                   <TableRow key={log.id}>
                     <TableCell className="text-text-muted whitespace-nowrap">
-                      {log.createdAt ? new Date(log.createdAt).toLocaleTimeString() : "—"}
+                      {formatDateTime(log.createdAt)}
                     </TableCell>
                     <TableCell className="font-semibold text-primary whitespace-nowrap">
                       {log.eventType}

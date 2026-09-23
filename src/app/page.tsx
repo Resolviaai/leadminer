@@ -28,7 +28,6 @@ import {
 
 export default function LandingPage() {
   const [emailInput, setEmailInput] = useState('');
-  const [submittedWaitlist, setSubmittedWaitlist] = useState(false);
 
   // Active showcase step
   const [activeShowcase, setActiveShowcase] = useState(0);
@@ -44,12 +43,6 @@ export default function LandingPage() {
     }, 50);
     return () => clearInterval(timer);
   }, []);
-
-  const handleWaitlistSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!emailInput) return;
-    setSubmittedWaitlist(true);
-  };
 
   return (
     <div className="min-h-screen bg-[#FAFAF9] text-neutral-900 font-sans selection:bg-[#C46A3A]/20 selection:text-[#C46A3A] relative overflow-x-hidden">
@@ -108,7 +101,7 @@ export default function LandingPage() {
             href="/overview"
             className="inline-flex items-center gap-1.5 bg-[#C46A3A] hover:bg-[#D17A45] text-white text-sm font-medium rounded-full px-5 py-2.5 shadow-sm hover:shadow transition-all hover:scale-[1.02] active:scale-[0.98]"
           >
-            <span>Join Waitlist</span>
+            <span>Open LeadMiner</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
@@ -158,30 +151,28 @@ export default function LandingPage() {
           transition={{ duration: 0.6, delay: 0.3 }}
           className="mt-8 max-w-md mx-auto"
         >
-          {submittedWaitlist ? (
-            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-5 py-3 rounded-full text-sm font-medium flex items-center justify-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              <span>You&apos;re on the list! We&apos;ll reach out shortly.</span>
-            </div>
-          ) : (
-            <form onSubmit={handleWaitlistSubmit} className="bg-white p-1.5 pl-5 rounded-full border border-neutral-200 shadow-lg shadow-neutral-200/50 flex items-center justify-between gap-2">
-              <input
-                type="email"
-                required
-                value={emailInput}
-                onChange={(e) => setEmailInput(e.target.value)}
-                placeholder="Enter your E-mail"
-                className="w-full bg-transparent text-sm text-neutral-800 placeholder-neutral-400 focus:outline-none"
-              />
-              <button
-                type="submit"
-                className="bg-[#C46A3A] hover:bg-[#D17A45] text-white text-sm font-medium rounded-full px-5 py-2.5 shrink-0 flex items-center gap-1.5 shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
-              >
-                <span>Join Waitlist</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </form>
-          )}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              window.location.href = '/overview';
+            }}
+            className="bg-white p-1.5 pl-5 rounded-full border border-neutral-200 shadow-lg shadow-neutral-200/50 flex items-center justify-between gap-2"
+          >
+            <input
+              type="email"
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+              placeholder="Enter your work email"
+              className="w-full bg-transparent text-sm text-neutral-800 placeholder-neutral-400 focus:outline-none"
+            />
+            <Link
+              href="/overview"
+              className="bg-[#C46A3A] hover:bg-[#D17A45] text-white text-sm font-medium rounded-full px-5 py-2.5 shrink-0 flex items-center gap-1.5 shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <span>Explore LeadMiner</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </form>
 
           {/* Trust Checkmarks */}
           <div className="flex items-center justify-center gap-5 sm:gap-7 mt-3.5 text-xs text-neutral-500 font-medium">

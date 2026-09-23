@@ -5,15 +5,21 @@ import { verifyWorkerAuth } from '@/lib/worker-auth';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // 60s max for Vercel Hobby plan compatibility
 
-export async function POST(req: NextRequest) {
+async function handleVerification(req: NextRequest) {
   const auth = verifyWorkerAuth(req);
   if (!auth.authorized) {
     return auth.response!;
   }
 
   try {
-    const result = await runVerificationBatch(25);
+    const url = new URL(req.url);
+    const rawBatch = parseInt(url.searchParams.get('batchSize') || '25', 10);
+    const batchSize = isNaN(rawBatch) ? 25 : Math.min(Math.max(rawBatch, 1), 50);
+
+    const result = await runVerificationBatch(batchSize);
+
     if (
+      req.method === 'GET' ||
       req.headers.get('accept')?.includes('application/json') ||
       req.headers.get('content-type')?.includes('application/json')
     ) {
@@ -23,4 +29,12 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
+}
+
+export async function GET(req: NextRequest) {
+  return handleVerification(req);
+}
+
+export async function POST(req: NextRequest) {
+  return handleVerification(req);
 }

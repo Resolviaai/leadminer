@@ -43,6 +43,20 @@ function getStatusBadge(status: string) {
   }
 }
 
+function formatDateTime(dateVal: Date | string | null | undefined): string {
+  if (!dateVal) return "—";
+  const d = new Date(dateVal);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+}
+
 function SkeletonRow() {
   return (
     <TableRow>
@@ -166,8 +180,8 @@ export function JobsInfiniteList({ initialData, total }: Props) {
                 </div>
               </div>
               <div className="flex items-center justify-between text-[11px] text-text-muted pt-1">
-                <span>Started: {j.startedAt ? new Date(j.startedAt).toLocaleTimeString() : "—"}</span>
-                <span>{j.completedAt ? new Date(j.completedAt).toLocaleTimeString() : "Running"}</span>
+                <span>Started: {formatDateTime(j.startedAt)}</span>
+                <span>{j.completedAt ? formatDateTime(j.completedAt) : "Running"}</span>
               </div>
             </Card>
           ))
@@ -208,11 +222,11 @@ export function JobsInfiniteList({ initialData, total }: Props) {
                     <TableCell className={`text-right font-mono ${(j.itemsFailed ?? 0) > 0 ? "text-danger font-semibold" : "text-text-muted"}`}>
                       {j.itemsFailed ?? 0}
                     </TableCell>
-                    <TableCell className="text-text-secondary text-[11px]">
-                      {j.startedAt ? new Date(j.startedAt).toLocaleTimeString() : "—"}
+                    <TableCell className="text-text-secondary text-[11px] whitespace-nowrap">
+                      {formatDateTime(j.startedAt)}
                     </TableCell>
-                    <TableCell className="text-text-secondary text-[11px]">
-                      {j.completedAt ? new Date(j.completedAt).toLocaleTimeString() : "In-flight"}
+                    <TableCell className="text-text-secondary text-[11px] whitespace-nowrap">
+                      {j.completedAt ? formatDateTime(j.completedAt) : "In-flight"}
                     </TableCell>
                   </TableRow>
                 ))

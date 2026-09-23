@@ -46,26 +46,45 @@ async function setupCronJobs() {
   const desiredJobs: Array<{
     title: string;
     path: string;
+    hours: number[];
     minutes: number[];
     description: string;
   }> = [
     {
       title: 'LeadMiner Auto-Dispatcher',
       path: '/api/workers/dispatch',
+      hours: [-1], // Every hour
       minutes: [0, 15, 30, 45], // Every 15 minutes
       description: 'Dispatches scheduled emails smoothly throughout the day',
     },
     {
       title: 'LeadMiner Linkpage Enrichment',
       path: '/api/workers/linkpage-enrichment',
+      hours: [-1], // Every hour
       minutes: [5], // Once every hour at :05
       description: 'Continuously unrolls Linktree/Beacons pages to discover emails',
+    },
+    {
+      title: 'LeadMiner Autonomous Discovery',
+      path: '/api/workers/discovery?batchSize=10',
+      hours: [0, 3, 6, 9, 12, 15, 18, 21], // Every 3 hours (8 runs/day * 10 keywords = 80 search calls <= 100 quota)
+      minutes: [10],
+      description: 'Continuously scrapes YouTube for new leads using keyword queue within daily quota',
+    },
+    {
+      title: 'LeadMiner Daily Autonomous Pipeline',
+      path: '/api/workers/pipeline',
+      hours: [13], // Once daily at 13:30 UTC
+      minutes: [30],
+      description: 'Daily end-to-end pipeline: cleanup, reply sync, discovery, verification, planner, dispatch',
     },
   ];
 
   for (const dj of desiredJobs) {
+    await new Promise((r) => setTimeout(r, 2000));
     const targetUrl = `${appUrl}${dj.path}`;
-    const existing = listData.jobs.find((j) => j.title === dj.title || j.url.includes(dj.path));
+    const basePath = dj.path.split('?')[0];
+    const existing = listData.jobs.find((j) => j.title === dj.title || j.url.includes(basePath));
 
     const payload: CronJobPayload = {
       job: {
@@ -75,7 +94,7 @@ async function setupCronJobs() {
         saveResponses: true,
         schedule: {
           timezone: 'UTC',
-          hours: [-1],
+          hours: dj.hours,
           mdays: [-1],
           minutes: dj.minutes,
           months: [-1],
