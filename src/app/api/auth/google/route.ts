@@ -21,7 +21,9 @@ export async function GET(req: NextRequest) {
   }
 
   // Generate cryptographically secure signed state parameter and cookie
-  const { state, cookieHeader } = generateOAuthState();
+  const email = auth.email || 'resolviaai@gmail.com';
+  const origin = req.nextUrl.origin;
+  const { state, cookieHeader } = generateOAuthState(email, origin);
 
   const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
   googleAuthUrl.searchParams.set('client_id', clientId);

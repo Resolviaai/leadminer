@@ -51,6 +51,7 @@ export function CampaignToggleButton({ campaignId, initialStatus }: Props) {
       size="sm"
       variant="outline"
       onClick={handleToggle}
+      disabled={isPending}
       className="gap-1.5 min-h-[38px] sm:h-8 px-3 text-xs active:scale-[0.98] transition-all cursor-pointer select-none"
     >
       {isPending ? (

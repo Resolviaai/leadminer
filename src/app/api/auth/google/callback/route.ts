@@ -5,7 +5,7 @@ import { gmailAccounts } from "../../../../../db/schema";
 import { env } from "../../../../../config/env";
 import { eq } from "drizzle-orm";
 import { encryptionService } from "@/services/security/encryption.service";
-import { verifyOAuthState, OAUTH_STATE_COOKIE } from "@/lib/api-auth";
+import { parseAndVerifyOAuthState, createSessionCookie, OAUTH_STATE_COOKIE } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -13,26 +13,62 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const code = searchParams.get("code");
   const error = searchParams.get("error");
-
-  if (error) {
-    return NextResponse.redirect(
-      new URL(`/gmail?error=${encodeURIComponent(error)}`, req.url)
-    );
-  }
-
   const state = searchParams.get("state");
   const cookieState = req.cookies.get(OAUTH_STATE_COOKIE)?.value;
 
-  // SEC-03: Strict CSRF protection via cryptographically signed state parameter
-  if (!verifyOAuthState(state, cookieState)) {
-    console.error("[OAuth Callback] State verification failed: invalid or missing CSRF token");
-    return NextResponse.redirect(
-      new URL("/gmail?error=invalid_oauth_state", req.url)
+  const verification = parseAndVerifyOAuthState(state, cookieState);
+  const operatorEmail = verification.email || 'resolviaai@gmail.com';
+
+  // Determine target origin: if origin was provided and valid, use it; otherwise fallback to req.nextUrl.origin
+  let targetOrigin = req.nextUrl.origin;
+  if (verification.origin) {
+    try {
+      const parsed = new URL(verification.origin);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        targetOrigin = parsed.origin;
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  const makeRedirect = (pathAndQuery: string) => {
+    let destinationUrl: URL;
+    try {
+      destinationUrl = new URL(pathAndQuery, targetOrigin);
+    } catch {
+      destinationUrl = new URL(pathAndQuery, req.url);
+    }
+
+    const res = NextResponse.redirect(destinationUrl.toString(), { status: 302 });
+
+    // Always re-issue the operator session cookie on the redirect response
+    // so the operator is NEVER redirected to /login!
+    res.headers.append('Set-Cookie', createSessionCookie(operatorEmail));
+
+    // Clear the OAuth state cookie
+    const isProd = env.NODE_ENV === 'production';
+    res.headers.append(
+      'Set-Cookie',
+      `${OAUTH_STATE_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${isProd ? '; Secure' : ''}`
     );
+
+    return res;
+  };
+
+  if (error) {
+    console.error("[OAuth Callback] Google returned error:", error);
+    return makeRedirect(`/gmail?error=${encodeURIComponent(error)}`);
+  }
+
+  // SEC-03: Strict CSRF protection via cryptographically signed state parameter
+  if (!verification.valid) {
+    console.error("[OAuth Callback] State verification failed: invalid, tampered, or expired CSRF token");
+    return makeRedirect("/gmail?error=invalid_oauth_state");
   }
 
   if (!code) {
-    return NextResponse.redirect(new URL("/gmail?error=missing_code", req.url));
+    return makeRedirect("/gmail?error=missing_code");
   }
 
   try {
@@ -51,9 +87,7 @@ export async function GET(req: NextRequest) {
     const email = profile.data.emailAddress;
 
     if (!email) {
-      return NextResponse.redirect(
-        new URL("/gmail?error=missing_email", req.url)
-      );
+      return makeRedirect("/gmail?error=missing_email");
     }
 
     const expiresAt = tokens.expiry_date ? new Date(tokens.expiry_date) : null;
@@ -109,21 +143,10 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const res = NextResponse.redirect(new URL("/gmail?success=connected", req.url));
-    res.headers.set(
-      "Set-Cookie",
-      `${OAUTH_STATE_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`
-    );
-    return res;
+    return makeRedirect(`/gmail?success=connected&email=${encodeURIComponent(email)}`);
   } catch (err: unknown) {
     console.error("[Google OAuth Callback Error]", err);
-    return NextResponse.redirect(
-      new URL(
-        `/gmail?error=${encodeURIComponent(
-          err instanceof Error ? err.message : "auth_failed"
-        )}`,
-        req.url
-      )
-    );
+    const errMessage = err instanceof Error ? err.message : "auth_failed";
+    return makeRedirect(`/gmail?error=${encodeURIComponent(errMessage)}`);
   }
 }

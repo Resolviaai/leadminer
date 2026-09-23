@@ -53,6 +53,16 @@ export async function runYouTubeDataRefresh(batchLimit = 50): Promise<{
 
     const { channels, quotaReached } = await discoveryService.enrichChannelsBatch(channelIds);
 
+    // P0-5: If quota was reached or the batch request failed entirely, abort without any lead mutations.
+    // Only proceed if the batch succeeded (quotaReached === false).
+    if (quotaReached) {
+      await jobRunner.logEvent(jobId, 'JOB_COMPLETED', 'WARN',
+        `YouTube refresh aborted — API quota reached. No leads modified. Retry when quota resets.`
+      );
+      await jobRunner.completeJob(jobId, 0);
+      return { processed: staleLeads.length, refreshed: 0, deletedOrTerminated: 0, quotaReached: true };
+    }
+
     const returnedMap = new Map<string, YouTubeChannelDetails>(channels.map((c) => [c.channelId, c]));
     let refreshedCount = 0;
     let deletedCount = 0;
@@ -78,8 +88,27 @@ export async function runYouTubeDataRefresh(batchLimit = 50): Promise<{
 
         refreshedCount++;
       } else {
+        // Channel not in results — confirm with a dedicated single-channel query before disqualifying
+        // This prevents false positives from partial batch failures
+        let confirmedGone = false;
+        try {
+          const { channels: singleCheck, quotaReached: singleQuota } =
+            await discoveryService.enrichChannelsBatch([lead.channelId]);
+          if (!singleQuota && singleCheck.length === 0) {
+            confirmedGone = true;
+          }
+        } catch (verifyErr: any) {
+          console.warn(`[YouTube Refresh] Single-channel verification failed for ${lead.channelId}: ${verifyErr.message}. Skipping disqualification.`);
+        }
+
+        if (!confirmedGone) {
+          // Could not confirm — skip to avoid false positive deletion
+          console.warn(`[YouTube Refresh] Channel ${lead.channelId} not in batch results but single-check inconclusive. Skipping.`);
+          continue;
+        }
+
         // Channel was deleted or terminated on YouTube: disqualify and cancel any active sequences
-        console.warn(`[YouTube Refresh] Channel ${lead.channelId} (${lead.channelTitle}) no longer exists on YouTube. Disqualifying.`);
+        console.warn(`[YouTube Refresh] Channel ${lead.channelId} (${lead.channelTitle}) confirmed gone from YouTube. Disqualifying.`);
         await db
           .update(leads)
           .set({

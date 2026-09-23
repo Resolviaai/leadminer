@@ -38,10 +38,12 @@ export default async function GmailAccountsPage() {
   const accounts = await getGmailAccounts();
 
   return (
-    <GmailAccountsClient
-      initialAccounts={accounts}
-      googleClientId={env.GOOGLE_CLIENT_ID}
-      googleRedirectUri={env.GOOGLE_REDIRECT_URI}
-    />
+    <React.Suspense fallback={<div className="p-6 text-sm text-text-muted">Loading connected inboxes...</div>}>
+      <GmailAccountsClient
+        initialAccounts={accounts}
+        googleClientId={env.GOOGLE_CLIENT_ID}
+        googleRedirectUri={env.GOOGLE_REDIRECT_URI}
+      />
+    </React.Suspense>
   );
 }

@@ -4,6 +4,8 @@ CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
 CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA pg_catalog;
 
 -- Schedule autonomous 15-minute outreach dispatch ticker
+-- Note: Configure custom database setting via:
+-- ALTER DATABASE postgres SET "app.settings.cron_secret" = 'your-cron-secret-here';
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') AND
@@ -13,14 +15,17 @@ BEGIN
     PERFORM cron.unschedule('dispatch-scheduled-outreach')
     WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'dispatch-scheduled-outreach');
 
-    -- Schedule every 15 minutes
+    -- Schedule every 15 minutes with dynamic secret setting
     PERFORM cron.schedule(
       'dispatch-scheduled-outreach',
       '*/15 * * * *',
       $cmd$
       SELECT net.http_get(
         url := 'https://leadminer-app.vercel.app/api/workers/dispatch',
-        headers := '{"Authorization": "Bearer 7d3a8f1e5c2b9a4d6f8e0b1c3a5d7e9f"}'::jsonb
+        headers := jsonb_build_object(
+          'Authorization',
+          'Bearer ' || coalesce(nullif(current_setting('app.settings.cron_secret', true), ''), 'CONFIGURE_CRON_SECRET_IN_SETTINGS')
+        )
       );
       $cmd$
     );

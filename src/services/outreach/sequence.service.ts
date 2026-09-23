@@ -495,39 +495,43 @@ export class SequenceService {
       return { sequence: seq, steps: steps as any };
     }
 
-    // Auto-create default sequence for campaign
+    // Auto-create default sequence for campaign (wrapped in transaction to prevent orphaned sequences)
     const defaultTemplate = await db.select().from(templates).limit(1);
     const templateId = defaultTemplate.length > 0 ? defaultTemplate[0].id : 1;
 
-    const insertedSeq = await db
-      .insert(sequences)
-      .values({
-        campaignId,
-        name: 'Default Outreach Sequence',
-        weekendPolicy: 'SKIP_WEEKENDS',
-        capacityBias: '0.00',
-        isActive: true,
-      })
-      .returning();
+    const newSeq = await db.transaction(async (tx) => {
+      const insertedSeq = await tx
+        .insert(sequences)
+        .values({
+          campaignId,
+          name: 'Default Outreach Sequence',
+          weekendPolicy: 'SKIP_WEEKENDS',
+          capacityBias: '0.00',
+          isActive: true,
+        })
+        .returning();
 
-    const newSeq = insertedSeq[0];
+      const seq = insertedSeq[0];
 
-    // Insert Step 1 (Initial Pitch)
-    await db.insert(sequenceSteps).values({
-      sequenceId: newSeq.id,
-      stepNumber: 1,
-      templateId,
-      delayDays: 0,
-      delayHours: 0,
-    });
+      // Insert Step 1 (Initial Pitch)
+      await tx.insert(sequenceSteps).values({
+        sequenceId: seq.id,
+        stepNumber: 1,
+        templateId,
+        delayDays: 0,
+        delayHours: 0,
+      });
 
-    // Insert Step 2 (Follow-up #1, 2 days later)
-    await db.insert(sequenceSteps).values({
-      sequenceId: newSeq.id,
-      stepNumber: 2,
-      templateId,
-      delayDays: 2,
-      delayHours: 0,
+      // Insert Step 2 (Follow-up #1, 2 days later)
+      await tx.insert(sequenceSteps).values({
+        sequenceId: seq.id,
+        stepNumber: 2,
+        templateId,
+        delayDays: 2,
+        delayHours: 0,
+      });
+
+      return seq;
     });
 
     const steps = await db

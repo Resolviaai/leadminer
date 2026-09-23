@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Mail,
   Plus,
@@ -48,6 +48,17 @@ export function GmailAccountsClient({
   const [isPermanent, setIsPermanent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const successParam = searchParams.get("success");
+  const errorParam = searchParams.get("error");
+  const emailParam = searchParams.get("email");
+  const [dismissBanner, setDismissBanner] = useState(false);
+
+  useEffect(() => {
+    if (successParam === "connected") {
+      router.refresh();
+    }
+  }, [successParam, router]);
 
   const activeCount = accounts.filter((a) => a.status === "ACTIVE").length;
   const totalSentToday = accounts.reduce((sum, acc) => sum + (acc.sentToday || 0), 0);
@@ -102,6 +113,60 @@ export function GmailAccountsClient({
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto w-full">
+      {/* Dynamic OAuth Status Banners */}
+      {successParam === "connected" && !dismissBanner && (
+        <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 flex items-start justify-between gap-3 text-emerald-300">
+          <div className="flex items-start gap-3">
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 mt-0.5 shrink-0" />
+            <div>
+              <h3 className="text-sm font-semibold text-emerald-200">Google Account Connected</h3>
+              <p className="text-xs text-emerald-300/90 mt-0.5">
+                {emailParam
+                  ? `Successfully authorized and connected ${emailParam}. Quota and sending rotation are now active.`
+                  : "Google account successfully authorized and active for outreach."}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setDismissBanner(true)}
+            className="text-emerald-400 hover:text-emerald-200 p-1 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {errorParam && !dismissBanner && (
+        <div className="p-4 rounded-xl border border-rose-500/20 bg-rose-500/10 flex items-start justify-between gap-3 text-rose-300">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-rose-400 mt-0.5 shrink-0" />
+            <div>
+              <h3 className="text-sm font-semibold text-rose-200">Connection Failed</h3>
+              <p className="text-xs text-rose-300/90 mt-0.5">
+                {errorParam === "invalid_oauth_state"
+                  ? "The authorization session expired or security verification timed out. Please try connecting again."
+                  : errorParam === "access_denied"
+                  ? "Gmail permissions were declined. LeadMiner requires Gmail send and read permissions to manage outreach."
+                  : `Google OAuth error: ${errorParam}`}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <a href={oauthUrl}>
+              <Button size="sm" variant="outline" className="h-8 px-3 text-xs bg-rose-950/40 border-rose-500/30 text-rose-200 hover:bg-rose-900/40">
+                Retry
+              </Button>
+            </a>
+            <button
+              onClick={() => setDismissBanner(true)}
+              className="text-rose-400 hover:text-rose-200 p-1 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header Card */}
       <Card className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-border">
         <div>

@@ -244,10 +244,22 @@ export { COOKIE_NAME };
 // ─── OAuth State CSRF Protection Helpers ─────────────────────────────────────
 export const OAUTH_STATE_COOKIE = 'lm_oauth_state';
 
-export function generateOAuthState(): { state: string; cookieHeader: string } {
+export interface OAuthStatePayload {
+  nonce: string;
+  timestamp: number;
+  email?: string;
+  origin?: string;
+}
+
+export function generateOAuthState(email?: string, origin?: string): { state: string; cookieHeader: string } {
   const nonce = crypto.randomBytes(16).toString('hex');
   const timestamp = Date.now();
-  const raw = `${nonce}.${timestamp}`;
+  let part1 = `${timestamp}`;
+  if (email || origin) {
+    const meta = Buffer.from(JSON.stringify({ email, origin })).toString('base64url');
+    part1 = `${timestamp}-${meta}`;
+  }
+  const raw = `${nonce}.${part1}`;
   const sig = crypto.createHmac('sha256', env.SESSION_SECRET).update(raw).digest('base64url');
   const state = `${raw}.${sig}`;
   const isProd = env.NODE_ENV === 'production';
@@ -255,28 +267,55 @@ export function generateOAuthState(): { state: string; cookieHeader: string } {
   return { state, cookieHeader };
 }
 
-export function verifyOAuthState(state: string | null | undefined, cookieVal: string | null | undefined): boolean {
-  if (!state || !cookieVal) return false;
-  if (state !== cookieVal) return false;
+export function parseAndVerifyOAuthState(
+  state: string | null | undefined,
+  cookieVal?: string | null | undefined
+): { valid: boolean; email?: string; origin?: string } {
+  if (!state) return { valid: false };
+
+  // If cookieVal is provided and doesn't match state, reject (CSRF mismatch)
+  if (cookieVal && cookieVal !== state) {
+    return { valid: false };
+  }
 
   const parts = state.split('.');
-  if (parts.length !== 3) return false;
-  const [nonce, timestampStr, sig] = parts;
-  const raw = `${nonce}.${timestampStr}`;
+  if (parts.length !== 3) return { valid: false };
+  const [nonce, part1, sig] = parts;
+  const raw = `${nonce}.${part1}`;
   const expectedSig = crypto.createHmac('sha256', env.SESSION_SECRET).update(raw).digest('base64url');
 
   if (
     sig.length !== expectedSig.length ||
     !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))
   ) {
-    return false;
+    return { valid: false };
   }
 
+  const [timestampStr, metaStr] = part1.split('-');
   const timestamp = parseInt(timestampStr, 10);
   if (isNaN(timestamp) || Date.now() - timestamp > 10 * 60 * 1000) {
     // Expired (10 min TTL)
-    return false;
+    return { valid: false };
   }
 
-  return true;
+  let email: string | undefined;
+  let origin: string | undefined;
+
+  if (metaStr) {
+    try {
+      const parsed = JSON.parse(Buffer.from(metaStr, 'base64url').toString('utf8'));
+      email = parsed.email;
+      origin = parsed.origin;
+    } catch {
+      // non-fatal fallback
+    }
+  }
+
+  return { valid: true, email, origin };
+}
+
+export function verifyOAuthState(state: string | null | undefined, cookieVal: string | null | undefined): boolean {
+  if (!state || !cookieVal) return false;
+  if (state !== cookieVal) return false;
+  return parseAndVerifyOAuthState(state, cookieVal).valid;
 }

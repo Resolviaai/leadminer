@@ -281,7 +281,7 @@ export async function runPlanner(): Promise<PlannerResult> {
           const scheduledTime = new Date(startTime.getTime() + slotOffsetMinutes * 60 * 1000);
 
           try {
-            await db
+            const inserted = await db
               .insert(scheduledEmails)
               .values({
                 campaignId: campaign.id,
@@ -294,12 +294,15 @@ export async function runPlanner(): Promise<PlannerResult> {
                 scheduledDate: currentPtDate,
                 status: 'PENDING',
               })
-              .onConflictDoNothing();
+              .onConflictDoNothing()
+              .returning({ id: scheduledEmails.id });
 
-            alreadyScheduledContactSteps.add(`${item.contactId}_step_${item.currentStep}`);
-            alreadyScheduledByAccount.set(account.id, (alreadyScheduledByAccount.get(account.id) || 0) + 1);
-            accountFuScheduled++;
-            totalScheduledFollowUps++;
+            if (inserted.length > 0) {
+              alreadyScheduledContactSteps.add(`${item.contactId}_step_${item.currentStep}`);
+              alreadyScheduledByAccount.set(account.id, (alreadyScheduledByAccount.get(account.id) || 0) + 1);
+              accountFuScheduled++;
+              totalScheduledFollowUps++;
+            }
           } catch (err: any) {
             console.warn(`    ⚠️ Follow-up scheduling error for contact ${item.contactId}:`, err.message);
             totalSkipped++;
@@ -374,9 +377,10 @@ export async function runPlanner(): Promise<PlannerResult> {
             const scheduledTime = new Date(startTime.getTime() + slotOffsetMinutes * 60 * 1000);
 
             try {
+              let insertedId: number | null = null;
               // ATOMIC TRANSACTION: Insert scheduled email and leadSequenceProgress together (P2-4)
               await db.transaction(async (tx) => {
-                await tx
+                const inserted = await tx
                   .insert(scheduledEmails)
                   .values({
                     campaignId: campaign.id,
@@ -388,42 +392,49 @@ export async function runPlanner(): Promise<PlannerResult> {
                     scheduledDate: currentPtDate,
                     status: 'PENDING',
                   })
-                  .onConflictDoNothing();
+                  .onConflictDoNothing()
+                  .returning({ id: scheduledEmails.id });
 
-                // Initialize state machine for this lead
-                await tx
-                  .insert(leadSequenceProgress)
-                  .values({
-                    leadId: cand.leadId,
-                    campaignId: campaign.id,
-                    contactId: cand.contactId,
-                    sequenceId: sequence.id,
-                    currentStep: 1,
-                    status: 'ACTIVE',
-                    pinnedGmailAccountId: account.id,
-                  })
-                  .onConflictDoNothing();
+                if (inserted.length > 0) {
+                  insertedId = inserted[0].id;
+                  // Initialize state machine for this lead
+                  await tx
+                    .insert(leadSequenceProgress)
+                    .values({
+                      leadId: cand.leadId,
+                      campaignId: campaign.id,
+                      contactId: cand.contactId,
+                      sequenceId: sequence.id,
+                      currentStep: 1,
+                      status: 'ACTIVE',
+                      pinnedGmailAccountId: account.id,
+                    })
+                    .onConflictDoNothing();
+                }
               });
 
-              alreadyScheduledContactSteps.add(`${cand.contactId}_step_1`);
-              alreadyScheduledByAccount.set(account.id, (alreadyScheduledByAccount.get(account.id) || 0) + 1);
-              contactedIds.add(cand.contactId);
-              accountNewScheduled++;
-              totalScheduledNew++;
+              if (insertedId !== null) {
+                alreadyScheduledContactSteps.add(`${cand.contactId}_step_1`);
+                alreadyScheduledByAccount.set(account.id, (alreadyScheduledByAccount.get(account.id) || 0) + 1);
+                contactedIds.add(cand.contactId);
+                accountNewScheduled++;
+                totalScheduledNew++;
+              }
             } catch (err: any) {
               console.warn(`    ⚠️ Step 1 scheduling error for contact ${cand.contactId}:`, err.message);
               totalSkipped++;
             }
           } else {
-            // Secondary contact: staggered +24h * cIdx
+            // Secondary contact: staggered +24h * cIdx (P1-9: Pacific Timezone)
             const slotOffsetMinutes = (accountFuScheduled + accountNewScheduled) * 12;
             const staggeredTime = new Date(startTime.getTime() + (cIdx * 24 * 60 + slotOffsetMinutes) * 60 * 1000);
-            const staggeredDateStr = staggeredTime.toISOString().slice(0, 10);
+            const staggeredDateStr = gmailSendingService.getPacificDateStr(staggeredTime);
 
             try {
+              let insertedSecId: number | null = null;
               // ATOMIC TRANSACTION: Insert staggered scheduled email and progress together (P2-4)
               await db.transaction(async (tx) => {
-                await tx
+                const inserted = await tx
                   .insert(scheduledEmails)
                   .values({
                     campaignId: campaign.id,
@@ -435,24 +446,35 @@ export async function runPlanner(): Promise<PlannerResult> {
                     scheduledDate: staggeredDateStr,
                     status: 'PENDING',
                   })
-                  .onConflictDoNothing();
+                  .onConflictDoNothing()
+                  .returning({ id: scheduledEmails.id });
 
-                await tx
-                  .insert(leadSequenceProgress)
-                  .values({
-                    leadId: cand.leadId,
-                    campaignId: campaign.id,
-                    contactId: cand.contactId,
-                    sequenceId: sequence.id,
-                    currentStep: 1,
-                    status: 'ACTIVE',
-                    pinnedGmailAccountId: account.id,
-                  })
-                  .onConflictDoNothing();
+                if (inserted.length > 0) {
+                  insertedSecId = inserted[0].id;
+                  await tx
+                    .insert(leadSequenceProgress)
+                    .values({
+                      leadId: cand.leadId,
+                      campaignId: campaign.id,
+                      contactId: cand.contactId,
+                      sequenceId: sequence.id,
+                      currentStep: 1,
+                      status: 'ACTIVE',
+                      pinnedGmailAccountId: account.id,
+                    })
+                    .onConflictDoNothing();
+                }
               });
 
-              alreadyScheduledContactSteps.add(`${cand.contactId}_step_1`);
-              contactedIds.add(cand.contactId);
+              if (insertedSecId !== null) {
+                alreadyScheduledContactSteps.add(`${cand.contactId}_step_1`);
+                contactedIds.add(cand.contactId);
+                if (staggeredDateStr === currentPtDate) {
+                  alreadyScheduledByAccount.set(account.id, (alreadyScheduledByAccount.get(account.id) || 0) + 1);
+                  accountNewScheduled++;
+                  totalScheduledNew++;
+                }
+              }
             } catch (err: any) {
               console.warn(`    ⚠️ Staggered Step 1 scheduling error for secondary contact ${cand.contactId}:`, err.message);
             }

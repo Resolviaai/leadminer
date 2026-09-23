@@ -813,6 +813,42 @@ export class GmailSendingService {
         };
       }
 
+      // P0-4: Detect ambiguous post-dispatch network failures.
+      // If the error is a network timeout/reset that may have occurred AFTER dispatch,
+      // we cannot know if Gmail received it. Lock UNCONFIRMED and do NOT release quota.
+      const errMsg: string = (error as any)?.message || '';
+      const isAmbiguousNetworkError =
+        errMsg.includes('ETIMEDOUT') ||
+        errMsg.includes('ECONNRESET') ||
+        errMsg.includes('socket hang up') ||
+        errMsg.includes('ECONNABORTED') ||
+        errMsg.includes('network timeout');
+
+      if (isAmbiguousNetworkError && messageRecordId) {
+        console.error(
+          `⚠️ [AMBIGUOUS DISPATCH] Network dropped for ${account.email} — cannot confirm if Gmail received message. Locking UNCONFIRMED. Quota retained.`
+        );
+        try {
+          await db
+            .update(messages)
+            .set({
+              sendStatus: 'UNCONFIRMED',
+              error: `Ambiguous dispatch: network dropped after transmit. ${errMsg}`,
+              updatedAt: new Date(),
+            })
+            .where(eq(messages.id, messageRecordId));
+        } catch {
+          // non-blocking fallback
+        }
+        // Do NOT release reservation — quota preserved to prevent duplicate send
+        return {
+          success: false,
+          accountId: account.id,
+          skippedReason: 'POST_SEND_VERIFICATION_FAILED',
+          error: `Ambiguous network failure after dispatch: ${errMsg}`,
+        };
+      }
+
       // Update message row to 'FAILED' only if live send NEVER happened
       if (messageRecordId) {
         try {

@@ -87,7 +87,7 @@ async function executePipeline() {
   if (elapsedSeconds > 40) {
     console.warn(`[Pipeline] Execution taking ${elapsedSeconds}s, skipping remaining steps to avoid Hobby timeout.`);
     return {
-      success: true,
+      success: false,
       partial: true,
       durationSeconds: Number(elapsedSeconds.toFixed(2)),
       pipeline: results,
