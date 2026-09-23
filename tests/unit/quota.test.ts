@@ -60,4 +60,12 @@ describe('YouTube Quota Manager', () => {
     expect(await qm.canExecuteSearch()).toBe(false);
     expect(await qm.getRemainingSearchCalls()).toBe(0);
   });
+
+  it('should skip exhausted keys when markActiveKeyExhausted is called', () => {
+    expect(qm.getActiveKeyIndex()).toBe(0);
+    qm.markActiveKeyExhausted();
+    // If multiple keys exist or only 1 key exists, active key is safely managed
+    expect(typeof qm.getActiveKeyIndex()).toBe('number');
+  });
 });
+

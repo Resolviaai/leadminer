@@ -7,6 +7,8 @@ import { emailExtractor } from '../services/extraction/email.extractor';
 import { socialExtractor } from '../services/extraction/social.extractor';
 import { websiteScraper } from '../services/extraction/website.scraper';
 import { jobRunner } from '../services/jobs/job.runner';
+import { getAvailableYouTubeKeys } from '../services/youtube/quota';
+import { telegramService } from '../services/notifications/telegram.service';
 
 export function calculatePriorityScore(newLeadsCount: number): number {
   if (newLeadsCount >= 11) return 90; // High yield
@@ -19,6 +21,17 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
   console.log(`\n======================================================`);
   console.log(`🚀 Starting YouTube Discovery Batch Worker (batchSize=${batchSize})`);
   console.log(`======================================================\n`);
+
+  // Mandatory API Key Guard: fail closed if no valid YouTube Data API keys configured
+  const availableKeys = getAvailableYouTubeKeys();
+  if (availableKeys.length === 0) {
+    console.error('⛔ [Discovery Worker] No valid YouTube Data API keys configured. Halting discovery.');
+    await telegramService.notifyCriticalError(
+      'YouTube Discovery Halted: No API Key',
+      'No valid YouTube Data API keys configured in environment (YOUTUBE_API_KEY). Halting discovery to prevent mock or bad data generation.'
+    );
+    return { processed: 0, leadsDiscovered: 0, quotaReached: true };
+  }
 
   // 1. Run recovery for any abandoned work from previous runs
   await jobRunner.recoverStaleJobsAndKeywords(env.WORKER_STALE_TIMEOUT_MINUTES);

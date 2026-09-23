@@ -10,12 +10,23 @@ export function getAvailableYouTubeKeys(): string[] {
     env.YOUTUBE_API_KEY_2,
     env.YOUTUBE_API_KEY_3,
     env.YOUTUBE_API_KEY_4,
-  ].filter((k): k is string => Boolean(k && k.trim().length > 0));
+  ].filter(
+    (k): k is string =>
+      Boolean(
+        k &&
+        k.trim().length > 0 &&
+        !k.startsWith('mock_') &&
+        !k.includes('[YOUR') &&
+        !k.startsWith('your_') &&
+        k.toLowerCase() !== 'none'
+      )
+  );
 }
 
 export class YouTubeQuotaManager {
   private inMemoryQuota: QuotaState;
   private inMemoryOnly: boolean;
+  private exhaustedKeyIndices = new Set<number>();
 
   constructor(inMemoryOnly?: boolean) {
     this.inMemoryOnly = inMemoryOnly ?? (process.env.NODE_ENV === 'test' || env.NODE_ENV === 'test');
@@ -36,13 +47,19 @@ export class YouTubeQuotaManager {
   public getActiveKeyIndex(): number {
     const keys = getAvailableYouTubeKeys();
     if (keys.length <= 1) return 0;
-    const used = this.inMemoryQuota.searchCallsUsedToday;
-    const index = Math.min(Math.floor(used / env.YOUTUBE_DAILY_SEARCH_LIMIT), keys.length - 1);
-    return Math.max(0, index);
+    // Find the first key that has not been exhausted today
+    for (let i = 0; i < keys.length; i++) {
+      if (!this.exhaustedKeyIndices.has(i)) {
+        return i;
+      }
+    }
+    return 0;
   }
 
   public markActiveKeyExhausted(): void {
     const currentIdx = this.getActiveKeyIndex();
+    this.exhaustedKeyIndices.add(currentIdx);
+    console.warn(`[YouTube Quota] Marked API key index ${currentIdx} as quota-exhausted.`);
     const nextTarget = (currentIdx + 1) * env.YOUTUBE_DAILY_SEARCH_LIMIT;
     this.inMemoryQuota.searchCallsUsedToday = Math.max(this.inMemoryQuota.searchCallsUsedToday, nextTarget);
   }
@@ -80,6 +97,7 @@ export class YouTubeQuotaManager {
       this.inMemoryQuota.searchCallsUsedToday = 0;
       this.inMemoryQuota.generalQuotaUsedToday = 0;
       this.inMemoryQuota.lastResetPt = new Date().toISOString();
+      this.exhaustedKeyIndices.clear();
       await this.persistQuotaState();
     }
 
@@ -169,9 +187,12 @@ export class YouTubeQuotaManager {
 
       return false;
     } catch (e) {
-      if (this.inMemoryQuota.searchCallsUsedToday < this.inMemoryQuota.searchCallsDailyLimit) {
-        this.inMemoryQuota.searchCallsUsedToday += 1;
-        return true;
+      console.error('[YouTube Quota] DB error during tryClaimSearchCall — failing closed:', e);
+      if (process.env.NODE_ENV === 'test' || env.NODE_ENV === 'test') {
+        if (this.inMemoryQuota.searchCallsUsedToday < this.inMemoryQuota.searchCallsDailyLimit) {
+          this.inMemoryQuota.searchCallsUsedToday += 1;
+          return true;
+        }
       }
       return false;
     }
@@ -223,9 +244,12 @@ export class YouTubeQuotaManager {
 
       return false;
     } catch (e) {
-      if (this.inMemoryQuota.generalQuotaUsedToday + units <= this.inMemoryQuota.generalQuotaDailyLimit) {
-        this.inMemoryQuota.generalQuotaUsedToday += units;
-        return true;
+      console.error('[YouTube Quota] DB error during tryClaimGeneralQuota — failing closed:', e);
+      if (process.env.NODE_ENV === 'test' || env.NODE_ENV === 'test') {
+        if (this.inMemoryQuota.generalQuotaUsedToday + units <= this.inMemoryQuota.generalQuotaDailyLimit) {
+          this.inMemoryQuota.generalQuotaUsedToday += units;
+          return true;
+        }
       }
       return false;
     }

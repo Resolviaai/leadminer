@@ -63,13 +63,8 @@ export class YouTubeDiscoveryService {
 
     const client = this.getClient();
     if (!client) {
-      const cleanQuery = params.query.replace(/[^a-zA-Z0-9]/g, '');
-      const count = Math.min(params.maxResults || 3, 3);
-      const mockIds: string[] = [];
-      for (let i = 1; i <= count; i++) {
-        mockIds.push(`UCmock_${cleanQuery.slice(0, 10)}_${i}`);
-      }
-      return { channelIds: mockIds, quotaReached: false };
+      console.error('[YouTube API] No YouTube client available. YOUTUBE_API_KEY is not configured or all keys exhausted.');
+      return { channelIds: [], quotaReached: false };
     }
 
     try {
@@ -126,22 +121,8 @@ export class YouTubeDiscoveryService {
 
     const client = this.getClient();
     if (!client) {
-      const mockChannels: YouTubeChannelDetails[] = uniqueChannelIds.map((id, index) => ({
-        channelId: id,
-        title: `Creator ${id.slice(-8)}`,
-        description: `Welcome to the official channel!\n\nFor business inquiries and sponsorships: business.${id.toLowerCase().slice(-6)}@gmail.com\n\nInstagram: @${id.slice(-6)}_official\nTwitter: @${id.slice(-6)}clips\nLinktree: https://linktr.ee/${id.slice(-6)}`,
-        customUrl: `@${id.slice(-8)}`,
-        publishedAt: new Date(Date.now() - 86400000 * 365).toISOString(),
-        thumbnailUrl: `https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200`,
-        subscriberCount: 25000 * (index + 1),
-        videoCount: 120 * (index + 1),
-        viewCount: 1500000 * (index + 1),
-        website: `https://${id.toLowerCase().slice(-6)}.com`,
-        country: 'US',
-        uploadsPlaylistId: `UU${id.slice(2)}`,
-        rawPayload: { mock: true, channelId: id },
-      }));
-      return { channels: mockChannels, quotaReached: false };
+      console.error('[YouTube API] No YouTube client available. YOUTUBE_API_KEY is not configured or all keys exhausted.');
+      return { channels: [], quotaReached: false };
     }
 
     try {
