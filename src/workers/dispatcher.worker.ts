@@ -389,6 +389,7 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
           .set({
             status: item.attempts >= maxAttempts ? 'FAILED' : 'PENDING',
             scheduledAt: retryTime,
+            scheduledDate: gmailSendingService.getPacificDateStr(retryTime),
             error: `Rate limited: ${errorMessage}`,
             updatedAt: new Date(),
           })
@@ -429,6 +430,7 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
           .set({
             status: 'PENDING',
             scheduledAt: retryTime,
+            scheduledDate: gmailSendingService.getPacificDateStr(retryTime),
             error: errorMessage,
             updatedAt: new Date(),
           })

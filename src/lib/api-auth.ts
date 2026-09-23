@@ -240,3 +240,43 @@ export function validateLoginCredentials(email: string, password: string): boole
 }
 
 export { COOKIE_NAME };
+
+// ─── OAuth State CSRF Protection Helpers ─────────────────────────────────────
+export const OAUTH_STATE_COOKIE = 'lm_oauth_state';
+
+export function generateOAuthState(): { state: string; cookieHeader: string } {
+  const nonce = crypto.randomBytes(16).toString('hex');
+  const timestamp = Date.now();
+  const raw = `${nonce}.${timestamp}`;
+  const sig = crypto.createHmac('sha256', env.SESSION_SECRET).update(raw).digest('base64url');
+  const state = `${raw}.${sig}`;
+  const isProd = env.NODE_ENV === 'production';
+  const cookieHeader = `${OAUTH_STATE_COOKIE}=${state}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600${isProd ? '; Secure' : ''}`;
+  return { state, cookieHeader };
+}
+
+export function verifyOAuthState(state: string | null | undefined, cookieVal: string | null | undefined): boolean {
+  if (!state || !cookieVal) return false;
+  if (state !== cookieVal) return false;
+
+  const parts = state.split('.');
+  if (parts.length !== 3) return false;
+  const [nonce, timestampStr, sig] = parts;
+  const raw = `${nonce}.${timestampStr}`;
+  const expectedSig = crypto.createHmac('sha256', env.SESSION_SECRET).update(raw).digest('base64url');
+
+  if (
+    sig.length !== expectedSig.length ||
+    !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))
+  ) {
+    return false;
+  }
+
+  const timestamp = parseInt(timestampStr, 10);
+  if (isNaN(timestamp) || Date.now() - timestamp > 10 * 60 * 1000) {
+    // Expired (10 min TTL)
+    return false;
+  }
+
+  return true;
+}

@@ -48,7 +48,7 @@ export async function seedDefaults() {
       .values({
         name: 'Short-Form Viral Clipping Offer',
         subject: 'Quick question about {{channel_name}} clips',
-        body: `Hey {{first_name}},\n\n{{custom_line}}\n\nI run an agency that turns long-form YouTube episodes into high-retention Shorts, Reels, and TikToks. We handle hook editing, captions, and pacing so you get more reach with zero extra recording time.\n\nCould I send over 2 sample clips we edited from your recent upload for free? If you like them, they're yours to post.\n\nBest,\nLeadMiner Team\n\nOpt-out: reply STOP to unsubscribe.`,
+        body: `Hey {{first_name}},\n\n{{custom_line}}\n\nI run an agency that turns long-form YouTube episodes into high-retention Shorts, Reels, and TikToks. We handle hook editing, captions, and pacing so you get more reach with zero extra recording time.\n\nCould I send over 2 sample clips we edited from your recent upload for free? If you like them, they're yours to post.\n\nBest,\nLeadMiner Team`,
         variables: ['first_name', 'channel_name', 'channel_url', 'subscriber_count', 'custom_line'],
         isActive: true,
       })

@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateLoginCredentialsAsync, createSessionCookie } from '../../../../lib/api-auth';
+import { checkRateLimit, getClientIp } from '../../../../lib/rate-limiter';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
+  const ip = getClientIp(req);
+  const rl = checkRateLimit('login', ip, 5, 60000); // 5 attempts per minute
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { success: false, error: 'Too many login attempts. Please wait 60 seconds.' },
+      { status: 429, headers: { 'Retry-After': '60' } }
+    );
+  }
+
   try {
     let email = '';
     let password = '';

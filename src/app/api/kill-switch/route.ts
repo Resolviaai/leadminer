@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/client';
-import { systemSettings } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { systemSettings, gmailAccounts } from '@/db/schema';
+import { eq, ne } from 'drizzle-orm';
 import { verifyDashboardAuth } from '@/lib/api-auth';
 
 export async function GET(req: NextRequest) {
@@ -9,16 +9,39 @@ export async function GET(req: NextRequest) {
   if (!auth.authorized) return auth.response!;
 
   try {
-    const record = await db
-      .select()
-      .from(systemSettings)
-      .where(eq(systemSettings.key, 'kill_switch'))
-      .limit(1);
+    const [record, inboxes] = await Promise.all([
+      db
+        .select()
+        .from(systemSettings)
+        .where(eq(systemSettings.key, 'kill_switch'))
+        .limit(1),
+      db
+        .select({
+          id: gmailAccounts.id,
+          status: gmailAccounts.status,
+          tokenGrantedAt: gmailAccounts.tokenGrantedAt,
+        })
+        .from(gmailAccounts)
+        .where(ne(gmailAccounts.status, 'DISCONNECTED')),
+    ]);
 
     const enabled = record.length > 0 && record[0].value ? Boolean((record[0].value as any).enabled) : false;
-    return NextResponse.json({ success: true, enabled });
+
+    // Check for tokens older than 5 days (Google Testing 7-day limit) or AUTH_ERROR
+    const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+    const expiringCount = inboxes.filter(
+      (acc) => acc.tokenGrantedAt && new Date(acc.tokenGrantedAt) < fiveDaysAgo
+    ).length;
+    const authErrorCount = inboxes.filter((acc) => acc.status === 'AUTH_ERROR').length;
+
+    return NextResponse.json({
+      success: true,
+      enabled,
+      expiringCount,
+      authErrorCount,
+    });
   } catch (error: any) {
-    return NextResponse.json({ success: false, enabled: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, enabled: false, expiringCount: 0, authErrorCount: 0, error: error.message }, { status: 500 });
   }
 }
 

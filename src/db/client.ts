@@ -14,7 +14,7 @@ export function getDbPool(): Pool {
       ssl: env.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false },
       max: process.env.NODE_ENV === 'production' ? 3 : 5,
       idleTimeoutMillis: 10000,
-      connectionTimeoutMillis: 5000,
+      connectionTimeoutMillis: 10000,
       statement_timeout: 15000, // 15s query timeout prevents hung queries wedging the pool
       query_timeout: 15000,
     });

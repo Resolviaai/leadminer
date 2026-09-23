@@ -5,6 +5,7 @@ import { eq, sql, and } from 'drizzle-orm';
 import { telegramService } from '../../../services/notifications/telegram.service';
 import { verifyUnsubscribeToken } from '../../../lib/unsubscribe-token';
 import { checkRateLimit, getClientIp } from '../../../lib/rate-limiter';
+import { sequenceService } from '../../../services/outreach/sequence.service';
 
 export const dynamic = 'force-dynamic';
 
@@ -76,6 +77,13 @@ async function handleUnsubscribe(email: string, leadIdStr?: string | null) {
           updatedAt: new Date(),
         })
         .where(eq(leads.id, verifiedLeadId));
+
+      // D7: Immediately cancel all PENDING scheduled emails for this lead
+      try {
+        await sequenceService.cancelSequenceForLead(verifiedLeadId, 'CANCELLED_OPT_OUT');
+      } catch (cancelErr: any) {
+        console.warn(`[Unsubscribe] Could not cancel sequence for lead #${verifiedLeadId}:`, cancelErr.message);
+      }
     }
   }
 

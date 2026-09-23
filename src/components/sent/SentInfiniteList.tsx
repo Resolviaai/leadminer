@@ -18,6 +18,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  AlertTriangle,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -316,6 +317,17 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
               {activeEmail.sentAt ? new Date(activeEmail.sentAt).toLocaleString() : "Recently sent"}
             </div>
           </div>
+
+          {/* Send / Delivery Error Display (N-P3-5) */}
+          {activeEmail.error && (
+            <div className="p-3.5 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-xs space-y-1">
+              <div className="font-semibold flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>Delivery / Send Failure</span>
+              </div>
+              <p className="font-mono text-[11px] break-words opacity-90">{activeEmail.error}</p>
+            </div>
+          )}
 
           {/* Email Body Card */}
           <div className="p-5 sm:p-6 rounded-xl bg-surface-200/60 border border-border">
@@ -622,7 +634,11 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
 
                   {/* Line 3: Body snippet */}
                   <div className="pl-6 text-[11px] text-text-muted line-clamp-1">
-                    {bodySnippet}
+                    {m.sendStatus === 'FAILED' && m.error ? (
+                      <span className="text-destructive font-mono">Error: {m.error}</span>
+                    ) : (
+                      bodySnippet
+                    )}
                   </div>
                 </div>
 
@@ -658,7 +674,11 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
                     </span>
                     <span className="text-text-muted mx-1.5 shrink-0">—</span>
                     <span className="text-text-muted font-normal text-[11px] truncate flex-1 min-w-0">
-                      {bodySnippet}
+                      {m.sendStatus === 'FAILED' && m.error ? (
+                        <span className="text-destructive font-mono">Error: {m.error}</span>
+                      ) : (
+                        bodySnippet
+                      )}
                     </span>
                   </div>
 

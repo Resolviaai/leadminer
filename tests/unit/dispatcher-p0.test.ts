@@ -32,6 +32,7 @@ const mockSendEmail = vi.fn();
 vi.mock('../../src/services/outreach/gmail.service', () => ({
   gmailSendingService: {
     sendEmail: (...args: any[]) => mockSendEmail(...args),
+    getPacificDateStr: (date = new Date()) => new Date(date).toISOString().split('T')[0],
   },
 }));
 

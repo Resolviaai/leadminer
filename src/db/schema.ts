@@ -207,6 +207,7 @@ export const leads = pgTable(
     phone: varchar('phone', { length: 50 }),
     contactPageUrl: varchar('contact_page_url', { length: 500 }),
     rawPayload: jsonb('raw_payload'),
+    refreshedAt: timestamp('refreshed_at', { withTimezone: true }),
   },
   (table) => [
     uniqueIndex('uq_leads_channel_id').on(table.channelId),
@@ -214,6 +215,7 @@ export const leads = pgTable(
     index('idx_leads_subscriber_count').on(table.subscriberCount),
     index('idx_leads_source_keyword').on(table.sourceKeywordId),
     index('idx_leads_country').on(table.country),
+    index('idx_leads_refreshed_at').on(table.refreshedAt),
   ]
 );
 

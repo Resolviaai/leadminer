@@ -16,7 +16,7 @@ export function RunDiscoveryButton() {
     setErrorMsg(null);
 
     try {
-      const res = await fetch('/api/workers/discovery', {
+      const res = await fetch('/api/actions/discovery', {
         method: 'POST',
         headers: { Accept: 'application/json' },
       });

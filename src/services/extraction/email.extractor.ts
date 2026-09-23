@@ -28,6 +28,18 @@ const BLOCKED_DOMAINS = new Set([
   'domain.com',
   'email.com',
   'test.com',
+  'emailaddress.com',
+  'whatever.com',
+  'yourdomain.com',
+  'yoursite.com',
+  'company.com',
+  'mycompany.com',
+  'example.org',
+  'example.net',
+  'test.org',
+  'test.net',
+  'invalid',
+  'localhost',
   'youtube.com',
   'google.com',
   'googlemail.com',
@@ -51,6 +63,20 @@ const BLOCKED_PREFIXES = new Set([
   'admin',
   'billing',
   'postmaster',
+  'mailer-daemon',
+  'daemon',
+  'bounce',
+  'abuse',
+  'your',
+  'email',
+  'contact-us',
+  'info',
+  'feedback',
+  'press',
+  'jobs',
+  'careers',
+  'privacy',
+  'legal',
 ]);
 
 const FILE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.mp4', '.mp3', '.pdf'];
@@ -91,7 +117,12 @@ export class EmailExtractor {
         continue;
       }
 
-      if (BLOCKED_PREFIXES.has(localPart)) {
+      if (
+        BLOCKED_PREFIXES.has(localPart) ||
+        localPart.startsWith('api-') ||
+        localPart.startsWith('support-') ||
+        localPart.startsWith('noreply')
+      ) {
         continue;
       }
 

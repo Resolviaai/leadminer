@@ -53,11 +53,7 @@ export function GmailAccountsClient({
   const totalSentToday = accounts.reduce((sum, acc) => sum + (acc.sentToday || 0), 0);
   const totalCapacity = accounts.reduce((sum, acc) => sum + (acc.dailyLimit || 0), 0);
 
-  const oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${
-    googleClientId || "PENDING"
-  }&redirect_uri=${encodeURIComponent(
-    googleRedirectUri
-  )}&response_type=code&scope=https://www.googleapis.com/auth/gmail.send%20https://www.googleapis.com/auth/gmail.readonly&access_type=offline&prompt=consent`;
+  const oauthUrl = "/api/auth/google";
 
   const handleOpenDisconnectModal = (account: GmailAccountItem, permanentDefault = false) => {
     setModalAccount(account);
@@ -251,7 +247,13 @@ export function GmailAccountsClient({
                         <span>Google Testing Token:</span>
                       </div>
                       <span className={isExpiringSoon ? 'font-bold text-amber-400' : 'text-text-secondary'}>
-                        {daysLeft > 0 ? `${daysLeft} days remaining` : 'Expired — Reconnect Now'}
+                        {daysLeft > 0 ? (
+                          `${daysLeft} days remaining`
+                        ) : (
+                          <a href={oauthUrl} className="underline font-bold text-amber-400 hover:text-amber-300">
+                            Expired — Reconnect Now
+                          </a>
+                        )}
                       </span>
                     </div>
                   );
@@ -300,13 +302,13 @@ export function GmailAccountsClient({
                   </div>
 
                   <div className="flex items-center gap-2">
-                    {isDisconnected ? (
+                    {isDisconnected || acc.status === "AUTH_ERROR" ? (
                       <>
                         <a href={oauthUrl}>
                           <Button
                             size="sm"
                             variant="secondary"
-                            className="min-h-[38px] sm:h-8 px-3 text-xs gap-1.5 active:scale-95"
+                            className="min-h-[44px] sm:h-8 px-3 text-xs gap-1.5 active:scale-95"
                           >
                             <RotateCw className="w-3.5 h-3.5" />
                             <span>Reconnect</span>
@@ -316,22 +318,35 @@ export function GmailAccountsClient({
                           size="sm"
                           variant="ghost"
                           onClick={() => handleOpenDisconnectModal(acc, true)}
-                          className="min-h-[38px] sm:h-8 px-2.5 text-xs text-danger hover:text-danger hover:bg-danger/10 active:scale-95"
+                          className="min-h-[44px] sm:h-8 px-2.5 text-xs text-danger hover:text-danger hover:bg-danger/10 active:scale-95"
                           title="Permanently remove record"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
                       </>
                     ) : (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleOpenDisconnectModal(acc, false)}
-                        className="min-h-[38px] sm:h-8 px-3 text-xs gap-1.5 text-text-secondary hover:text-danger hover:bg-danger/10 active:scale-95 transition-all"
-                      >
-                        <Unlink className="w-3.5 h-3.5 text-danger" />
-                        <span>Disconnect</span>
-                      </Button>
+                      <>
+                        <a href={oauthUrl}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="min-h-[44px] sm:h-8 px-2.5 text-xs gap-1 active:scale-95"
+                            title="Refresh or re-authenticate Google token"
+                          >
+                            <RotateCw className="w-3 h-3" />
+                            <span className="hidden sm:inline">Refresh</span>
+                          </Button>
+                        </a>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleOpenDisconnectModal(acc, false)}
+                          className="min-h-[44px] sm:h-8 px-3 text-xs gap-1.5 text-text-secondary hover:text-danger hover:bg-danger/10 active:scale-95 transition-all"
+                        >
+                          <Unlink className="w-3.5 h-3.5 text-danger" />
+                          <span>Disconnect</span>
+                        </Button>
+                      </>
                     )}
                   </div>
                 </div>

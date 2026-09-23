@@ -1,6 +1,7 @@
 import * as cheerio from 'cheerio';
 import { emailExtractor, categorizeEmail, EmailCategory } from './email.extractor';
 import { socialExtractor } from './social.extractor';
+import { isSafePublicUrl } from '../../lib/ssrf-guard';
 
 export interface ScrapedLinkPageResult {
   url: string;
@@ -60,6 +61,12 @@ export class LinkPageScraper {
 
   private async fetchHtml(url: string, maxBytes = 524288): Promise<{ html: string | null; error?: string }> {
     try {
+      // N-P2-1: Reject loopback, private IP, and cloud metadata targets
+      if (!(await isSafePublicUrl(url))) {
+        console.warn(`[SSRF Guard] Blocked unsafe linkpage target URL: ${url}`);
+        return { html: null, error: 'SSRF_BLOCKED' };
+      }
+
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
 

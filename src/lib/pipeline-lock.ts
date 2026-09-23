@@ -1,12 +1,14 @@
-import { db } from '../db/client';
-import { sql } from 'drizzle-orm';
+import { getDbPool } from '../db/client';
+import { env } from '../config/env';
 
 /**
  * PostgreSQL Advisory Lock helper.
  *
  * Prevents concurrent overlapping pipeline or dispatcher runs.
- * If another worker is already holding the lock, immediately returns
- * { acquired: false } without waiting, preventing race conditions and double sends.
+ * Uses a dedicated checked-out client from the pool so that pg_try_advisory_lock
+ * and pg_advisory_unlock are guaranteed to execute on the same PostgreSQL backend session.
+ *
+ * In production, fails CLOSED on database error to prevent race conditions and duplicate sends.
  */
 
 // Stable 32-bit integer lock keys for different pipeline tasks
@@ -18,47 +20,66 @@ export const LOCK_KEYS = {
   VERIFICATION: 10005,
 } as const;
 
-export async function tryAcquireAdvisoryLock(lockKey: number): Promise<boolean> {
-  try {
-    const result = await db.execute<{ acquired: boolean }>(
-      sql`SELECT pg_try_advisory_lock(${lockKey}) AS acquired;`
-    );
-    const rows = (result as any).rows ?? result;
-    return Boolean(rows[0]?.acquired);
-  } catch (error: any) {
-    console.warn(`[AdvisoryLock] Error acquiring lock ${lockKey}:`, error.message);
-    // In local sqlite/dev without postgres advisory locks, allow execution
-    return true;
-  }
-}
-
-export async function releaseAdvisoryLock(lockKey: number): Promise<void> {
-  try {
-    await db.execute(sql`SELECT pg_advisory_unlock(${lockKey});`);
-  } catch (error: any) {
-    console.warn(`[AdvisoryLock] Error releasing lock ${lockKey}:`, error.message);
-  }
-}
-
 /**
- * Wraps an async operation with an atomic advisory lock.
- * If the lock cannot be acquired, returns { executed: false, reason: 'LOCKED' }.
+ * Wraps an async operation with an atomic PostgreSQL advisory lock.
+ * If the lock cannot be acquired or another process holds it, returns { executed: false, reason: '...' }.
  */
 export async function withAdvisoryLock<T>(
   lockKey: number,
   taskName: string,
   operation: () => Promise<T>
 ): Promise<{ executed: boolean; result?: T; reason?: string }> {
-  const acquired = await tryAcquireAdvisoryLock(lockKey);
-  if (!acquired) {
-    console.warn(`⚠️ [AdvisoryLock] ${taskName} is already running in another process. Skipping.`);
-    return { executed: false, reason: `ALREADY_RUNNING: ${taskName} is locked by another process` };
-  }
+  const pool = getDbPool();
+  let client;
 
   try {
+    client = await pool.connect();
+  } catch (connErr: any) {
+    console.error(`[AdvisoryLock] Connection error acquiring lock for ${taskName}:`, connErr.message);
+    // In local dev/test without Postgres, allow operation to run
+    if (env.NODE_ENV === 'test' || env.NODE_ENV === 'development') {
+      const result = await operation();
+      return { executed: true, result };
+    }
+    // Production: FAIL CLOSED (N-P1-1)
+    return {
+      executed: false,
+      reason: `LOCK_CONNECTION_FAILED: Database unavailable for ${taskName} advisory lock (${connErr.message})`,
+    };
+  }
+
+  let lockAcquired = false;
+
+  try {
+    const res = await client.query('SELECT pg_try_advisory_lock($1) AS acquired', [lockKey]);
+    lockAcquired = Boolean(res.rows[0]?.acquired);
+
+    if (!lockAcquired) {
+      console.warn(`⚠️ [AdvisoryLock] ${taskName} is already running in another process (key ${lockKey}). Skipping.`);
+      return {
+        executed: false,
+        reason: `ALREADY_RUNNING: ${taskName} is locked by another process`,
+      };
+    }
+
+    // Execute protected operation while holding lock on this exact client connection
     const result = await operation();
     return { executed: true, result };
+  } catch (err: any) {
+    console.error(`[AdvisoryLock] Error during locked operation for ${taskName}:`, err.message);
+    if (!lockAcquired && (env.NODE_ENV === 'test' || env.NODE_ENV === 'development')) {
+      const result = await operation();
+      return { executed: true, result };
+    }
+    throw err;
   } finally {
-    await releaseAdvisoryLock(lockKey);
+    if (lockAcquired) {
+      try {
+        await client.query('SELECT pg_advisory_unlock($1)', [lockKey]);
+      } catch (unlockErr: any) {
+        console.warn(`[AdvisoryLock] Error unlocking ${taskName} (key ${lockKey}):`, unlockErr.message);
+      }
+    }
+    client.release();
   }
 }

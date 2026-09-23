@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -16,7 +16,7 @@ export function RunOutreachButton() {
     setErrorMsg(null);
 
     try {
-      const res = await fetch('/api/workers/outreach', {
+      const res = await fetch('/api/actions/dispatch', {
         method: 'POST',
         headers: { Accept: 'application/json' },
       });

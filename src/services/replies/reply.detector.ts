@@ -6,7 +6,7 @@ import { env } from '../../config/env';
 import { sequenceService } from '../outreach/sequence.service';
 
 export const OPT_OUT_REGEX =
-  /\b(stop|unsubscribe|opt[- ]?out|remove\s+me|take\s+me\s+off|please\s+remove|don'?t\s+contact|leave\s+me\s+alone)\b/i;
+  /(?:^\s*(?:please\s+)?stop[\.\!]?\s*$|\b(?:please\s+)?stop\s+(?:emailing|messaging|contacting|sending)\b|\breply\s+stop\b|\b(?:unsubscribe|opt[- ]?out|remove\s+(?:me|my\s+email)|take\s+me\s+off|please\s+remove|don'?t\s+(?:contact|email|send\s+(?:me\s+)?emails)|do\s+not\s+(?:contact|email|send\s+(?:me\s+)?emails)|leave\s+me\s+alone|not\s+interested|no\s+thanks|never\s+contact\s+me|cease\s+and\s+desist|already\s+unsubscribed)\b)/i;
 
 export interface InboundReplyPayload {
   threadId: string;

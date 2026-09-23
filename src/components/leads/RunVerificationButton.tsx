@@ -16,7 +16,7 @@ export function RunVerificationButton() {
     setErrorMsg(null);
 
     try {
-      const res = await fetch('/api/workers/verification', {
+      const res = await fetch('/api/actions/verification', {
         method: 'POST',
         headers: { Accept: 'application/json' },
       });

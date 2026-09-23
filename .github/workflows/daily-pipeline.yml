@@ -13,10 +13,10 @@ concurrency:
 jobs:
   trigger-pipeline:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
-      - name: Trigger Live LeadMiner Autonomous Pipeline
+      - name: Trigger LeadMiner Step-by-Step Autonomous Pipeline
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           APP_URL: ${{ secrets.APP_URL || 'https://leadminer-app.vercel.app' }}
@@ -26,19 +26,37 @@ jobs:
             exit 1
           fi
 
-          echo "Triggering autonomous pipeline on $APP_URL/api/workers/pipeline..."
-          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$APP_URL/api/workers/pipeline" \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            -H "Content-Type: application/json")
+          # D4: Run pipeline step-by-step so each step gets an isolated 60s Vercel execution window
+          STEPS=("cleanup" "replies" "discovery" "verification" "planner" "dispatch")
 
-          HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
-          BODY=$(echo "$RESPONSE" | sed '$d')
+          for STEP in "${STEPS[@]}"; do
+            echo ""
+            echo "=========================================================="
+            echo "🚀 Executing Pipeline Step: $STEP"
+            echo "=========================================================="
 
-          echo "HTTP Status: $HTTP_STATUS"
-          echo "Pipeline Response: $BODY"
+            RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$APP_URL/api/workers/pipeline?step=$STEP" \
+              -H "Authorization: Bearer $CRON_SECRET" \
+              -H "Content-Type: application/json")
 
-          if [ "$HTTP_STATUS" -ne 200 ]; then
-            echo "Pipeline failed with status $HTTP_STATUS"
-            exit 1
-          fi
-          echo "Autonomous pipeline completed successfully!"
+            HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+            BODY=$(echo "$RESPONSE" | sed '$d')
+
+            echo "HTTP Status: $HTTP_STATUS"
+            echo "Response: $BODY"
+
+            if [ "$HTTP_STATUS" -ne 200 ] && [ "$HTTP_STATUS" -ne 409 ]; then
+              echo "❌ Step $STEP failed with HTTP status $HTTP_STATUS"
+              exit 1
+            elif [ "$HTTP_STATUS" -eq 409 ]; then
+              echo "⚠️ Step $STEP was skipped (lock held by another process)"
+            else
+              echo "✅ Step $STEP completed successfully"
+            fi
+
+            # Short pause between steps
+            sleep 3
+          done
+
+          echo ""
+          echo "🎉 All autonomous pipeline steps finished successfully!"

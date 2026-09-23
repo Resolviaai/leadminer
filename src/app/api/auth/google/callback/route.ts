@@ -5,6 +5,7 @@ import { gmailAccounts } from "../../../../../db/schema";
 import { env } from "../../../../../config/env";
 import { eq } from "drizzle-orm";
 import { encryptionService } from "@/services/security/encryption.service";
+import { verifyOAuthState, OAUTH_STATE_COOKIE } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,17 @@ export async function GET(req: NextRequest) {
   if (error) {
     return NextResponse.redirect(
       new URL(`/gmail?error=${encodeURIComponent(error)}`, req.url)
+    );
+  }
+
+  const state = searchParams.get("state");
+  const cookieState = req.cookies.get(OAUTH_STATE_COOKIE)?.value;
+
+  // SEC-03: Strict CSRF protection via cryptographically signed state parameter
+  if (!verifyOAuthState(state, cookieState)) {
+    console.error("[OAuth Callback] State verification failed: invalid or missing CSRF token");
+    return NextResponse.redirect(
+      new URL("/gmail?error=invalid_oauth_state", req.url)
     );
   }
 
@@ -97,7 +109,12 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    return NextResponse.redirect(new URL("/gmail?success=connected", req.url));
+    const res = NextResponse.redirect(new URL("/gmail?success=connected", req.url));
+    res.headers.set(
+      "Set-Cookie",
+      `${OAUTH_STATE_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`
+    );
+    return res;
   } catch (err: unknown) {
     console.error("[Google OAuth Callback Error]", err);
     return NextResponse.redirect(

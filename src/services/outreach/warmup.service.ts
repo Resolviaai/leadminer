@@ -55,7 +55,7 @@ export class WarmupService {
       return Number(activeDaysResult.rows?.[0]?.count || 0);
     } catch (e: any) {
       console.warn(`[WarmupService] Error calculating active days for account #${accountId}:`, e.message);
-      return 7; // Safe fallback to standard capacity on DB error
+      return 0; // N-P1-4: Safe fail-closed fallback to Day 0 ramp (minimum capacity) on DB error
     }
   }
 

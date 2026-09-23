@@ -11,6 +11,46 @@ import { withAdvisoryLock, LOCK_KEYS } from '@/lib/pipeline-lock';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // 60s max execution duration for Vercel Hobby plan compatibility
 
+async function executeSingleStep(stepName: string) {
+  const startedAt = new Date();
+  let result: any;
+
+  switch (stepName.toLowerCase()) {
+    case 'cleanup':
+      result = await runCleanup();
+      break;
+    case 'replies':
+      result = await runReplySync();
+      break;
+    case 'discovery':
+      result = await runDiscoveryBatch(10);
+      break;
+    case 'verification':
+      result = await runVerificationBatch(25);
+      break;
+    case 'planner':
+      result = await runPlanner();
+      break;
+    case 'dispatch':
+      result = await runDispatcher(3);
+      break;
+    default:
+      throw new Error(`Unknown pipeline step: "${stepName}". Valid steps: cleanup, replies, discovery, verification, planner, dispatch`);
+  }
+
+  const finishedAt = new Date();
+  const durationMs = finishedAt.getTime() - startedAt.getTime();
+
+  return {
+    success: true,
+    step: stepName,
+    startedAt: startedAt.toISOString(),
+    finishedAt: finishedAt.toISOString(),
+    durationSeconds: Number((durationMs / 1000).toFixed(2)),
+    result,
+  };
+}
+
 async function executePipeline() {
   const startedAt = new Date();
   const results: Record<string, any> = {};
@@ -33,13 +73,26 @@ async function executePipeline() {
     results.replies = { error: err.message };
   }
 
-  // 2. Discover new YouTube channels using keyword queue (lean batch: 12 keywords to stay under 15s)
+  // 2. Discover new YouTube channels using keyword queue (lean batch: 10 keywords)
   try {
-    console.log('[Pipeline] Step 2/5: Running channel discovery batch (12 keywords)...');
-    results.discovery = await runDiscoveryBatch(12);
+    console.log('[Pipeline] Step 2/5: Running channel discovery batch (10 keywords)...');
+    results.discovery = await runDiscoveryBatch(10);
   } catch (err: any) {
     console.error('[Pipeline] Error in discovery step:', err);
     results.discovery = { error: err.message };
+  }
+
+  // Defensive elapsed time check to avoid Vercel 60s hard kill
+  const elapsedSeconds = (Date.now() - startedAt.getTime()) / 1000;
+  if (elapsedSeconds > 40) {
+    console.warn(`[Pipeline] Execution taking ${elapsedSeconds}s, skipping remaining steps to avoid Hobby timeout.`);
+    return {
+      success: true,
+      partial: true,
+      durationSeconds: Number(elapsedSeconds.toFixed(2)),
+      pipeline: results,
+      notice: 'Skipped planner and dispatch due to execution time limit. Use step-by-step triggers.',
+    };
   }
 
   // 3. Verify extracted contact emails & auto-qualify eligible leads (lean batch: 25 contacts)
@@ -87,17 +140,29 @@ async function handlePipelineRequest(req: NextRequest) {
     return auth.response!;
   }
 
+  const step = req.nextUrl.searchParams.get('step');
+
   try {
-    const lockResult = await withAdvisoryLock(LOCK_KEYS.DAILY_PIPELINE, 'Daily Pipeline', async () => {
-      return await executePipeline();
-    });
+    const lockResult = await withAdvisoryLock(
+      LOCK_KEYS.DAILY_PIPELINE,
+      step ? `Pipeline Step: ${step}` : 'Daily Pipeline',
+      async () => {
+        if (step) {
+          return await executeSingleStep(step);
+        }
+        return await executePipeline();
+      }
+    );
 
     if (!lockResult.executed) {
-      return NextResponse.json({
-        success: true,
-        skipped: true,
-        reason: lockResult.reason,
-      });
+      return NextResponse.json(
+        {
+          success: false,
+          skipped: true,
+          reason: lockResult.reason,
+        },
+        { status: 409 }
+      );
     }
 
     return NextResponse.json(lockResult.result);

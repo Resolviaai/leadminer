@@ -14,7 +14,14 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const accountId = Number(body.accountId);
-    const permanent = Boolean(body.permanent);
+    // N-P2-7: Strict boolean validation — reject strings like "false" that coerce truthy
+    if (body.permanent !== undefined && typeof body.permanent !== 'boolean') {
+      return NextResponse.json(
+        { error: 'Invalid payload: "permanent" must be a JSON boolean (true or false), not a string or other type' },
+        { status: 400 }
+      );
+    }
+    const permanent = body.permanent === true;
 
     if (!accountId || isNaN(accountId)) {
       return NextResponse.json({ error: 'Valid accountId is required' }, { status: 400 });

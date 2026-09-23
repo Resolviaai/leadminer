@@ -1,11 +1,12 @@
 import { db } from '../db/client';
-import { logs, jobs, gmailAccounts, leads, scheduledEmails, leadSequenceProgress, contacts, messages } from '../db/schema';
+import { logs, jobs, gmailAccounts, leads, scheduledEmails, leadSequenceProgress, contacts, messages, systemSettings } from '../db/schema';
 import { lt, and, inArray, eq, isNotNull, sql } from 'drizzle-orm';
 import { jobRunner } from '../services/jobs/job.runner';
 import { quotaManager } from '../services/youtube/quota';
 import { reconcilePendingLeadQualifications } from './verification.worker';
 import { telegramService } from '../services/notifications/telegram.service';
 import { gmailSendingService } from '../services/outreach/gmail.service';
+import { runYouTubeDataRefresh } from './youtube-refresh.worker';
 
 export async function runCleanup(): Promise<{
   recoveredKeywords: number;
@@ -57,31 +58,111 @@ export async function runCleanup(): Promise<{
     const quota = await quotaManager.syncQuotaState();
     console.log(`[Quota Check] Search calls today: ${quota.searchCallsUsedToday}/${quota.searchCallsDailyLimit}`);
 
-    // 7. Check for Gmail accounts nearing 7-day token expiration (Google Testing Mode)
+    // 7. Check for Gmail accounts nearing 7-day token expiration (Google Testing Mode) & AUTH_ERROR
     try {
-      const activeInboxes = await db
+      let alertHistory: Record<string, number> = {};
+      try {
+        const [settingRow] = await db
+          .select()
+          .from(systemSettings)
+          .where(eq(systemSettings.key, 'token_alert_history'))
+          .limit(1);
+        if (settingRow && settingRow.value) {
+          alertHistory = settingRow.value as Record<string, number>;
+        }
+      } catch (e) {
+        // non-fatal
+      }
+
+      const monitoredInboxes = await db
         .select({
           id: gmailAccounts.id,
           email: gmailAccounts.email,
+          status: gmailAccounts.status,
           tokenGrantedAt: gmailAccounts.tokenGrantedAt,
         })
         .from(gmailAccounts)
-        .where(eq(gmailAccounts.status, 'ACTIVE'));
+        .where(inArray(gmailAccounts.status, ['ACTIVE', 'AUTH_ERROR']));
 
-      for (const inbox of activeInboxes) {
-        if (inbox.tokenGrantedAt) {
-          const daysOld = Math.floor((Date.now() - new Date(inbox.tokenGrantedAt).getTime()) / (24 * 60 * 60 * 1000));
-          if (daysOld >= 5) {
-            console.warn(`⚠️ [Token Expiry Warning] Inbox ${inbox.email} token is ${daysOld} days old (Testing Mode)!`);
+      const nowMs = Date.now();
+      let alertHistoryUpdated = false;
+
+      for (const inbox of monitoredInboxes) {
+        const lastAlert = alertHistory[String(inbox.id)] || 0;
+        const hoursSinceLastAlert = (nowMs - lastAlert) / (60 * 60 * 1000);
+
+        if (inbox.status === 'AUTH_ERROR') {
+          if (hoursSinceLastAlert >= 24) {
+            console.error(`⛔ [Auth Error Alert] Inbox ${inbox.email} is in AUTH_ERROR status!`);
             await telegramService.notifyCriticalError(
-              'Gmail OAuth Token Expiry Warning',
-              `Inbox ${inbox.email} token was granted ${daysOld} days ago. In Google Testing mode, refresh tokens expire after 7 days. Reconnect this account at /gmail to prevent outreach disruption.`
+              'Gmail Account Authentication Error',
+              `Inbox ${inbox.email} is in AUTH_ERROR status. Outreach cannot proceed from this address. Reconnect at /gmail immediately.`
             );
+            alertHistory[String(inbox.id)] = nowMs;
+            alertHistoryUpdated = true;
+          }
+          continue;
+        }
+
+        if (inbox.tokenGrantedAt) {
+          const daysOld = Math.floor((nowMs - new Date(inbox.tokenGrantedAt).getTime()) / (24 * 60 * 60 * 1000));
+          if (daysOld >= 5) {
+            // N-P2-6: Once-per-day guard prevents spamming notifications on every hourly cleanup
+            if (hoursSinceLastAlert >= 24) {
+              console.warn(`⚠️ [Token Expiry Warning] Inbox ${inbox.email} token is ${daysOld} days old (Testing Mode)!`);
+              await telegramService.notifyCriticalError(
+                'Gmail OAuth Token Expiry Warning',
+                `Inbox ${inbox.email} token was granted ${daysOld} days ago. In Google Testing mode, refresh tokens expire after 7 days. Reconnect this account at /gmail to prevent outreach disruption.`
+              );
+              alertHistory[String(inbox.id)] = nowMs;
+              alertHistoryUpdated = true;
+            }
           }
         }
       }
+
+      if (alertHistoryUpdated) {
+        await db
+          .insert(systemSettings)
+          .values({
+            key: 'token_alert_history',
+            value: alertHistory,
+            description: 'Timestamps of last token expiry/auth error alerts sent to avoid spam',
+          })
+          .onConflictDoUpdate({
+            target: systemSettings.key,
+            set: { value: alertHistory },
+          });
+      }
     } catch (tokenWarnErr: any) {
       console.warn('[Cleanup Watchdog] Error checking token expiry:', tokenWarnErr.message);
+    }
+
+    // 7b. REL-05 / D3: Dispatch Lag Watchdog — alert if scheduled emails are overdue by > 2 hours
+    try {
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+      const overdueEmails = await db
+        .select({ id: scheduledEmails.id, scheduledAt: scheduledEmails.scheduledAt })
+        .from(scheduledEmails)
+        .where(
+          and(
+            eq(scheduledEmails.status, 'PENDING'),
+            lt(scheduledEmails.scheduledAt, twoHoursAgo)
+          )
+        )
+        .limit(50);
+
+      if (overdueEmails.length > 0) {
+        console.warn(`⚠️ [Dispatch Lag Watchdog] Found ${overdueEmails.length} overdue PENDING scheduled emails!`);
+        if (overdueEmails.length >= 5) {
+          await telegramService.notifyCriticalError(
+            'Dispatch Scheduler Lag Detected',
+            `LeadMiner has ${overdueEmails.length} scheduled email(s) that are overdue by more than 2 hours. Ensure your external scheduler (cron-job.org / GitHub Actions) is actively triggering /api/workers/dispatch.`
+          );
+        }
+      }
+    } catch (lagErr: any) {
+      console.warn('[Cleanup Watchdog] Error checking dispatch lag:', lagErr.message);
     }
 
     // 8. Re-cancel orphaned sequences/scheduled emails for leads that already replied, bounced, or unsubscribed (TASK-17 / P1-14)
@@ -184,6 +265,16 @@ export async function runCleanup(): Promise<{
       }
     } catch (pruneErr: any) {
       console.warn('[Cleanup Watchdog] Error pruning 30-day raw lead payloads:', pruneErr.message);
+    }
+
+    // 10b. D10 / YLD-13: YouTube 25-Day Compliance Data Refresh
+    try {
+      const refreshResult = await runYouTubeDataRefresh(25);
+      if (refreshResult.refreshed > 0 || refreshResult.deletedOrTerminated > 0) {
+        console.log(`[Cleanup Watchdog] YouTube 25-day compliance refresh: ${refreshResult.refreshed} updated, ${refreshResult.deletedOrTerminated} deleted/disqualified.`);
+      }
+    } catch (refreshErr: any) {
+      console.warn('[Cleanup Watchdog] Error during YouTube compliance data refresh:', refreshErr.message);
     }
 
     // 11. Reconcile crashed Gmail reservations (P2-28):

@@ -7,6 +7,7 @@ import { replyDetectorService } from '../services/replies/reply.detector';
 import { jobRunner } from '../services/jobs/job.runner';
 import { encryptionService } from '../services/security/encryption.service';
 import { sequenceService } from '../services/outreach/sequence.service';
+import { gmailSendingService } from '../services/outreach/gmail.service';
 
 export function decodeGmailBody(payload: any): string {
   const parts: string[] = [];
@@ -304,6 +305,7 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
               .update(scheduledEmails)
               .set({
                 scheduledAt: fiveDaysLater,
+                scheduledDate: gmailSendingService.getPacificDateStr(fiveDaysLater),
                 updatedAt: new Date(),
               })
               .where(and(eq(scheduledEmails.leadId, msg.leadId), eq(scheduledEmails.status, 'PENDING')));
@@ -318,6 +320,7 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
               .update(scheduledEmails)
               .set({
                 scheduledAt: fortyEightHoursLater,
+                scheduledDate: gmailSendingService.getPacificDateStr(fortyEightHoursLater),
                 updatedAt: new Date(),
               })
               .where(and(eq(scheduledEmails.leadId, msg.leadId), eq(scheduledEmails.status, 'PENDING')));

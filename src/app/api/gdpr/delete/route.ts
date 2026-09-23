@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db/client';
-import { suppressions, leads, contacts, scheduledEmails, leadSequenceProgress, logs } from '@/db/schema';
+import { db } from '../../../../db/client';
+import { suppressions, leads, contacts, scheduledEmails, leadSequenceProgress, logs } from '../../../../db/schema';
 import { eq, sql, inArray } from 'drizzle-orm';
-import { checkRateLimit, getClientIp } from '@/lib/rate-limiter';
-import { verifyUnsubscribeToken } from '@/lib/unsubscribe-token';
+import { checkRateLimit, getClientIp } from '../../../../lib/rate-limiter';
+import { verifyUnsubscribeToken } from '../../../../lib/unsubscribe-token';
+import { verifyDashboardAuth } from '../../../../lib/api-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -123,11 +124,26 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (token && leadId) {
+    // TASK-01 / N-P0-1: Mandatory authorization check.
+    // GDPR erasure is destructive. Require either:
+    // 1) An active authenticated dashboard session (admin), OR
+    // 2) A valid HMAC signature token matching the email and leadId.
+    const dashboardAuth = verifyDashboardAuth(req);
+    let isAuthorized = dashboardAuth.authorized;
+
+    if (!isAuthorized && token && leadId) {
       const isValid = verifyUnsubscribeToken(email, Number(leadId), token);
-      if (!isValid) {
-        console.warn(`[GDPR] Provided token was invalid for ${email}. Proceeding with email suppression.`);
+      if (isValid) {
+        isAuthorized = true;
       }
+    }
+
+    if (!isAuthorized) {
+      console.warn(`[GDPR] Unauthorized erasure attempt rejected for ${email} (IP: ${ip})`);
+      return NextResponse.json(
+        { error: 'Unauthorized: valid signature token or admin session required to perform GDPR erasure' },
+        { status: 403 }
+      );
     }
 
     const result = await performGdprErasure(email);
