@@ -128,19 +128,21 @@ export function verifyDashboardAuth(req: NextRequest): DashboardAuthResult {
  * Validate login credentials against env vars.
  */
 export function validateLoginCredentials(email: string, password: string): boolean {
-  const expectedEmail = env.DASHBOARD_EMAIL;
-  const expectedPassword = env.DASHBOARD_PASSWORD;
+  const expectedEmail = (env.DASHBOARD_EMAIL || '').trim().toLowerCase();
+  const expectedPassword = (env.DASHBOARD_PASSWORD || '').trim();
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanPassword = password.trim();
 
   if (!expectedEmail || !expectedPassword) return false;
 
   // Constant-time comparisons for both fields
   const emailMatch =
-    email.length === expectedEmail.length &&
-    crypto.timingSafeEqual(Buffer.from(email), Buffer.from(expectedEmail));
+    cleanEmail.length === expectedEmail.length &&
+    crypto.timingSafeEqual(Buffer.from(cleanEmail), Buffer.from(expectedEmail));
 
   const passwordMatch =
-    password.length === expectedPassword.length &&
-    crypto.timingSafeEqual(Buffer.from(password), Buffer.from(expectedPassword));
+    cleanPassword.length === expectedPassword.length &&
+    crypto.timingSafeEqual(Buffer.from(cleanPassword), Buffer.from(expectedPassword));
 
   return emailMatch && passwordMatch;
 }

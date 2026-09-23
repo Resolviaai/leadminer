@@ -68,8 +68,8 @@ const envSchema = z.object({
   CRON_JOB_API_KEY: z.string().optional().default(''),
 
   // Dashboard login credentials (stored in env, never in code)
-  DASHBOARD_EMAIL: z.string().optional().default(''),
-  DASHBOARD_PASSWORD: z.string().optional().default(''),
+  DASHBOARD_EMAIL: z.string().trim().optional().default(''),
+  DASHBOARD_PASSWORD: z.string().trim().optional().default(''),
 
   // Discovery Quality Filter Thresholds (n8n Reintegration)
   MIN_DISCOVERY_SUBSCRIBERS: z.coerce.number().default(10),
