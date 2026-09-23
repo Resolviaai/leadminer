@@ -149,5 +149,50 @@ All development activities, audits, architectural decisions, and milestones are 
 - **Validation:**
   - `npx tsc --noEmit` exits 0 (clean TypeScript build).
   - `npx vitest run` passes **121/121 tests** across 20 test files (100% pass rate).
-- **Next Step:** Begin Phase 2 (P1) starting with TASK-08 (P1-10: YouTube API key guard in discovery worker).
+- **Next Step:** Completed Phase 2 (P1), Phase 3 (Warmup Engine), Phase 4 (Security & Worker Concurrency), and Phase 5 (P3 Backlog).
+
+---
+
+## 2026-09-23 — Session 8 (Full System Production Lockdown, Concurrency & Security Suite)
+- **Agent:** Antigravity
+- **Context:** Execution of full V1 production hardening across Phase 2, Phase 3, Phase 4, and Phase 5.
+- **Completed in this batch:**
+  - **YouTube & Discovery Hardening (TASK-08, TASK-13, TASK-31, TASK-32):**
+    - Multi-key rotation with persistent quota fail-closed enforcement; zero-mock elimination.
+    - Added `refundSearchCall()` and `refundGeneralQuota()` to refund quota upon non-quota API call failures or missing clients.
+    - Reset claimed batch keywords to PENDING with decremented attempts when enrichment hits quota limit.
+  - **Reply Engine & Bounce Classification (TASK-09, TASK-11, TASK-41):**
+    - Three-tier bounce classification: `OUT_OF_OFFICE` (pauses sequence +5d), `SOFT_BOUNCE` (reschedules +48h), and `HARD_BOUNCE` (permanent suppression).
+    - Scans active outreach threads without 72h cutoff; strips quote footers before opt-out regex matching.
+    - Set-based deduplication of Gmail thread IDs in `replies.worker.ts`.
+  - **Outreach & Deterministic Warmup (TASK-10, Phase 3 Warmup):**
+    - Deterministic 7-day warmup engine (`warmup.service.ts`) keyed by stable Google Account ID (`sub`), counting actual distinct sent days (5, 8, 12, 16, 20, 25/day).
+    - 24-hour staggered contact scheduling for multi-contact leads.
+    - Multi-campaign capacity allocation: proportional quota distribution across all ACTIVE campaigns.
+    - Atomic sequence progress advance and scheduled email insertion in `db.transaction`.
+    - Sorted candidates by `subscriberCount DESC`.
+    - Neutral greeting fallback ("there") and automatic stripping of fake `Re:` / `Fwd:` on step 1 cold outreach.
+  - **Security, SSRF Guard & Encryption (TASK-20, TASK-21, TASK-22, TASK-28):**
+    - HMAC-SHA256 signed unsubscribe URLs with rate limiting and audit logging.
+    - SSRF guard blocking private IP ranges (`169.254.0.0/16`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, cloud metadata) with per-hop DNS resolution.
+    - AI prompt injection shield with untrusted metadata envelopes and output validation.
+    - Fail-loud AES-256-GCM encryption with `reEncrypt` key rotation helper.
+    - Web Crypto Edge-compatible session authentication in `edge-auth.ts` for Next.js Middleware.
+  - **Database & Concurrency Hardening (TASK-29, TASK-30, TASK-33, TASK-34, TASK-35, TASK-36, TASK-37):**
+    - Atomic contact verification claims using `FOR UPDATE SKIP LOCKED` ordered by oldest first (`id ASC`).
+    - Transient DNS timeout re-queuing up to 3 attempts before marking `FAILED`.
+    - Migration `0013_performance_indexes_and_constraints.sql` adding `uq_sequences_campaign_id`, `idx_messages_sent_at`, `idx_jobs_status_type`, and `idx_scheduled_emails_status_scheduled`.
+    - YouTube ToS compliance: automated 30-day raw payload pruning in cleanup worker watchdog.
+    - Watchdog recovery for stuck `SCRAPING` link-pages and `IN_PROGRESS` verifications.
+    - Honest dashboard error reporting in overview page with prominent red banner during database outages.
+  - **API Hygiene & Vercel Limits (TASK-39, TASK-40, TASK-43):**
+    - Clamped numeric query parameters across all API routes (`Math.max`, `Math.min`).
+    - Session-authenticated, idempotent campaign toggle with audit log.
+    - Locked down `/api/health` with minimal public ping and authenticated diagnostic output.
+    - Capped all worker and pipeline function `maxDuration` to 60s for Vercel Hobby plan compatibility.
+- **Validation:**
+  - `npx tsc --noEmit` exits 0 (clean TypeScript build).
+  - `npx vitest run` passes **137/137 tests** across 22 test files (100% pass rate).
+  - `npm run build` succeeded with exit code 0 across all 33 static and dynamic routes.
+
 
