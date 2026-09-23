@@ -150,9 +150,27 @@ export async function runPlanner(): Promise<PlannerResult> {
     ? ['MAILBOX_VERIFIED', 'VALID', 'DOMAIN_VALID']
     : ['MAILBOX_VERIFIED', 'VALID'];
 
-  // Base schedule start time: 9:15 AM EDT (13:15 UTC) or 2 minutes from now
+  // Base schedule start time: 9:15 AM Eastern Time dynamically computed in UTC (P3-9 / BUG-05)
   const now = new Date();
-  const todayUtcStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 13, 15, 0));
+  const etFormatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  });
+  const parts = etFormatter.formatToParts(now);
+  const etHour = parseInt(parts.find((p) => p.type === 'hour')?.value ?? '0', 10);
+  const etMinute = parseInt(parts.find((p) => p.type === 'minute')?.value ?? '0', 10);
+  const nowUtcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const etNowMinutes = etHour * 60 + etMinute;
+  let etOffsetMinutes = etNowMinutes - nowUtcMinutes;
+  if (etOffsetMinutes > 720) etOffsetMinutes -= 1440;
+  if (etOffsetMinutes < -720) etOffsetMinutes += 1440;
+
+  const targetUtcMinutes = 9 * 60 + 15 - etOffsetMinutes;
+  const targetUtcHours = Math.floor(targetUtcMinutes / 60);
+  const targetUtcMins = targetUtcMinutes % 60;
+  const todayUtcStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), targetUtcHours, targetUtcMins, 0));
   const startTime = now.getTime() > todayUtcStart.getTime()
     ? new Date(now.getTime() + 2 * 60 * 1000)
     : todayUtcStart;
@@ -253,10 +271,9 @@ export async function runPlanner(): Promise<PlannerResult> {
           })
           .sort((a, b) => b.score - a.score);
 
-        const maxAllowedFu = Math.min(
-          scoredFollowUps.length,
-          Math.max(targetFuSlots, remainingSlots - 2)
-        );
+        // P2-27: Strict Phi Governor — follow-ups capped strictly to targetFuSlots
+        // Unused follow-up capacity fluidly spills over into Step 1 below
+        const maxAllowedFu = Math.min(scoredFollowUps.length, targetFuSlots);
 
         for (let i = 0; i < maxAllowedFu; i++) {
           const item = scoredFollowUps[i];

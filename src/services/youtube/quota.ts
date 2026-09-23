@@ -47,13 +47,24 @@ export class YouTubeQuotaManager {
   public getActiveKeyIndex(): number {
     const keys = getAvailableYouTubeKeys();
     if (keys.length <= 1) return 0;
-    // Find the first key that has not been exhausted today
-    for (let i = 0; i < keys.length; i++) {
+
+    // P3-7: Derive active key index directly from DB quota counts
+    const derivedIdx = Math.min(
+      keys.length - 1,
+      Math.floor(this.inMemoryQuota.searchCallsUsedToday / Math.max(1, env.YOUTUBE_DAILY_SEARCH_LIMIT))
+    );
+
+    for (let i = derivedIdx; i < keys.length; i++) {
       if (!this.exhaustedKeyIndices.has(i)) {
         return i;
       }
     }
-    return 0;
+    for (let i = 0; i < derivedIdx; i++) {
+      if (!this.exhaustedKeyIndices.has(i)) {
+        return i;
+      }
+    }
+    return Math.min(derivedIdx, keys.length - 1);
   }
 
   public markActiveKeyExhausted(): void {
@@ -88,7 +99,7 @@ export class YouTubeQuotaManager {
       }
     }
 
-    // Check if midnight in Pacific Time has passed
+    // P3-10: Check if midnight in Pacific Time has passed (Atomic midnight reset)
     const nowPt = this.getPacificDateString();
     const lastResetDate = new Date(this.inMemoryQuota.lastResetPt);
     const lastPt = this.getPacificDateString(isNaN(lastResetDate.getTime()) ? new Date(0) : lastResetDate);
@@ -98,7 +109,33 @@ export class YouTubeQuotaManager {
       this.inMemoryQuota.generalQuotaUsedToday = 0;
       this.inMemoryQuota.lastResetPt = new Date().toISOString();
       this.exhaustedKeyIndices.clear();
-      await this.persistQuotaState();
+
+      if (!this.inMemoryOnly) {
+        try {
+          await db.execute(sql`
+            UPDATE system_settings
+            SET value = jsonb_set(
+              jsonb_set(
+                jsonb_set(
+                  value,
+                  '{search_calls_used_today}',
+                  '0'::jsonb
+                ),
+                '{general_quota_used_today}',
+                '0'::jsonb
+              ),
+              '{last_reset_pt}',
+              to_jsonb(${this.inMemoryQuota.lastResetPt}::text)
+            ),
+            updated_at = NOW()
+            WHERE key = 'youtube_quota';
+          `);
+        } catch {
+          await this.persistQuotaState();
+        }
+      } else {
+        await this.persistQuotaState();
+      }
     }
 
     return { ...this.inMemoryQuota };

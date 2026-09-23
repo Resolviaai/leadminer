@@ -5,9 +5,8 @@ import { env } from '../config/env';
 import { youtubeDiscoveryService } from '../services/youtube/discovery.service';
 import { emailExtractor } from '../services/extraction/email.extractor';
 import { socialExtractor } from '../services/extraction/social.extractor';
-import { websiteScraper } from '../services/extraction/website.scraper';
 import { jobRunner } from '../services/jobs/job.runner';
-import { getAvailableYouTubeKeys } from '../services/youtube/quota';
+import { getAvailableYouTubeKeys, quotaManager } from '../services/youtube/quota';
 import { telegramService } from '../services/notifications/telegram.service';
 
 export function calculatePriorityScore(newLeadsCount: number): number {
@@ -115,8 +114,29 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
         break;
       }
 
-      // 5. In-Memory Channel ID Deduplication
-      const rawIds = searchResult.channelIds;
+      // 5. In-Memory Channel ID Deduplication & Pagination (P2-23)
+      const rawIds = [...searchResult.channelIds];
+
+      if (searchResult.nextPageToken && (kw.priorityScore || 0) >= 50 && (await quotaManager.canExecuteSearch())) {
+        try {
+          const page2Result = await youtubeDiscoveryService.searchChannelIds({
+            query: kw.keyword,
+            pageToken: searchResult.nextPageToken,
+            maxResults: env.YOUTUBE_MAX_RESULTS_PER_SEARCH,
+          });
+          if (!page2Result.quotaReached && page2Result.channelIds.length > 0) {
+            console.log(`  📄 [Pagination P2-23] Fetched page 2 for high-priority keyword "${kw.keyword}" (+${page2Result.channelIds.length} channels).`);
+            for (const id of page2Result.channelIds) {
+              if (!rawIds.includes(id)) {
+                rawIds.push(id);
+              }
+            }
+          }
+        } catch (page2Err: any) {
+          console.warn(`  ⚠️ Page 2 search error for "${kw.keyword}":`, page2Err.message);
+        }
+      }
+
       const uniqueChannelIds = Array.from(new Set(rawIds));
       console.log(`  Found ${rawIds.length} raw channels -> ${uniqueChannelIds.length} unique channel IDs.`);
 
@@ -231,24 +251,19 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
             }
           }
 
-          // If still no email found, try lightweight internal website scraper
-          const targetScrapeUrl = ch.website || extractedSocials.website || extractedSocials.linktree || extractedSocials.beacons;
-          let scrapedResult: Awaited<ReturnType<typeof websiteScraper.scrapeUrl>> | null = null;
-          if (extractedEmails.length === 0 && targetScrapeUrl) {
-            try {
-              scrapedResult = await websiteScraper.scrapeUrl(targetScrapeUrl);
-              if (scrapedResult.emails.length > 0) {
-                for (const emailStr of scrapedResult.emails) {
-                  extractedEmails.push({ email: emailStr, source: 'links' });
-                }
-              }
-            } catch (scrapeErr: any) {
-              console.warn(`[Website Scraper] Error scraping ${targetScrapeUrl}:`, scrapeErr?.message);
-            }
+          // 11. Decouple Website Scraping from Hot Discovery Path (P2-26)
+          // Defer website and link-tree scraping out of band to linkpage-enrichment.worker.ts
+          if (ch.website && !extractedSocials.items.some((item) => item.value === ch.website)) {
+            extractedSocials.items.push({
+              type: 'WEBSITE',
+              value: ch.website,
+              normalizedValue: ch.website,
+              source: 'channel_details',
+            });
           }
 
-          const primaryPhone = scrapedResult?.phones[0] || extractedSocials.phone || null;
-          const contactPageUrl = scrapedResult?.contactPageUrl || null;
+          const primaryPhone = extractedSocials.phone || null;
+          const contactPageUrl = null;
 
           // 11. Persist New Lead atomically with provenance and contacts inside a single transaction
           await pool.transaction(async (tx) => {
@@ -260,7 +275,7 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
                 channelTitle: ch.title,
                 customUrl: ch.customUrl,
                 description: ch.description,
-                website: ch.website || scrapedResult?.url || extractedSocials.website || null,
+                website: ch.website || extractedSocials.website || null,
                 thumbnailUrl: ch.thumbnailUrl,
                 subscriberCount: ch.subscriberCount,
                 videoCount: ch.videoCount,
@@ -334,29 +349,6 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
                   linkedin: item.type === 'LINKEDIN' ? item.value : undefined,
                 })
                 .onConflictDoNothing();
-            }
-
-            // Also insert any extra scraped items (e.g. phone, website subpages, extra socials)
-            if (scrapedResult?.rawItems) {
-              for (const item of scrapedResult.rawItems) {
-                if (item.type === 'EMAIL') continue;
-                await tx
-                  .insert(contacts)
-                  .values({
-                    leadId,
-                    contactType: item.type,
-                    value: item.value,
-                    normalizedValue: item.normalizedValue,
-                    source: item.source,
-                    isPrimary: false,
-                    instagram: item.type === 'INSTAGRAM' ? item.normalizedValue : undefined,
-                    twitter: item.type === 'TWITTER_X' ? item.normalizedValue : undefined,
-                    discord: item.type === 'DISCORD' ? item.value : undefined,
-                    tiktok: item.type === 'TIKTOK' ? item.normalizedValue : undefined,
-                    linkedin: item.type === 'LINKEDIN' ? item.value : undefined,
-                  })
-                  .onConflictDoNothing();
-              }
             }
           });
 

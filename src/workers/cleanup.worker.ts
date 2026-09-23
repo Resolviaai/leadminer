@@ -1,10 +1,11 @@
 import { db } from '../db/client';
-import { logs, jobs, gmailAccounts, leads, scheduledEmails, leadSequenceProgress, contacts } from '../db/schema';
-import { lt, and, inArray, eq, isNotNull } from 'drizzle-orm';
+import { logs, jobs, gmailAccounts, leads, scheduledEmails, leadSequenceProgress, contacts, messages } from '../db/schema';
+import { lt, and, inArray, eq, isNotNull, sql } from 'drizzle-orm';
 import { jobRunner } from '../services/jobs/job.runner';
 import { quotaManager } from '../services/youtube/quota';
 import { reconcilePendingLeadQualifications } from './verification.worker';
 import { telegramService } from '../services/notifications/telegram.service';
+import { gmailSendingService } from '../services/outreach/gmail.service';
 
 export async function runCleanup(): Promise<{
   recoveredKeywords: number;
@@ -183,6 +184,51 @@ export async function runCleanup(): Promise<{
       }
     } catch (pruneErr: any) {
       console.warn('[Cleanup Watchdog] Error pruning 30-day raw lead payloads:', pruneErr.message);
+    }
+
+    // 11. Reconcile crashed Gmail reservations (P2-28):
+    // Compare account.sentToday against actual messages marked 'SENT' today in Pacific Time.
+    // If a worker crashed after reserving an account but before sending or completing,
+    // and no emails are currently in-flight SENDING, synchronize sentToday to match reality.
+    try {
+      const activeInboxes = await db
+        .select({ id: gmailAccounts.id, email: gmailAccounts.email, sentToday: gmailAccounts.sentToday })
+        .from(gmailAccounts)
+        .where(eq(gmailAccounts.status, 'ACTIVE'));
+
+      const ptTodayStr = gmailSendingService.getPacificDateStr(); // YYYY-MM-DD
+      const ptMidnight = new Date(`${ptTodayStr}T00:00:00-07:00`);
+
+      for (const inbox of activeInboxes) {
+        const actualSentResult = await db.execute<{ count: string }>(sql`
+          SELECT COUNT(*)::text as count
+          FROM ${messages}
+          WHERE ${messages.gmailAccountId} = ${inbox.id}
+            AND ${messages.sendStatus} = 'SENT'
+            AND ${messages.sentAt} >= ${ptMidnight}
+        `);
+        const actualCount = parseInt(actualSentResult.rows[0]?.count || '0', 10);
+
+        const inFlightResult = await db.execute<{ count: string }>(sql`
+          SELECT COUNT(*)::text as count
+          FROM ${scheduledEmails}
+          WHERE ${scheduledEmails.gmailAccountId} = ${inbox.id}
+            AND ${scheduledEmails.status} = 'SENDING'
+            AND ${scheduledEmails.updatedAt} > NOW() - INTERVAL '5 minutes'
+        `);
+        const inFlightCount = parseInt(inFlightResult.rows[0]?.count || '0', 10);
+
+        if ((inbox.sentToday || 0) > actualCount + inFlightCount) {
+          const correctedCount = actualCount + inFlightCount;
+          console.warn(`[Cleanup Watchdog] Reconciled crashed Gmail reservations for ${inbox.email}: sentToday corrected from ${inbox.sentToday} to ${correctedCount}.`);
+          await db
+            .update(gmailAccounts)
+            .set({ sentToday: correctedCount, updatedAt: new Date() })
+            .where(eq(gmailAccounts.id, inbox.id));
+        }
+      }
+    } catch (reconcileErr: any) {
+      console.warn('[Cleanup Watchdog] Note on Gmail reservation reconciliation:', reconcileErr.message);
     }
 
     const totalProcessed = recovery.recoveredKeywords + recovery.recoveredJobs + recoveredLeads + requalifiedLeads;

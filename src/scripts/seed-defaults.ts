@@ -1,6 +1,7 @@
 import { db, getDbPool } from '../db/client';
 import { templates, campaigns, systemSettings } from '../db/schema';
 import { eq } from 'drizzle-orm';
+import { env } from '../config/env';
 
 export async function seedDefaults() {
   console.log('🌱 Seeding system default templates and settings...');
@@ -17,13 +18,13 @@ export async function seedDefaults() {
       {
         key: 'youtube_quota',
         value: {
-          search_calls_daily_limit: 100,
+          search_calls_daily_limit: env.YOUTUBE_DAILY_SEARCH_LIMIT,
           search_calls_used_today: 0,
-          general_quota_daily_limit: 10000,
+          general_quota_daily_limit: env.YOUTUBE_DAILY_GENERAL_LIMIT,
           general_quota_used_today: 0,
           last_reset_pt: new Date().toISOString(),
         },
-        description: 'YouTube API dual-bucket quota tracking (search.list 100 calls/day; general 10,000 units/day; resets midnight PT).',
+        description: `YouTube API dual-bucket quota tracking (search.list ${env.YOUTUBE_DAILY_SEARCH_LIMIT} calls/day; general ${env.YOUTUBE_DAILY_GENERAL_LIMIT} units/day; resets midnight PT).`,
       },
       {
         key: 'batch_config',

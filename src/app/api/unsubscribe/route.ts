@@ -4,20 +4,12 @@ import { suppressions, leads, contacts } from '../../../db/schema';
 import { eq, sql, and } from 'drizzle-orm';
 import { telegramService } from '../../../services/notifications/telegram.service';
 import { verifyUnsubscribeToken } from '../../../lib/unsubscribe-token';
+import { checkRateLimit, getClientIp } from '../../../lib/rate-limiter';
 
 export const dynamic = 'force-dynamic';
 
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 function isRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const entry = rateLimitMap.get(ip);
-  if (!entry || now > entry.resetAt) {
-    rateLimitMap.set(ip, { count: 1, resetAt: now + 60000 });
-    return false;
-  }
-  if (entry.count >= 20) return true;
-  entry.count++;
-  return false;
+  return !checkRateLimit('unsubscribe', ip, 20, 60000).allowed;
 }
 
 function escapeHtml(str: string): string {

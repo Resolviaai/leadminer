@@ -187,9 +187,9 @@
 - **Problem:** New-lead candidates are not sorted — random order instead of highest-fit first.
 - **Fix:** Ordered candidate leads by `subscriberCount DESC`.
 
-### P2-23 [ ] No YouTube search pagination
+### P2-23 [x] No YouTube search pagination
 - **Problem:** Only first page of results per keyword. Missing many relevant leads.
-- **Suggested fix:** Paginate top keywords within quota budget.
+- **Fix:** Added `nextPageToken` capture in `YouTubeDiscoveryService.searchChannelIds`. In `discovery.worker.ts`, high-priority keywords (`priorityScore >= 50`) automatically fetch page 2 if daily search quota allows, deduplicating channels in memory before database insertion.
 
 ### P2-24 [x] Re-qualification sweep runs unbounded multiple times daily
 - **Problem:** No batch size cap. Slows as database grows. Runs more than once per day.
@@ -199,17 +199,17 @@
 - **Problem:** Link-page rows that crash mid-scrape stay as "scraping" forever.
 - **Fix:** Cleanup watchdog resets contacts stuck in `SCRAPING` > 15 minutes back to `PENDING`; corrected job type to `LINKPAGE_ENRICHMENT`.
 
-### P2-26 [ ] Website scraping runs in the hot discovery path — one slow site starves the pipeline
+### P2-26 [x] Website scraping runs in the hot discovery path — one slow site starves the pipeline
 - **Problem:** Website enrichment is synchronous in the discovery loop.
-- **Suggested fix:** Move website scraping to a separate worker.
+- **Fix:** Decoupled external website scraping from discovery hot path. Discovered website URLs and link-tree URLs are inserted into `contacts` with `link_scrape_status = 'PENDING'`, delegating extraction out-of-band to `linkpage-enrichment.worker.ts`.
 
-### P2-27 [ ] Planner "spillover" overrides the Phi capacity split
+### P2-27 [x] Planner "spillover" overrides the Phi capacity split
 - **Problem:** Two competing models for capacity allocation. Causes inconsistent planning.
-- **Suggested fix:** Pick one model. Phi split recommended after per-sequence metrics exist.
+- **Fix:** Reconciled capacity allocation: follow-ups are strictly capped to `targetFuSlots` calculated by the Phi equilibrium ratio, preventing follow-ups from starving new leads. When fewer follow-ups are due, unused follow-up capacity fluidly spills over into Step 1 new outreach.
 
-### P2-28 [ ] Crashed Gmail reservations burn quota; successful reconcile double-charges
+### P2-28 [x] Crashed Gmail reservations burn quota; successful reconcile double-charges
 - **Problem:** Reservation timestamps not tracked. Release-on-success path double-charges sentToday.
-- **Suggested fix:** Timestamp reservations. Reap stale ones. Fix release path.
+- **Fix:** Added `releaseAccountReservation()` call in `gmail.service.ts` in-flight reconciliation path to eliminate double-charging. Added watchdog step in `cleanup.worker.ts` comparing `sentToday` against actual sent messages today (Pacific Time), restoring capacity lost from serverless crashes.
 
 ### P2-29 [x] Concurrent planners can create duplicate sequences
 - **Problem:** Two planners running simultaneously can both create a sequence for the same campaign.
@@ -251,14 +251,26 @@
 ### P3-5 [x] Lock down /api/health (currently exposes system info)
 - **Fix:** `/api/health` returns minimal status `{ status: 'healthy', timestamp }` for unauthenticated requests, and requires Bearer token or session auth for full diagnostics.
 
-### P3-6 [ ] Page all Gmail accounts by capacity (currently only fetches top N)
-### P3-7 [ ] Derive YouTube key from DB counts (sync with prod state)
-### P3-8 [ ] Single source of truth for search limit
-### P3-9 [ ] DST timing edge case (already partially fixed by BUG-05, verify completeness)
-### P3-10 [ ] Atomic midnight quota resets
+### P3-6 [x] Page all Gmail accounts by capacity (currently only fetches top N)
+- **Fix:** Removed arbitrary `.limit(10)` from `reserveSendingAccount()`. Orders all active Gmail accounts by remaining daily capacity (`(dailyLimit - sentToday) DESC`) so accounts with available quota are always prioritized.
+
+### P3-7 [x] Derive YouTube key from DB counts (sync with prod state)
+- **Fix:** `getActiveKeyIndex()` derives the active key index directly from DB quota counts (`Math.floor(searchCallsUsedToday / YOUTUBE_DAILY_SEARCH_LIMIT)`), syncing key rotation across stateless serverless instances.
+
+### P3-8 [x] Single source of truth for search limit
+- **Fix:** Unified `env.YOUTUBE_DAILY_SEARCH_LIMIT` and `env.YOUTUBE_DAILY_GENERAL_LIMIT` as the single source of truth across `env.ts`, `seed-defaults.ts`, `quota.ts`, and UI.
+
+### P3-9 [x] DST timing edge case (already partially fixed by BUG-05, verify completeness)
+- **Fix:** Replaced hardcoded `13:15 UTC` in `planner.worker.ts` with dynamic `America/New_York` offset calculation via `Intl.DateTimeFormat`. Correctly maps 9:15 AM Eastern to 13:15 UTC in EDT and 14:15 UTC in EST.
+
+### P3-10 [x] Atomic midnight quota resets
+- **Fix:** `syncQuotaState()` performs atomic midnight Pacific resets in PostgreSQL via conditional JSONB update queries, preventing race conditions between concurrent worker executions.
+
 ### P3-11 [x] Gemini failure alerts + move AI call after cheap checks
 - **Fix:** Moved Gemini AI personalization after kill-switch, campaign status, and template checks.
-### P3-12 [ ] Rate-limit public endpoints + GDPR delete-my-data path
+
+### P3-12 [x] Rate-limit public endpoints + GDPR delete-my-data path
+- **Fix:** Created shared sliding-window IP rate limiter (`src/lib/rate-limiter.ts`) protecting `/api/unsubscribe`, `/api/health`, and `/api/gdpr/delete`. Built self-serve GDPR Right to Erasure endpoint (`/api/gdpr/delete`) that scrubs personal data, permanently suppresses emails, cancels active sequences, and provides a web portal form.
 
 ---
 

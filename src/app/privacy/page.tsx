@@ -186,11 +186,23 @@ export default function PrivacyPolicyPage() {
           </div>
         </section>
 
-        {/* Section 6: Contact */}
+        {/* Section 6: Contact & Self-Serve Data Erasure */}
         <section className="space-y-4 border-t border-[#2E2E2E] pt-8">
-          <h2 className="text-xl font-semibold text-white tracking-tight">6. Privacy Inquiries &amp; Contact</h2>
+          <h2 className="text-xl font-semibold text-white tracking-tight">6. GDPR Right to Erasure &amp; Contact</h2>
           <p className="text-sm text-[#94a3b8] leading-relaxed">
-            If you have questions regarding this Privacy Policy, our data processing procedures, or wish to submit a data erasure request, please contact our administrative team at:
+            In compliance with GDPR Article 17 (Right to Erasure), creators and recipients may immediately and permanently purge all stored contact data and add their email to our suppression list via our self-serve portal:
+          </p>
+          <div className="pt-1 pb-2">
+            <Link
+              href="/api/gdpr/delete"
+              className="inline-flex items-center space-x-2 px-4 py-2 rounded-lg bg-[#C46A3A]/15 border border-[#C46A3A]/40 text-[#C46A3A] hover:bg-[#C46A3A]/25 transition-colors text-xs font-semibold"
+            >
+              <span>Access Self-Serve GDPR Erasure Portal</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+          <p className="text-sm text-[#94a3b8] leading-relaxed">
+            For all other privacy inquiries, contact our administrative compliance team at:
           </p>
           <div className="p-4 rounded-lg bg-[#1C1C1C] border border-[#2E2E2E] font-mono text-xs text-[#cbd5e1] space-y-1">
             <p>Email: privacy@resolvia.ai</p>

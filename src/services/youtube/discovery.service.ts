@@ -54,7 +54,7 @@ export class YouTubeDiscoveryService {
     throw new Error('Max retries exceeded');
   }
 
-  public async searchChannelIds(params: YouTubeSearchParams): Promise<{ channelIds: string[]; quotaReached: boolean }> {
+  public async searchChannelIds(params: YouTubeSearchParams): Promise<{ channelIds: string[]; nextPageToken?: string; quotaReached: boolean }> {
     const claimed = await quotaManager.tryClaimSearchCall();
     if (!claimed) {
       console.warn(`[YouTube Quota] Daily search.list limit reached (${env.YOUTUBE_DAILY_SEARCH_LIMIT} calls). Pausing discovery.`);
@@ -74,6 +74,7 @@ export class YouTubeDiscoveryService {
           part: ['snippet'],
           q: params.query,
           type: ['channel'],
+          pageToken: params.pageToken,
           maxResults: params.maxResults || env.YOUTUBE_MAX_RESULTS_PER_SEARCH,
           regionCode:
             params.regionCode ||
@@ -91,7 +92,11 @@ export class YouTubeDiscoveryService {
 
       // In-memory deduplication
       const uniqueIds = Array.from(new Set(rawIds));
-      return { channelIds: uniqueIds, quotaReached: false };
+      return {
+        channelIds: uniqueIds,
+        nextPageToken: searchResponse.data.nextPageToken || undefined,
+        quotaReached: false,
+      };
     } catch (error: any) {
       const isQuota = error?.status === 403 && (error?.message?.includes('quota') || error?.errors?.[0]?.reason === 'quotaExceeded');
       if (isQuota) {

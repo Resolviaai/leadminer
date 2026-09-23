@@ -27,6 +27,7 @@ const PUBLIC_PATHS = new Set([
   '/api/auth/logout',
   '/api/unsubscribe',
   '/api/health',
+  '/api/gdpr/delete',
 ]);
 
 function isPublic(pathname: string): boolean {

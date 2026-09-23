@@ -109,7 +109,7 @@ export class GmailSendingService {
         .select()
         .from(gmailAccounts)
         .where(eq(gmailAccounts.status, 'ACTIVE'))
-        .limit(10);
+        .orderBy(sql`(${gmailAccounts.dailyLimit} - COALESCE(${gmailAccounts.sentToday}, 0)) DESC`);
 
       const currentPtDate = this.getPacificDateStr();
 
@@ -583,6 +583,9 @@ export class GmailSendingService {
                     })
                     .where(eq(messages.id, messageRecordId));
                 }
+
+                // P2-28: Release current reservation so sentToday is not double-charged
+                await this.releaseAccountReservation(account.id);
 
                 await db
                   .update(leads)
