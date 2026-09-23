@@ -16,6 +16,7 @@ import { geminiService } from '../services/ai/gemini.service';
 import { gmailSendingService } from '../services/outreach/gmail.service';
 import { runReplySync } from './replies.worker';
 import { sequenceService } from '../services/outreach/sequence.service';
+import { telegramService } from '../services/notifications/telegram.service';
 
 export interface DispatcherResult {
   dispatched: number;
@@ -116,10 +117,11 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
       .limit(1);
     if (activeKill.length > 0 && (activeKill[0].value as any)?.enabled) {
       console.warn('⛔ [Kill Switch Active] Mid-dispatch emergency stop.');
+      const remainingClaimed = claimedRows.slice(i);
       await db
         .update(scheduledEmails)
         .set({ status: 'PENDING', updatedAt: new Date() })
-        .where(eq(scheduledEmails.id, scheduledId));
+        .where(inArray(scheduledEmails.id, remainingClaimed));
       break;
     }
 
@@ -351,7 +353,7 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
       const errorMessage = sendResult.error || sendResult.skippedReason || 'Send failed';
       console.error(`  ❌ Send failed: ${errorMessage}`);
 
-      // Retry policy: if attempts < 3 and error is transient, postpone 10 minutes.
+      // Retry policy: if attempts < 3 and error is transient, postpone.
       // BUG-01: Treat post-send verification failure and unconfirmed states as terminal to prevent duplicate sends!
       const isTerminalFailure =
         sendResult.skippedReason === 'POST_SEND_VERIFICATION_FAILED' ||
@@ -359,7 +361,65 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
         sendResult.skippedReason === 'MESSAGE_PREVIOUSLY_UNCONFIRMED' ||
         sendResult.skippedReason === 'RECIPIENT_ALREADY_CONTACTED';
 
+      const isRateLimited =
+        errorMessage.includes('429') ||
+        errorMessage.toLowerCase().includes('ratelimit') ||
+        errorMessage.toLowerCase().includes('rate limit') ||
+        errorMessage.toLowerCase().includes('quota exceeded') ||
+        errorMessage.toLowerCase().includes('userratelimitexceeded') ||
+        errorMessage.toLowerCase().includes('resource_exhausted');
+
       const maxAttempts = 3;
+
+      if (isRateLimited) {
+        console.warn(`  ⚠️ Rate limit detected for account #${item.gmailAccountId}. Halting batch and applying backoff.`);
+        await telegramService.notifyCriticalError(
+          'Gmail API Rate Limit (429)',
+          `Account #${item.gmailAccountId} hit rate limits (${errorMessage}). Dispatched batch halted, backing off pending sends by 30+ minutes.`
+        );
+
+        // Exponential backoff for this email: 30m, 60m, 120m
+        const backoffMs = Math.pow(2, Math.max(0, item.attempts - 1)) * 30 * 60 * 1000;
+        const retryTime = new Date(Date.now() + backoffMs);
+
+        await db
+          .update(scheduledEmails)
+          .set({
+            status: item.attempts >= maxAttempts ? 'FAILED' : 'PENDING',
+            scheduledAt: retryTime,
+            error: `Rate limited: ${errorMessage}`,
+            updatedAt: new Date(),
+          })
+          .where(eq(scheduledEmails.id, scheduledId));
+
+        // Delay other pending emails on this account by 30m to let rate limit cool down
+        const coolDownTime = new Date(Date.now() + 30 * 60 * 1000);
+        await db
+          .update(scheduledEmails)
+          .set({
+            scheduledAt: sql`GREATEST(${scheduledEmails.scheduledAt}, ${coolDownTime})`,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(scheduledEmails.gmailAccountId, item.gmailAccountId),
+              eq(scheduledEmails.status, 'PENDING')
+            )
+          );
+
+        // Release any other claimed rows in this batch before breaking
+        const remainingClaimed = claimedRows.slice(i + 1);
+        if (remainingClaimed.length > 0) {
+          await db
+            .update(scheduledEmails)
+            .set({ status: 'PENDING', updatedAt: new Date() })
+            .where(inArray(scheduledEmails.id, remainingClaimed));
+        }
+
+        // Halt rest of current dispatch batch
+        break;
+      }
+
       if (item.attempts < maxAttempts && !isTerminalFailure) {
         const retryTime = new Date(Date.now() + 10 * 60 * 1000);
         await db

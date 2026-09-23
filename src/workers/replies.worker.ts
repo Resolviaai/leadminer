@@ -24,15 +24,59 @@ export function decodeGmailBody(payload: any): string {
   return parts.join('\n');
 }
 
-export function isAutomatedBounceOrDaemon(headers: { name?: string; value?: string }[], fromHeader: string): boolean {
+export type AutomatedResponseType = 'NONE' | 'HARD_BOUNCE' | 'SOFT_BOUNCE' | 'OUT_OF_OFFICE';
+
+export function classifyAutomatedResponse(
+  headers: { name?: string; value?: string }[],
+  fromHeader: string,
+  subjectHeader: string = '',
+  bodyText: string = ''
+): AutomatedResponseType {
   const fromEmailLower = (fromHeader || '').toLowerCase();
+  const subjectLower = (subjectHeader || '').toLowerCase();
   const autoSubmitted = headers.find((h: any) => h.name?.toLowerCase() === 'auto-submitted')?.value?.toLowerCase();
   const precedence = headers.find((h: any) => h.name?.toLowerCase() === 'precedence')?.value?.toLowerCase();
   const xAutoreply = headers.find((h: any) => h.name?.toLowerCase() === 'x-autoreply')?.value?.toLowerCase();
-  const subject = headers.find((h: any) => h.name?.toLowerCase() === 'subject')?.value?.toLowerCase() || '';
 
-  const isAutoSubmitted = autoSubmitted && autoSubmitted !== 'no';
-  const isBulkOrBounce = precedence === 'bulk' || precedence === 'junk' || precedence === 'bounce';
+  // 1. OUT OF OFFICE / VACATION / AUTO-REPLY
+  const isOooSubject =
+    subjectLower.includes('out of office') ||
+    subjectLower.includes('away from office') ||
+    subjectLower.includes('away from my desk') ||
+    subjectLower.includes('automatic reply') ||
+    subjectLower.includes('auto-reply') ||
+    subjectLower.includes('autoreply') ||
+    subjectLower.includes('on leave') ||
+    subjectLower.includes('on vacation') ||
+    subjectLower.includes('vacation notice');
+
+  const isOooHeader =
+    autoSubmitted === 'auto-replied' ||
+    xAutoreply === 'yes';
+
+  if (isOooSubject || isOooHeader) {
+    return 'OUT_OF_OFFICE';
+  }
+
+  // 2. SOFT BOUNCE (temporary mailbox issues, greylisting, quota)
+  const isSoftBounce =
+    subjectLower.includes('mailbox is full') ||
+    subjectLower.includes('mailbox full') ||
+    subjectLower.includes('quota exceeded') ||
+    subjectLower.includes('temporarily unavailable') ||
+    subjectLower.includes('service unavailable') ||
+    subjectLower.includes('too busy') ||
+    subjectLower.includes('temporary problem') ||
+    subjectLower.includes('greylisted') ||
+    bodyText.toLowerCase().includes('mailbox is full') ||
+    bodyText.toLowerCase().includes('quota exceeded') ||
+    bodyText.toLowerCase().includes('temporarily deferred');
+
+  if (isSoftBounce) {
+    return 'SOFT_BOUNCE';
+  }
+
+  // 3. HARD BOUNCE / AUTOMATED DAEMON / DELIVERY FAILURE
   const isDaemonOrBounceAddress =
     fromEmailLower.includes('mailer-daemon') ||
     fromEmailLower.includes('postmaster') ||
@@ -40,13 +84,39 @@ export function isAutomatedBounceOrDaemon(headers: { name?: string; value?: stri
     fromEmailLower.includes('no-reply') ||
     fromEmailLower.includes('delivery-status') ||
     fromEmailLower.includes('mail delivery subsystem');
-  const isDeliveryFailureSubject =
-    subject.includes('delivery status notification') ||
-    subject.includes('failure notice') ||
-    subject.includes('undeliverable') ||
-    subject.includes('returned mail');
 
-  return Boolean(isAutoSubmitted || isBulkOrBounce || xAutoreply || isDaemonOrBounceAddress || isDeliveryFailureSubject);
+  const isDeliveryFailureSubject =
+    subjectLower.includes('delivery status notification') ||
+    subjectLower.includes('failure notice') ||
+    subjectLower.includes('undeliverable') ||
+    subjectLower.includes('returned mail') ||
+    subjectLower.includes('address not found') ||
+    subjectLower.includes('user unknown');
+
+  const isHardBounceHeader =
+    precedence === 'bounce' ||
+    precedence === 'bulk' ||
+    precedence === 'junk' ||
+    (autoSubmitted && autoSubmitted !== 'no');
+
+  const isHardBounceBody =
+    bodyText.toLowerCase().includes('550 5.1.1') ||
+    bodyText.toLowerCase().includes('recipient address rejected') ||
+    bodyText.toLowerCase().includes('user unknown') ||
+    bodyText.toLowerCase().includes('no such user') ||
+    bodyText.toLowerCase().includes('does not exist');
+
+  if (isDaemonOrBounceAddress || isDeliveryFailureSubject || isHardBounceHeader || isHardBounceBody) {
+    return 'HARD_BOUNCE';
+  }
+
+  return 'NONE';
+}
+
+export function isAutomatedBounceOrDaemon(headers: { name?: string; value?: string }[], fromHeader: string): boolean {
+  const subject = headers.find((h: any) => h.name?.toLowerCase() === 'subject')?.value || '';
+  const result = classifyAutomatedResponse(headers, fromHeader, subject);
+  return result !== 'NONE';
 }
 
 export async function runReplySync(): Promise<{ repliesDetected: number }> {
@@ -54,10 +124,8 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
   console.log(`📥 Starting Reply Detection & Sync Worker`);
   console.log(`======================================================\n`);
 
-  // BUG-09 fix: 72h sliding window, max 200 threads
-  const REPLY_SCAN_WINDOW_MS = 72 * 60 * 60 * 1000;
+  // Decision 7: Scan active contacted/replied threads without 72h restriction
   const REPLY_SCAN_BATCH_SIZE = 200;
-  const windowStart = new Date(Date.now() - REPLY_SCAN_WINDOW_MS);
 
   const recentSent = await db
     .select({
@@ -76,8 +144,7 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
       and(
         eq(messages.sendStatus, 'SENT'),
         isNotNull(messages.threadId),
-        inArray(leads.outreachStatus, ['CONTACTED', 'REPLIED']),
-        gte(messages.sentAt, windowStart)
+        inArray(leads.outreachStatus, ['CONTACTED', 'REPLIED'])
       )
     )
     .orderBy(desc(messages.sentAt))
@@ -182,8 +249,17 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
       }
     }
 
-    // 5. Inspect threads for replies
-    for (const msg of recentSent) {
+    // 5. Deduplicate thread IDs across recentSent (P3-3)
+    const seenThreads = new Set<string>();
+    const deduplicatedSent = recentSent.filter((msg) => {
+      if (!msg.threadId) return false;
+      if (seenThreads.has(msg.threadId)) return false;
+      seenThreads.add(msg.threadId);
+      return true;
+    });
+
+    // 6. Inspect threads for replies
+    for (const msg of deduplicatedSent) {
       if (!msg.threadId || !msg.gmailAccountId) continue;
 
       const clientEntry = gmailClientsMap.get(msg.gmailAccountId);
@@ -209,16 +285,50 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
           const headers = tm.payload?.headers || [];
           const fromHeader = headers.find((h: any) => h.name?.toLowerCase() === 'from')?.value || '';
           const fromEmailLower = fromHeader.toLowerCase();
+          const subjectHeader = headers.find((h: any) => h.name?.toLowerCase() === 'subject')?.value || '';
 
-          // Anti-Bounce & Auto-Reply Protection:
-          if (isAutomatedBounceOrDaemon(headers, fromHeader)) {
-            // BUG-08 fix: active bounce handling — don't just skip, mark lead BOUNCED.
-            // Permanent delivery failures must suppress the address and cancel the sequence
-            // to prevent continued sends to a known-bad address (Gmail rep damage).
+          // P1-11: Direction Check FIRST! If outbound, ignore completely.
+          const isOutbound = fromEmailLower.includes(accountEmailLower);
+          if (isOutbound) {
+            continue;
+          }
+
+          const bodyText = decodeGmailBody(tm.payload);
+          const responseType = classifyAutomatedResponse(headers, fromHeader, subjectHeader, bodyText);
+
+          // P1-12: Handle OUT_OF_OFFICE (pause 5 days, no bounce/suppression)
+          if (responseType === 'OUT_OF_OFFICE') {
+            console.log(`[OOO Handler] Out-of-office detected from ${fromHeader} on lead #${msg.leadId}. Pausing sequence +5 days.`);
+            const fiveDaysLater = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+            await db
+              .update(scheduledEmails)
+              .set({
+                scheduledAt: fiveDaysLater,
+                updatedAt: new Date(),
+              })
+              .where(and(eq(scheduledEmails.leadId, msg.leadId), eq(scheduledEmails.status, 'PENDING')));
+            continue;
+          }
+
+          // P1-12: Handle SOFT_BOUNCE (retry 48h, no bounce/suppression)
+          if (responseType === 'SOFT_BOUNCE') {
+            console.log(`[Soft Bounce] Temporary delivery issue for lead #${msg.leadId}. Rescheduling next step +48h.`);
+            const fortyEightHoursLater = new Date(Date.now() + 48 * 60 * 60 * 1000);
+            await db
+              .update(scheduledEmails)
+              .set({
+                scheduledAt: fortyEightHoursLater,
+                updatedAt: new Date(),
+              })
+              .where(and(eq(scheduledEmails.leadId, msg.leadId), eq(scheduledEmails.status, 'PENDING')));
+            continue;
+          }
+
+          // P1-12: Handle HARD_BOUNCE (permanent delivery failure)
+          if (responseType === 'HARD_BOUNCE') {
             try {
               const bounceEmail = (msg.recipientEmail || '').toLowerCase().trim();
               if (bounceEmail) {
-                // 1. Suppress the email address
                 await db
                   .insert(suppressions)
                   .values({
@@ -229,7 +339,6 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
                   })
                   .onConflictDoNothing();
 
-                // 2. Mark the lead as BOUNCED + suppressed
                 await db
                   .update(leads)
                   .set({ outreachStatus: 'BOUNCED', suppressionStatus: true, updatedAt: new Date() })
@@ -240,7 +349,6 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
                   .set({ emailStatus: 'INVALID', verificationReason: 'Hard bounce detected', updatedAt: new Date() })
                   .where(and(eq(contacts.leadId, msg.leadId), sql`lower(${contacts.email}) = ${bounceEmail}`));
 
-                // 3. Cancel all pending scheduled emails for this lead
                 await db
                   .update(scheduledEmails)
                   .set({ status: 'CANCELLED', error: 'Bounce detected', updatedAt: new Date() })
@@ -249,7 +357,7 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
                 await sequenceService.cancelSequenceForLead(msg.leadId, 'CANCELLED_BOUNCED');
 
                 console.log(`[Bounce Handler] Lead #${msg.leadId} (${bounceEmail}) marked BOUNCED and suppressed.`);
-                await jobRunner.logEvent(jobId, 'BOUNCE_DETECTED', 'WARN', `Bounce for ${bounceEmail} (lead #${msg.leadId}) — suppressed and sequence cancelled.`, { leadId: msg.leadId, email: bounceEmail });
+                await jobRunner.logEvent(jobId, 'BOUNCE_DETECTED', 'WARN', `Hard bounce for ${bounceEmail} (lead #${msg.leadId}) — suppressed and sequence cancelled.`, { leadId: msg.leadId, email: bounceEmail });
               }
             } catch (bounceErr: any) {
               console.warn(`[Reply Worker] Non-fatal: bounce handling failed for lead #${msg.leadId}:`, bounceErr.message);
@@ -257,24 +365,20 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
             continue;
           }
 
-          // Inspect messages in thread: find genuine creator reply where from != account.email and timestamp after outbound send
-          const isOutbound = fromEmailLower.includes(accountEmailLower);
+          // Genuine creator human reply
           const dateHeader = headers.find((h: any) => h.name?.toLowerCase() === 'date')?.value;
           const msgTime = Number(tm.internalDate) || (dateHeader ? new Date(dateHeader).getTime() : Date.now());
 
-          // 5-second clock skew buffer to ensure near-instant creator responses or slight server time variations are reliably captured
-          if (!isOutbound && msgTime > (outboundTime - 5000)) {
-            // Extract clean sender email
+          if (msgTime > (outboundTime - 5000)) {
             const emailMatch = fromHeader.match(/<([^>]+)>/) || [null, fromHeader.trim()];
             const senderEmail = emailMatch[1] || msg.recipientEmail;
 
-            // Call replyDetectorService.processInboundReply
             const replyRes = await replyDetectorService.processInboundReply({
               threadId: msg.threadId,
               messageId: tm.id,
               senderEmail,
               snippet: tm.snippet || 'Reply received from creator',
-              bodyText: decodeGmailBody(tm.payload),
+              bodyText,
               receivedAt: new Date(msgTime),
               gmailAccountId: account.id,
             });

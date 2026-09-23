@@ -38,30 +38,43 @@ export class TelegramNotificationService {
       return true;
     }
 
-    try {
-      const url = `https://api.telegram.org/bot${this.botToken}/sendMessage`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: this.chatId,
-          text,
-          parse_mode: 'HTML',
-          disable_web_page_preview: true,
-        }),
-      });
+    const maxAttempts = 3;
+    let attempt = 0;
+    while (attempt < maxAttempts) {
+      attempt++;
+      try {
+        const url = `https://api.telegram.org/bot${this.botToken}/sendMessage`;
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: this.chatId,
+            text,
+            parse_mode: 'HTML',
+            disable_web_page_preview: true,
+          }),
+        });
 
-      if (!response.ok) {
+        if (response.ok) {
+          return true;
+        }
+
         const err = await response.text();
-        console.error(`[Telegram Error] HTTP ${response.status}: ${err}`);
-        return false;
+        console.error(`[Telegram Error] Attempt ${attempt}/${maxAttempts} HTTP ${response.status}: ${err}`);
+        if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+          return false;
+        }
+      } catch (error: any) {
+        console.error(`[Telegram Notification Failed] Attempt ${attempt}/${maxAttempts}:`, error.message);
       }
 
-      return true;
-    } catch (error: any) {
-      console.error('[Telegram Notification Failed]:', error.message);
-      return false;
+      if (attempt < maxAttempts) {
+        const delayMs = Math.pow(2, attempt - 1) * 1000;
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
     }
+
+    return false;
   }
 
   public async notifyReply(data: TelegramReplyNotification): Promise<boolean> {

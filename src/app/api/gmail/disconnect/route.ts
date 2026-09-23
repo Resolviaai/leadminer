@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '../../../../db/client';
-import { gmailAccounts, messages, logs } from '../../../../db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { gmailAccounts, messages, logs, scheduledEmails, leadSequenceProgress } from '../../../../db/schema';
+import { eq, sql, and, not } from 'drizzle-orm';
 import { encryptionService } from '../../../../services/security/encryption.service';
 import { gmailSendingService } from '../../../../services/outreach/gmail.service';
 import { verifyDashboardAuth } from '../../../../lib/api-auth';
+import { telegramService } from '../../../../services/notifications/telegram.service';
 
 export async function POST(req: NextRequest) {
   const auth = verifyDashboardAuth(req);
@@ -61,7 +62,86 @@ export async function POST(req: NextRequest) {
 
     const sentMessagesCount = msgCountRes?.count || 0;
 
-    // 3. Execution: Permanent Delete vs Soft Disconnect
+    // 3. Re-pin or cancel pending scheduled emails and active sequences (TASK-12 / P1-6)
+    const otherActiveAccounts = await db
+      .select({ id: gmailAccounts.id, email: gmailAccounts.email })
+      .from(gmailAccounts)
+      .where(and(eq(gmailAccounts.status, 'ACTIVE'), not(eq(gmailAccounts.id, accountId))));
+
+    if (otherActiveAccounts.length > 0) {
+      const targetAccount = otherActiveAccounts[0];
+      await db
+        .update(scheduledEmails)
+        .set({
+          gmailAccountId: targetAccount.id,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(scheduledEmails.gmailAccountId, accountId),
+            eq(scheduledEmails.status, 'PENDING')
+          )
+        );
+
+      await db
+        .update(leadSequenceProgress)
+        .set({
+          pinnedGmailAccountId: targetAccount.id,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(leadSequenceProgress.pinnedGmailAccountId, accountId),
+            eq(leadSequenceProgress.status, 'ACTIVE')
+          )
+        );
+
+      console.log(`[Disconnect Re-Pin] Re-pinned sequences and pending sends from #${accountId} to #${targetAccount.id} (${targetAccount.email})`);
+    } else {
+      await db
+        .update(scheduledEmails)
+        .set({
+          status: 'CANCELLED',
+          error: `Pinned inbox ${account.email} was disconnected and no other active inboxes are available.`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(scheduledEmails.gmailAccountId, accountId),
+            eq(scheduledEmails.status, 'PENDING')
+          )
+        );
+
+      await db
+        .update(leadSequenceProgress)
+        .set({
+          status: 'PAUSED',
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(leadSequenceProgress.pinnedGmailAccountId, accountId),
+            eq(leadSequenceProgress.status, 'ACTIVE')
+          )
+        );
+
+      console.warn(`[Disconnect Cancel] No active inboxes available. Cancelled pending scheduled emails for #${accountId}.`);
+    }
+
+    try {
+      await telegramService.notifyCriticalError(
+        'Gmail Inbox Disconnected',
+        `Inbox ${account.email} (ID #${accountId}) was disconnected. ${
+          otherActiveAccounts.length > 0
+            ? `Pending sends re-pinned to ${otherActiveAccounts[0].email}.`
+            : 'No alternate active inboxes found; pending sends cancelled.'
+        }`
+      );
+    } catch (tgErr: any) {
+      console.warn('[Disconnect Telegram Alert Non-Fatal]:', tgErr.message);
+    }
+
+    // 4. Execution: Permanent Delete vs Soft Disconnect
     if (permanent && sentMessagesCount === 0) {
       await db.delete(gmailAccounts).where(eq(gmailAccounts.id, accountId));
 

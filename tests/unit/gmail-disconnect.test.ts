@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockDbSelect = vi.fn();
 const mockDbUpdate = vi.fn();
@@ -87,8 +87,14 @@ describe('Gmail Disconnect & Removal Endpoint', () => {
               ]),
             };
           }
-          // Second query is count of messages
-          return Promise.resolve([{ count: 5 }]);
+          if (selectCall === 2) {
+            // Count of messages
+            return Promise.resolve([{ count: 5 }]);
+          }
+          // otherActiveAccounts
+          return Promise.resolve([
+            { id: 2, email: 'secondary@gmail.com', status: 'ACTIVE' },
+          ]);
         }),
       }),
     }));
@@ -127,7 +133,8 @@ describe('Gmail Disconnect & Removal Endpoint', () => {
     );
 
     // Assert account status set to DISCONNECTED and tokens wiped
-    const updatedFields = updateSetCalls[0];
+    const updatedFields = updateSetCalls.find((u) => u.status === 'DISCONNECTED');
+    expect(updatedFields).toBeDefined();
     expect(updatedFields.status).toBe('DISCONNECTED');
     expect(updatedFields.refreshToken).toBeNull();
     expect(updatedFields.accessToken).toBeNull();
@@ -154,7 +161,10 @@ describe('Gmail Disconnect & Removal Endpoint', () => {
               ]),
             };
           }
-          return Promise.resolve([{ count: 0 }]); // 0 messages sent
+          if (selectCall === 2) {
+            return Promise.resolve([{ count: 0 }]); // 0 messages sent
+          }
+          return Promise.resolve([{ id: 3, email: 'active@gmail.com', status: 'ACTIVE' }]);
         }),
       }),
     }));

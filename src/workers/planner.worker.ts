@@ -294,13 +294,14 @@ export async function runPlanner(): Promise<PlannerResult> {
       .where(eq(messages.campaignId, campaign.id));
     const contactedIds = new Set(contactedContacts.map((c) => c.contactId).filter(Boolean));
 
-    // Query qualified Step 1 candidate leads
+    // Query qualified Step 1 candidate leads sorted by subscriber count (Decision 8)
     const candidates = await db
       .select({
         leadId: leads.id,
         contactId: contacts.id,
         email: contacts.email,
         channelTitle: leads.channelTitle,
+        subscriberCount: leads.subscriberCount,
         isPrimary: contacts.isPrimary,
       })
       .from(leads)
@@ -314,54 +315,100 @@ export async function runPlanner(): Promise<PlannerResult> {
           isNotNull(contacts.email)
         )
       )
+      .orderBy(desc(leads.subscriberCount), desc(leads.discoveredAt))
       .limit(slotsForNew * 5);
 
-    let accountNewScheduled = 0;
+    // Group contacts by leadId for multi-contact 24h staggering (Decision 6, P1-13)
+    const leadContactsMap = new Map<number, typeof candidates>();
     for (const cand of candidates) {
+      const list = leadContactsMap.get(cand.leadId) || [];
+      list.push(cand);
+      leadContactsMap.set(cand.leadId, list);
+    }
+
+    let accountNewScheduled = 0;
+    for (const [leadId, leadContacts] of leadContactsMap.entries()) {
       if (accountNewScheduled >= slotsForNew) break;
-      if (!cand.email) continue;
-      if (contactedIds.has(cand.contactId)) continue;
-      if (alreadyScheduledContactSteps.has(`${cand.contactId}_step_1`)) continue;
 
-      const slotOffsetMinutes = (accountFuScheduled + accountNewScheduled) * 12;
-      const scheduledTime = new Date(startTime.getTime() + slotOffsetMinutes * 60 * 1000);
+      // Primary contact first
+      leadContacts.sort((a, b) => (b.isPrimary ? 1 : 0) - (a.isPrimary ? 1 : 0));
 
-      try {
-        await db
-          .insert(scheduledEmails)
-          .values({
-            campaignId: campaign.id,
-            leadId: cand.leadId,
-            contactId: cand.contactId,
-            gmailAccountId: account.id,
-            stepNumber: 1,
-            scheduledAt: scheduledTime,
-            scheduledDate: currentPtDate,
-            status: 'PENDING',
-          })
-          .onConflictDoNothing();
+      for (let cIdx = 0; cIdx < leadContacts.length; cIdx++) {
+        const cand = leadContacts[cIdx];
+        if (!cand.email) continue;
+        if (contactedIds.has(cand.contactId)) continue;
+        if (alreadyScheduledContactSteps.has(`${cand.contactId}_step_1`)) continue;
 
-        // Initialize state machine for this lead
-        await db
-          .insert(leadSequenceProgress)
-          .values({
-            leadId: cand.leadId,
-            campaignId: campaign.id,
-            contactId: cand.contactId,
-            sequenceId: sequence.id,
-            currentStep: 1,
-            status: 'ACTIVE',
-            pinnedGmailAccountId: account.id,
-          })
-          .onConflictDoNothing();
+        if (cIdx === 0) {
+          // Primary contact: schedule for today
+          if (accountNewScheduled >= slotsForNew) break;
+          const slotOffsetMinutes = (accountFuScheduled + accountNewScheduled) * 12;
+          const scheduledTime = new Date(startTime.getTime() + slotOffsetMinutes * 60 * 1000);
 
-        alreadyScheduledContactSteps.add(`${cand.contactId}_step_1`);
-        contactedIds.add(cand.contactId);
-        accountNewScheduled++;
-        totalScheduledNew++;
-      } catch (err: any) {
-        console.warn(`    ⚠️ Step 1 scheduling error for contact ${cand.contactId}:`, err.message);
-        totalSkipped++;
+          try {
+            await db
+              .insert(scheduledEmails)
+              .values({
+                campaignId: campaign.id,
+                leadId: cand.leadId,
+                contactId: cand.contactId,
+                gmailAccountId: account.id,
+                stepNumber: 1,
+                scheduledAt: scheduledTime,
+                scheduledDate: currentPtDate,
+                status: 'PENDING',
+              })
+              .onConflictDoNothing();
+
+            // Initialize state machine for this lead
+            await db
+              .insert(leadSequenceProgress)
+              .values({
+                leadId: cand.leadId,
+                campaignId: campaign.id,
+                contactId: cand.contactId,
+                sequenceId: sequence.id,
+                currentStep: 1,
+                status: 'ACTIVE',
+                pinnedGmailAccountId: account.id,
+              })
+              .onConflictDoNothing();
+
+            alreadyScheduledContactSteps.add(`${cand.contactId}_step_1`);
+            contactedIds.add(cand.contactId);
+            accountNewScheduled++;
+            totalScheduledNew++;
+          } catch (err: any) {
+            console.warn(`    ⚠️ Step 1 scheduling error for contact ${cand.contactId}:`, err.message);
+            totalSkipped++;
+          }
+        } else {
+          // Secondary contact: staggered +24h * cIdx
+          const slotOffsetMinutes = (accountFuScheduled + accountNewScheduled) * 12;
+          const staggeredTime = new Date(startTime.getTime() + (cIdx * 24 * 60 + slotOffsetMinutes) * 60 * 1000);
+          const staggeredDateStr = staggeredTime.toISOString().slice(0, 10);
+
+          try {
+            await db
+              .insert(scheduledEmails)
+              .values({
+                campaignId: campaign.id,
+                leadId: cand.leadId,
+                contactId: cand.contactId,
+                gmailAccountId: account.id,
+                stepNumber: 1,
+                scheduledAt: staggeredTime,
+                scheduledDate: staggeredDateStr,
+                status: 'PENDING',
+              })
+              .onConflictDoNothing();
+
+            alreadyScheduledContactSteps.add(`${cand.contactId}_step_1`);
+            contactedIds.add(cand.contactId);
+          } catch (err: any) {
+            console.warn(`    ⚠️ Staggered Step 1 scheduling error for secondary contact ${cand.contactId}:`, err.message);
+          }
+        }
       }
     }
 

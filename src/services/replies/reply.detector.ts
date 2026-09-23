@@ -18,6 +18,27 @@ export interface InboundReplyPayload {
   gmailAccountId?: number;
 }
 
+export function stripQuotedText(text: string): string {
+  if (!text) return '';
+  const lines = text.split('\n');
+  const cleanLines: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (
+      /^On\s.+wrote:$/i.test(trimmed) ||
+      /^>+/i.test(trimmed) ||
+      /^-+\s*Original Message\s*-+/i.test(trimmed) ||
+      /^-+\s*Forwarded message\s*-+/i.test(trimmed) ||
+      /^From:\s/i.test(trimmed) ||
+      /^_{10,}/.test(trimmed)
+    ) {
+      break;
+    }
+    cleanLines.push(line);
+  }
+  return cleanLines.join('\n').trim();
+}
+
 export class ReplyDetectorService {
   public async processInboundReply(payload: InboundReplyPayload): Promise<{ recorded: boolean; reason?: string }> {
     try {
@@ -67,8 +88,9 @@ export class ReplyDetectorService {
         return { recorded: false, reason: 'Reply was already processed previously' };
       }
 
-      // 3. Detect unsubscribe / opt-out intent
-      const searchableReplyText = `${payload.snippet}\n${payload.bodyText || ''}`;
+      // 3. Detect unsubscribe / opt-out intent (scan unquoted text only)
+      const cleanBody = stripQuotedText(payload.bodyText || '');
+      const searchableReplyText = `${payload.snippet}\n${cleanBody}`;
       const isOptOut = OPT_OUT_REGEX.test(searchableReplyText);
 
       if (isOptOut) {
@@ -107,11 +129,7 @@ export class ReplyDetectorService {
       }
 
       // Automatically cancel any remaining pending scheduled emails for this lead (e.g. secondary contacts)
-      try {
-        await sequenceService.cancelSequenceForLead(match.leadId, isOptOut ? 'CANCELLED_OPT_OUT' : 'CANCELLED_REPLY');
-      } catch (cancelErr: any) {
-        console.warn(`[Reply Detector] Non-fatal: could not cancel sequence for lead ${match.leadId}:`, cancelErr.message);
-      }
+      await sequenceService.cancelSequenceForLead(match.leadId, isOptOut ? 'CANCELLED_OPT_OUT' : 'CANCELLED_REPLY');
 
       // 4. Send high-signal Telegram notification with isolated failure protection
       try {

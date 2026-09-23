@@ -55,6 +55,14 @@ export class SequenceService {
    * using database metrics from real sent messages and inbound replies.
    */
   public async getSequenceMetrics(sequenceId: number): Promise<SequenceModelMetrics> {
+    const [seq] = await db
+      .select({ campaignId: sequences.campaignId })
+      .from(sequences)
+      .where(eq(sequences.id, sequenceId))
+      .limit(1);
+
+    const campaignId = seq?.campaignId;
+
     const steps = await db
       .select()
       .from(sequenceSteps)
@@ -72,14 +80,19 @@ export class SequenceService {
       };
     }
 
-    // Query send counts per step
+    // Query send counts per step (confirmed SENT sends only, filtered by campaign)
     const sendStats = await db
       .select({
         stepNumber: messages.stepNumber,
         count: sql<number>`count(*)::int`,
       })
       .from(messages)
-      .where(inArray(messages.sendStatus, ['SENT', 'SENDING']))
+      .where(
+        and(
+          eq(messages.sendStatus, 'SENT'),
+          campaignId ? eq(messages.campaignId, campaignId) : undefined
+        )
+      )
       .groupBy(messages.stepNumber);
 
     const sendsByStep = new Map<number, number>();
@@ -87,14 +100,20 @@ export class SequenceService {
       sendsByStep.set(s.stepNumber, s.count);
     }
 
-    // Query reply counts per step (based on the outbound message's stepNumber)
+    // Query reply counts per step (deduplicated replies, filtered by campaign)
     const replyStats = await db
       .select({
         stepNumber: messages.stepNumber,
-        count: sql<number>`count(*)::int`,
+        count: sql<number>`count(DISTINCT replies.id)::int`,
       })
       .from(replies)
       .innerJoin(messages, eq(replies.threadId, messages.threadId))
+      .where(
+        and(
+          eq(messages.sendStatus, 'SENT'),
+          campaignId ? eq(messages.campaignId, campaignId) : undefined
+        )
+      )
       .groupBy(messages.stepNumber);
 
     const repliesByStep = new Map<number, number>();
@@ -102,15 +121,21 @@ export class SequenceService {
       repliesByStep.set(r.stepNumber, r.count);
     }
 
-    // Query bounce / unsubscribe counts per step
+    // Query bounce / unsubscribe counts per step (deduplicated suppressions, filtered by campaign)
     const suppressionStats = await db
       .select({
         stepNumber: messages.stepNumber,
-        count: sql<number>`count(*)::int`,
+        count: sql<number>`count(DISTINCT suppressions.id)::int`,
       })
       .from(suppressions)
       .innerJoin(leads, eq(suppressions.channelId, leads.channelId))
       .innerJoin(messages, eq(leads.id, messages.leadId))
+      .where(
+        and(
+          eq(messages.sendStatus, 'SENT'),
+          campaignId ? eq(messages.campaignId, campaignId) : undefined
+        )
+      )
       .groupBy(messages.stepNumber);
 
     const unsubsByStep = new Map<number, number>();
@@ -396,39 +421,42 @@ export class SequenceService {
     status: 'CANCELLED_REPLY' | 'CANCELLED_OPT_OUT' | 'CANCELLED_BOUNCED'
   ): Promise<void> {
     try {
-      // 1. Cancel sequence progress rows
-      await db
-        .update(leadSequenceProgress)
-        .set({
-          status,
-          nextStepDueAt: null,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(leadSequenceProgress.leadId, leadId),
-            eq(leadSequenceProgress.status, 'ACTIVE')
-          )
-        );
+      await db.transaction(async (tx) => {
+        // 1. Cancel sequence progress rows
+        await tx
+          .update(leadSequenceProgress)
+          .set({
+            status,
+            nextStepDueAt: null,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(leadSequenceProgress.leadId, leadId),
+              eq(leadSequenceProgress.status, 'ACTIVE')
+            )
+          );
 
-      // 2. Cancel all pending scheduled emails for this lead
-      await db
-        .update(scheduledEmails)
-        .set({
-          status: 'CANCELLED',
-          error: `Sequence halted: ${status}`,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(scheduledEmails.leadId, leadId),
-            eq(scheduledEmails.status, 'PENDING')
-          )
-        );
+        // 2. Cancel all pending scheduled emails for this lead
+        await tx
+          .update(scheduledEmails)
+          .set({
+            status: 'CANCELLED',
+            error: `Sequence halted: ${status}`,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(scheduledEmails.leadId, leadId),
+              eq(scheduledEmails.status, 'PENDING')
+            )
+          );
+      });
 
       console.log(`🛑 [Sequence Engine] Cancelled active sequence for Lead #${leadId} (reason: ${status})`);
     } catch (e: any) {
-      console.warn(`[Sequence Engine] Error cancelling sequence for lead #${leadId}:`, e.message);
+      console.error(`[Sequence Engine] Critical: failed cancelling sequence for lead #${leadId}:`, e);
+      throw e;
     }
   }
 

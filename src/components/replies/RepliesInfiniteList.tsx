@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { Loader2, ExternalLink, Inbox } from "lucide-react";
+import { Loader2, ExternalLink, Inbox, Check, Ban } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,7 +34,7 @@ interface Props {
 function SkeletonRow() {
   return (
     <TableRow>
-      {Array.from({ length: 5 }).map((_, i) => (
+      {Array.from({ length: 6 }).map((_, i) => (
         <TableCell key={i}>
           <div className="animate-pulse h-4 bg-surface-200 rounded-md" />
         </TableCell>
@@ -64,12 +64,43 @@ export function RepliesInfiniteList({ initialData, total }: Props) {
   const [hasMore, setHasMore] = useState(initialData.length < total);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
   const isLoadingRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     return () => { abortControllerRef.current?.abort(); };
   }, []);
+
+  const handleAction = async (replyId: number, action: "handled" | "stop") => {
+    const previousItems = [...items];
+
+    // Optimistic update
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === replyId ? { ...item, processed: true } : item
+      )
+    );
+    setActionLoadingId(replyId);
+
+    try {
+      const res = await fetch("/api/replies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, replyId }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to update reply status");
+      }
+    } catch (err: any) {
+      // Revert on error
+      setItems(previousItems);
+      setError(`Action failed: ${err.message}`);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
 
   const loadMore = useCallback(async () => {
     if (isLoadingRef.current || !hasMore) return;
@@ -148,7 +179,7 @@ export function RepliesInfiniteList({ initialData, total }: Props) {
           </Card>
         ) : (
           items.map((r) => (
-            <Card key={r.id} className="p-3.5 space-y-2">
+            <Card key={r.id} className="p-3.5 space-y-2.5">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <span className="font-semibold text-xs text-text-main block">
@@ -156,25 +187,60 @@ export function RepliesInfiniteList({ initialData, total }: Props) {
                   </span>
                   <span className="font-mono text-[11px] text-text-muted">{r.senderEmail}</span>
                 </div>
-                <Badge variant="secondary" className="text-[10px]">
-                  {r.campaignName || "General"}
-                </Badge>
+                <div className="flex items-center gap-1.5">
+                  {r.processed && (
+                    <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30 bg-emerald-500/10">
+                      Handled
+                    </Badge>
+                  )}
+                  <Badge variant="secondary" className="text-[10px]">
+                    {r.campaignName || "General"}
+                  </Badge>
+                </div>
               </div>
+
               <p className="text-xs text-text-secondary italic p-2 rounded bg-surface-200 border border-border/50 line-clamp-3">
                 "{r.snippet || "No preview available"}"
               </p>
-              <div className="flex items-center justify-between text-[11px] text-text-muted pt-1">
-                <span>{r.receivedAt ? new Date(r.receivedAt).toLocaleDateString() : "Recent"}</span>
-                <a
-                  href={`https://mail.google.com/mail/u/0/#inbox/${r.threadId}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <Button size="sm" variant="outline" className="min-h-[36px] px-3 text-xs gap-1.5 active:scale-95">
-                    <span>Open in Gmail</span>
-                    <ExternalLink className="w-3 h-3" />
+
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-border/40">
+                <span className="text-[11px] text-text-muted">
+                  {r.receivedAt ? new Date(r.receivedAt).toLocaleDateString() : "Recent"}
+                </span>
+                <div className="flex items-center gap-1.5">
+                  {!r.processed && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={actionLoadingId === r.id}
+                      onClick={() => handleAction(r.id, "handled")}
+                      className="min-h-[38px] px-2.5 text-xs gap-1 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 active:scale-95"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Handled</span>
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={actionLoadingId === r.id}
+                    onClick={() => handleAction(r.id, "stop")}
+                    className="min-h-[38px] px-2.5 text-xs gap-1 text-rose-400 border-rose-500/30 hover:bg-rose-500/10 active:scale-95"
+                  >
+                    <Ban className="w-3.5 h-3.5" />
+                    <span>Stop</span>
                   </Button>
-                </a>
+                  <a
+                    href={`https://mail.google.com/mail/u/0/#inbox/${r.threadId}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <Button size="sm" variant="outline" className="min-h-[38px] px-2.5 text-xs gap-1 active:scale-95">
+                      <span>Gmail</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </Button>
+                  </a>
+                </div>
               </div>
             </Card>
           ))
@@ -191,7 +257,8 @@ export function RepliesInfiniteList({ initialData, total }: Props) {
                 <TableHead>Latest Message Snippet</TableHead>
                 <TableHead>Campaign</TableHead>
                 <TableHead>Received</TableHead>
-                <TableHead className="text-right">Action</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -199,7 +266,7 @@ export function RepliesInfiniteList({ initialData, total }: Props) {
                 Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} />)
               ) : items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-44 text-center">
+                  <TableCell colSpan={6} className="h-44 text-center">
                     <div className="flex flex-col items-center justify-center space-y-2 py-4">
                       <div className="w-10 h-10 rounded-xl bg-surface-200 border border-border flex items-center justify-center text-text-muted">
                         <Inbox className="w-5 h-5 text-primary opacity-80" />
@@ -227,17 +294,52 @@ export function RepliesInfiniteList({ initialData, total }: Props) {
                     <TableCell className="text-text-muted text-[11px]">
                       {r.receivedAt ? new Date(r.receivedAt).toLocaleString() : "Recent"}
                     </TableCell>
+                    <TableCell>
+                      {r.processed ? (
+                        <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30 bg-emerald-500/10">
+                          Handled
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="text-[10px] text-amber-400 border-amber-500/30 bg-amber-500/10">
+                          New
+                        </Badge>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right">
-                      <a
-                        href={`https://mail.google.com/mail/u/0/#inbox/${r.threadId}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
-                          <span>Gmail</span>
-                          <ExternalLink className="w-3 h-3" />
+                      <div className="inline-flex items-center justify-end gap-1.5">
+                        {!r.processed && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={actionLoadingId === r.id}
+                            onClick={() => handleAction(r.id, "handled")}
+                            className="h-7 text-xs gap-1 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 active:scale-95"
+                          >
+                            <Check className="w-3 h-3" />
+                            <span>Handled</span>
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={actionLoadingId === r.id}
+                          onClick={() => handleAction(r.id, "stop")}
+                          className="h-7 text-xs gap-1 text-rose-400 border-rose-500/30 hover:bg-rose-500/10 active:scale-95"
+                        >
+                          <Ban className="w-3 h-3" />
+                          <span>Stop</span>
                         </Button>
-                      </a>
+                        <a
+                          href={`https://mail.google.com/mail/u/0/#inbox/${r.threadId}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 active:scale-95">
+                            <span>Gmail</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </Button>
+                        </a>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))

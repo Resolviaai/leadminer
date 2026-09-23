@@ -90,4 +90,52 @@ describe('Opt-Out & Unsubscribe Regex Detection', () => {
   });
 });
 
+import { classifyAutomatedResponse } from '../../src/workers/replies.worker';
+import { stripQuotedText } from '../../src/services/replies/reply.detector';
+
+describe('Detailed Automated Response Classification & Quote Stripping', () => {
+  it('should classify Out-Of-Office responses distinctly from hard bounces', () => {
+    const res = classifyAutomatedResponse(
+      [{ name: 'Subject', value: 'Automatic reply: Out of office until Monday' }],
+      'creator@channel.com',
+      'Automatic reply: Out of office until Monday'
+    );
+    expect(res).toBe('OUT_OF_OFFICE');
+  });
+
+  it('should classify mailbox full as soft bounce', () => {
+    const res = classifyAutomatedResponse(
+      [{ name: 'Subject', value: 'Mailbox is full' }],
+      'mailserver@domain.com',
+      'Mailbox is full'
+    );
+    expect(res).toBe('SOFT_BOUNCE');
+  });
+
+  it('should classify delivery failure / 550 as hard bounce', () => {
+    const res = classifyAutomatedResponse(
+      [{ name: 'Subject', value: 'Delivery Status Notification (Failure)' }],
+      'mailer-daemon@googlemail.com',
+      'Delivery Status Notification (Failure)',
+      '550 5.1.1 The email account that you tried to reach does not exist.'
+    );
+    expect(res).toBe('HARD_BOUNCE');
+  });
+
+  it('should strip quoted text before evaluating opt-out phrases', () => {
+    const humanReplyWithQuotedFooter = `
+Yes, let's schedule a call tomorrow!
+
+On Wed, Sep 23, 2026 at 10:00 AM outreach@leadminer.io wrote:
+> If you want to unsubscribe or stop receiving these, please let us know.
+`.trim();
+
+    const stripped = stripQuotedText(humanReplyWithQuotedFooter);
+    expect(stripped).toContain("Yes, let's schedule a call tomorrow!");
+    expect(stripped).not.toContain("unsubscribe");
+    expect(OPT_OUT_REGEX.test(stripped)).toBe(false);
+  });
+});
+
+
 

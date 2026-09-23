@@ -1,5 +1,5 @@
 import { db } from '../db/client';
-import { logs, jobs, gmailAccounts } from '../db/schema';
+import { logs, jobs, gmailAccounts, leads, scheduledEmails, leadSequenceProgress } from '../db/schema';
 import { lt, and, inArray, eq } from 'drizzle-orm';
 import { jobRunner } from '../services/jobs/job.runner';
 import { quotaManager } from '../services/youtube/quota';
@@ -81,6 +81,42 @@ export async function runCleanup(): Promise<{
       }
     } catch (tokenWarnErr: any) {
       console.warn('[Cleanup Watchdog] Error checking token expiry:', tokenWarnErr.message);
+    }
+
+    // 8. Re-cancel orphaned sequences/scheduled emails for leads that already replied, bounced, or unsubscribed (TASK-17 / P1-14)
+    try {
+      const suppressedOrRepliedLeads = await db
+        .select({ id: leads.id, status: leads.outreachStatus })
+        .from(leads)
+        .where(inArray(leads.outreachStatus, ['REPLIED', 'UNSUBSCRIBED', 'BOUNCED']));
+
+      const leadIds = suppressedOrRepliedLeads.map((l) => l.id);
+      if (leadIds.length > 0) {
+        const cancelledScheduled = await db
+          .update(scheduledEmails)
+          .set({
+            status: 'CANCELLED',
+            error: 'Cleanup watchdog: lead already replied, unsubscribed, or bounced',
+            updatedAt: new Date(),
+          })
+          .where(and(inArray(scheduledEmails.leadId, leadIds), eq(scheduledEmails.status, 'PENDING')))
+          .returning({ id: scheduledEmails.id });
+
+        if (cancelledScheduled.length > 0) {
+          console.warn(`[Cleanup Watchdog] Cancelled ${cancelledScheduled.length} orphaned pending scheduled email(s) for replied/suppressed leads.`);
+        }
+
+        await db
+          .update(leadSequenceProgress)
+          .set({
+            status: 'CANCELLED_REPLY',
+            nextStepDueAt: null,
+            updatedAt: new Date(),
+          })
+          .where(and(inArray(leadSequenceProgress.leadId, leadIds), eq(leadSequenceProgress.status, 'ACTIVE')));
+      }
+    } catch (cancelErr: any) {
+      console.warn('[Cleanup Watchdog] Error re-cancelling sequences for suppressed leads:', cancelErr.message);
     }
 
     const totalProcessed = recovery.recoveredKeywords + recovery.recoveredJobs + recoveredLeads + requalifiedLeads;

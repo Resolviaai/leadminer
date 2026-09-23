@@ -1,6 +1,6 @@
 import React from "react";
 import { db } from "../../db/client";
-import { replies, leads, campaigns } from "../../db/schema";
+import { replies, leads, campaigns, messages } from "../../db/schema";
 import { eq, desc, sql } from "drizzle-orm";
 import { Inbox } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -26,14 +26,23 @@ async function getData() {
         })
         .from(replies)
         .leftJoin(leads, eq(replies.leadId, leads.id))
-        .leftJoin(campaigns, eq(replies.leadId, campaigns.id))
+        .leftJoin(messages, eq(replies.threadId, messages.threadId))
+        .leftJoin(campaigns, eq(messages.campaignId, campaigns.id))
         .orderBy(desc(replies.id))
         .limit(50),
       db.select({ total: sql<number>`count(*)::int` }).from(replies),
     ]);
 
+    // Deduplicate in case a thread has multiple messages
+    const seen = new Set<number>();
+    const deduplicated = (listResult || []).filter((r) => {
+      if (seen.has(r.id)) return false;
+      seen.add(r.id);
+      return true;
+    });
+
     const total = countResult?.[0]?.total ?? 0;
-    return { list: listResult || [], total };
+    return { list: deduplicated, total };
   } catch (err) {
     console.error("[RepliesPage Error]", err);
     return { list: [], total: 0 };
