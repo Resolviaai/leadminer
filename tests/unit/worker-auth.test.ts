@@ -101,7 +101,7 @@ describe('Worker & Dashboard Auth Security Hardening', () => {
       const cookieHeader = createSessionCookie('operator@test.com');
       expect(cookieHeader).toContain(COOKIE_NAME);
       expect(cookieHeader).toContain('HttpOnly');
-      expect(cookieHeader).toContain('SameSite=Strict');
+      expect(cookieHeader).toContain('SameSite=Lax');
 
       // Extract the raw cookie token
       const match = cookieHeader.match(new RegExp(`${COOKIE_NAME}=([^;]+)`));

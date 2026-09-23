@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { validateLoginCredentials, createSessionCookie } from '../../../../lib/api-auth';
+import { validateLoginCredentialsAsync, createSessionCookie } from '../../../../lib/api-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,7 +23,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Email and password are required' }, { status: 400 });
     }
 
-    if (!validateLoginCredentials(email, password)) {
+    const isValid = await validateLoginCredentialsAsync(email, password);
+    if (!isValid) {
       // Deliberate: same error for wrong email and wrong password — don't reveal which is wrong
       return NextResponse.json({ success: false, error: 'Invalid credentials' }, { status: 401 });
     }

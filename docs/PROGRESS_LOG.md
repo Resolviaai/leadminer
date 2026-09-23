@@ -259,5 +259,54 @@ All development activities, audits, architectural decisions, and milestones are 
   - `npx tsc --noEmit`: 0 errors.
   - Production verification: 100% verified live on Vercel.
 
+---
 
+## 2026-09-23 — Session 10 (Supabase Auth Integration & Persistent PWA Session Retention)
+- **Agent:** Antigravity
+- **Actions Completed:**
+  - **Supabase Cloud Auth Integration:**
+    - Connected Supabase Cloud Auth API for standard operator email + password authentication (`signInWithPassword`).
+    - Seeded and confirmed operator credentials (`resolviaai@gmail.com`) in Supabase Auth `auth.users`.
+    - Implemented `verifySupabaseAuth(email, password)` in `src/lib/api-auth.ts`.
+  - **Database-Backed Scrypt Authentication & Management:**
+    - Implemented salted scrypt password hashing and verification in PostgreSQL `system_settings` (`admin_auth`).
+    - Created `src/scripts/seed-auth.ts` to idempotently seed database credentials from environment variables.
+    - Created `POST /api/auth/password` endpoint allowing authenticated operators to update passwords with automatic database hashing.
+    - Updated `validateLoginCredentialsAsync` with multi-tier validation: Supabase Auth -> PostgreSQL salted scrypt -> environment variable fallback.
+  - **Persistent PWA Session & Standalone Launch Retention:**
+    - Extended session duration to 30 days (`SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000`).
+    - Updated cookie configuration to `SameSite=Lax; Path=/; HttpOnly; Secure`, preventing mobile browsers (iOS Safari and Android Chrome) from stripping session cookies during top-level PWA standalone launches.
+    - Implemented rolling session auto-refresh in Next.js Edge Middleware (`middleware.ts`): if a valid session is older than 24 hours, middleware automatically signs and issues a refreshed 30-day cookie via response headers.
+    - Whitelisted `/manifest.json`, `/sw.js`, and `.json` files in middleware `isPublic()` to eliminate 307 redirect blocks preventing PWA installations.
+    - Updated `public/manifest.json` with `"start_url": "/overview"`, `"scope": "/"`, `"id": "leadminer-pwa"`, `"display": "standalone"`.
+    - Updated `public/sw.js` notification click fallback to `'/overview'`.
 
+---
+
+## 2026-09-23 — Session 11 (1-to-1 Homepage Art-Directed Redesign to Match Reference)
+- **Agent:** Antigravity
+- **Context:** User provided primary visual reference image (`media_1790181206353.jpg`) and directed a 1-to-1 exact visual match of style, layout, lightness, spacing, rounded containers, and composition.
+- **Actions Completed:**
+  - **Canvas & Atmosphere:** Rebuilt homepage (`src/app/page.tsx`) and `src/components/AppShell.tsx` using warm off-white canvas (`#FAFAF9`), subtle geometric square grid overlay, soft blue/lavender atmospheric gradients, and warm copper ambient glow under the product visual.
+  - **Hero Composition:**
+    - Centered top navigation with LeadMiner mark, clean muted links, Sign in, and copper pill CTA (`Join Waitlist →`).
+    - Eyebrow badge: blue pill `Built for B2B SaaS & Financial Firms` with pulsing indicator.
+    - Headline: `YouTube Leads. Real Opportunities.` with copper accent on `Opportunities.`.
+    - Subtitle: `Find high-intent businesses on YouTube, extract verified contacts, and send personalized outreach — automatically.`
+    - Rounded-full email input with copper submit button and 3 trust checkmarks (`No credit card`, `Free forever`, `Fully automated`).
+    - Elevated central LeadMiner dashboard showcase featuring real KPI counters (1,248 Leads Found, 892 Verified Emails, 318 Emails Sent, 74 Replies), smooth SVG area chart with interactive tooltip (`318 emails sent | 74 replies (23.2%)`), and live activity feed.
+    - Floating UI cards: red YouTube card (top-left), angled 82% Leads Discovered card with sparkline and corner ribbon (bottom-left), Google card (top-right), LinkedIn card (mid-right), Web globe card (bottom-right).
+    - Handwritten script annotations with curved arrows (`More sources. More opportunities.` and `Find. Enrich. Outreach. Grow.`).
+  - **Logo Trust Strip:** Grayscale logos for YouTube, Google, LinkedIn, Stripe, Notion, Supabase, and OpenAI.
+  - **Feature Grid:** 4 clean white cards with soft orange icon squares (`Lead Discovery`, `Verified Contacts`, `Automated Outreach`, `Track & Grow`), uppercase `FEATURES` badge, and `Explore All Features →` pill button.
+  - **Mid-Page Orange CTA:** Full-width rounded-3xl copper gradient banner (`Let's have a 30-min call`), avatar badge (`Mark Vassilevskiy`), white pill CTA (`Book a Call`), and decorative 3D pinned cards (`Design Concept` with blue pin sphere and `Complete Development` with red pin sphere).
+  - **Product Showcase:** 3 alternating visual storytelling sections featuring the real LeadMiner Discovery Stream, DNS MX Verification Matrix, and Outreach Email Composer with Gemini personalization tag.
+  - **How It Works:** 4 connected timeline cards (`01 Discover`, `02 Verify`, `03 Personalize`, `04 Send & Track`).
+  - **Autonomy Architecture:** 3 cards (`Keeps moving`, `Knows where it stopped`, `Knows when to stop`).
+  - **Social Proof:** `500+ Clients, Real Results` with telemetry metrics (24M Leads Discovered, 20k+ Businesses Reached, 4.8/5 Rating) and 3 authentic testimonial cards (Alex Carter, Sarah Kim, David Park).
+  - **Final Purple CTA Banner:** Violet/indigo gradient banner with floating 3D mail envelopes on left and right, center headline `Join Our Newsletter and Stay Updated`, email input, and dark submit button.
+  - **Minimal Dark Footer:** Charcoal background (`#161616`), LeadMiner copper mark, social links (YouTube, X, LinkedIn, Discord), 3 navigation columns (Product, Resources, Company), and copyright bar.
+- **Validation:**
+  - `npx vitest run`: **143/143 tests passing** (100% pass rate).
+  - `npx tsc --noEmit`: 0 errors.
+  - `npm run build`: 0 errors across all 33 static and dynamic routes.

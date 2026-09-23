@@ -2,11 +2,14 @@
   "name": "LeadMiner | Autonomous Outreach",
   "short_name": "LeadMiner",
   "description": "YouTube lead-generation & cold outreach engine",
-  "start_url": "/",
+  "id": "leadminer-pwa",
+  "start_url": "/overview",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0A0B0E",
+  "background_color": "#0E1117",
   "theme_color": "#C46A3A",
+  "categories": ["business", "productivity"],
   "icons": [
     {
       "src": "/icon-192.png",

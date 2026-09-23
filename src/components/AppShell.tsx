@@ -20,7 +20,12 @@ export function AppShell({ children, dryRun = true }: AppShellProps) {
   // For public pages (Landing Page, Login, Privacy Policy, Terms of Service),
   // render full-width without internal dashboard sidebar or header
   if (isPublicPage) {
-    return <div className="w-full min-h-screen bg-[#161616] text-[#e2e8f0] flex flex-col">{children}</div>;
+    const isHomePage = pathname === '/';
+    return (
+      <div className={`w-full min-h-screen flex flex-col ${isHomePage ? 'bg-[#FAFAF9] text-neutral-900' : 'bg-[#161616] text-[#e2e8f0]'}`}>
+        {children}
+      </div>
+    );
   }
 
   // For authenticated dashboard pages, render full sidebar, topbar, and chrome

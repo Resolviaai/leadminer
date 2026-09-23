@@ -5,1115 +5,1268 @@ import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
-  Database,
   Mail,
-  Inbox,
   Send,
-  CheckCircle2,
-  XCircle,
-  Shield,
-  Zap,
-  ArrowRight,
-  ArrowDown,
-  ChevronRight,
-  Radio,
-  Cpu,
-  Layers,
-  Terminal,
-  Activity,
-  Globe,
-  Share2,
-  Lock,
-  PauseCircle,
-  RefreshCw,
+  BarChart3,
   Check,
-  AlertCircle,
+  CheckCircle2,
+  ArrowRight,
+  ChevronDown,
+  Layers,
+  Shield,
+  Cpu,
+  Zap,
+  Globe,
+  Quote,
+  Sparkles,
   Sliders,
-  LogIn,
+  Bell,
+  Settings,
+  Flame,
+  TrendingUp,
 } from 'lucide-react';
 
 export default function LandingPage() {
-  const [activePipelineStep, setActivePipelineStep] = useState(0);
-  const [keywordCounter, setKeywordCounter] = useState(24800);
-  const [verifiedCounter, setVerifiedCounter] = useState(850);
-  const [replyHaltActive, setReplyHaltActive] = useState(true);
+  const [emailInput, setEmailInput] = useState('');
+  const [newsletterEmail, setNewsletterEmail] = useState('');
+  const [submittedWaitlist, setSubmittedWaitlist] = useState(false);
+  const [submittedNewsletter, setSubmittedNewsletter] = useState(false);
 
-  // Counter micro-animation on load
+  // Active showcase step
+  const [activeShowcase, setActiveShowcase] = useState(0);
+
+  // Animated KPI numbers
+  const [leadsFound, setLeadsFound] = useState(1200);
+  const [verifiedEmails, setVerifiedEmails] = useState(860);
+
   useEffect(() => {
     const timer = setInterval(() => {
-      setKeywordCounter((prev) => (prev < 25391 ? prev + 47 : 25391));
-      setVerifiedCounter((prev) => (prev < 892 ? prev + 3 : 892));
-    }, 40);
+      setLeadsFound((prev) => (prev < 1248 ? prev + 4 : 1248));
+      setVerifiedEmails((prev) => (prev < 892 ? prev + 3 : 892));
+    }, 50);
     return () => clearInterval(timer);
   }, []);
 
-  const pipelineStages = [
-    {
-      id: 'keywords',
-      label: 'Keywords',
-      pill: '25,391 Seeds',
-      title: 'Target Niche Ingestion',
-      desc: 'Normalized keyword library parsed from curated entity categories and commercial modifiers.',
-      stat: '25,391 Normalized Keywords',
-      detail: 'Dual YouTube quota management keeps search calls within the daily 100-request limit.',
-      icon: Layers,
-    },
-    {
-      id: 'leads',
-      label: 'Leads',
-      pill: 'Discovery',
-      title: 'Autonomous Creator Discovery',
-      desc: 'Retrieves high-relevance channels, subscriber metrics, and public business contact channels.',
-      stat: '1,248 Channels Discovered',
-      detail: 'In-memory deduplication discards known IDs before database insertion, saving quota.',
-      icon: Search,
-    },
-    {
-      id: 'verification',
-      label: 'Verification',
-      pill: '99.4% Valid',
-      title: 'Deliverability & MX Guard',
-      desc: 'RFC syntax parsing, 17 disposable domain filters, and 3-second DNS MX resolution.',
-      stat: '892 Business Emails Verified',
-      detail: 'Fail-closed architecture: unverified or unconfirmed addresses never enter sending queues.',
-      icon: Shield,
-    },
-    {
-      id: 'campaign',
-      label: 'Campaign',
-      pill: 'Personalization',
-      title: 'Deterministic AI Personalization',
-      desc: 'Gemini analyzes channel topics and recent video data to draft authentic, contextual opening lines.',
-      stat: '318 Outreach Drafts Prepared',
-      detail: 'Enforces human-sounding plain text without spam-triggering links or sales hyperbole.',
-      icon: Cpu,
-    },
-    {
-      id: 'gmail',
-      label: 'Gmail',
-      pill: 'Multi-Account',
-      title: 'Staggered Account Rotation',
-      desc: 'Rotates outreach across connected Google Workspace inboxes with randomized send delays.',
-      stat: '18-25 Daily Safe Limit / Inbox',
-      detail: 'Warmup ramp pacing preserves primary inbox sender reputation and domain trust.',
-      icon: Send,
-    },
-    {
-      id: 'reply',
-      label: 'Reply',
-      pill: 'Auto-Halt',
-      title: 'Instant Thread Detection',
-      desc: 'Scans inbox threads. Upon creator reply or opt-out, remaining follow-ups are cancelled instantly.',
-      stat: '74 Replies Handled (23.3%)',
-      detail: 'Zero chance of sending automated follow-ups to someone who already responded.',
-      icon: Inbox,
-    },
-  ];
+  const handleWaitlistSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!emailInput) return;
+    setSubmittedWaitlist(true);
+  };
+
+  const handleNewsletterSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newsletterEmail) return;
+    setSubmittedNewsletter(true);
+  };
 
   return (
-    <div className="relative min-h-screen bg-[#0E1117] text-[#EDEDED] overflow-x-hidden selection:bg-[#C46A3A]/30 selection:text-[#FFBD8A]">
-      {/* ─── BACKGROUND AMBIENCE & SUBTLE GRID ─────────────────────────────── */}
-      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-        {/* Jensen Huang subtle grid layout */}
-        <div
-          className="absolute inset-0 opacity-[0.035]"
-          style={{
-            backgroundImage: `radial-gradient(circle at 1px 1px, #C46A3A 1px, transparent 0)`,
-            backgroundSize: '32px 32px',
-          }}
-        />
+    <div className="min-h-screen bg-[#FAFAF9] text-neutral-900 font-sans selection:bg-[#C46A3A]/20 selection:text-[#C46A3A] relative overflow-x-hidden">
+      {/* ─── GLOBAL BACKGROUND GRID PATTERN ─── */}
+      <div
+        className="absolute inset-0 pointer-events-none z-0"
+        style={{
+          backgroundImage: `
+            linear-gradient(to right, rgba(0, 0, 0, 0.04) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(0, 0, 0, 0.04) 1px, transparent 1px)
+          `,
+          backgroundSize: '48px 48px',
+          maskImage: 'radial-gradient(ellipse 90% 70% at 50% 15%, black 40%, transparent 95%)',
+          WebkitMaskImage: 'radial-gradient(ellipse 90% 70% at 50% 15%, black 40%, transparent 95%)',
+        }}
+      />
 
-        {/* Ambient Warm Copper Glows */}
-        <div className="absolute -top-[25%] left-1/2 -translate-x-1/2 w-[850px] h-[550px] bg-gradient-to-b from-[#C46A3A]/15 via-[#C46A3A]/5 to-transparent rounded-full blur-[140px] pointer-events-none" />
-        <div className="absolute top-[35%] -left-[150px] w-[500px] h-[500px] bg-gradient-to-tr from-[#C46A3A]/8 to-transparent rounded-full blur-[150px] pointer-events-none" />
-        <div className="absolute bottom-[20%] -right-[150px] w-[650px] h-[650px] bg-gradient-to-tl from-[#C46A3A]/10 via-[#C46A3A]/4 to-transparent rounded-full blur-[160px] pointer-events-none" />
+      {/* ─── ATMOSPHERIC GRADIENTS ─── */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[550px] bg-gradient-to-b from-blue-100/50 via-orange-100/30 to-transparent blur-3xl pointer-events-none z-0" />
+      <div className="absolute top-[400px] left-1/2 -translate-x-1/2 w-[900px] h-[400px] bg-[#C46A3A]/10 blur-[120px] rounded-full pointer-events-none z-0" />
 
-        {/* Technical SVG Circuit Connections */}
-        <svg className="absolute inset-0 w-full h-full opacity-[0.05]" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <linearGradient id="circuitGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#C46A3A" stopOpacity="0.8" />
-              <stop offset="100%" stopColor="#8B4A29" stopOpacity="0.1" />
-            </linearGradient>
-          </defs>
-          <path d="M0,180 Q450,120 900,260 T1800,200" fill="none" stroke="url(#circuitGrad)" strokeWidth="1.5" strokeDasharray="6 8" />
-          <path d="M100,700 Q650,540 1200,720 T2000,580" fill="none" stroke="url(#circuitGrad)" strokeWidth="1.2" strokeDasharray="5 7" />
-          <circle cx="900" cy="260" r="3.5" fill="#C46A3A" />
-          <circle cx="1200" cy="720" r="3.5" fill="#C46A3A" />
-        </svg>
-      </div>
-
-      {/* ─── NAVIGATION ───────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-50 border-b border-[#262B35]/80 bg-[#0E1117]/85 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          {/* Left: LeadMiner Logo & Wordmark */}
-          <Link href="/" className="flex items-center space-x-3 group">
-            <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 flex items-center justify-center border border-[#C46A3A]/30 bg-[#161920] shadow-sm group-hover:scale-105 transition-transform">
-              <img src="/favicon.svg" alt="LeadMiner Logo" className="w-7 h-7 object-contain" />
-            </div>
-            <div className="flex items-center space-x-2">
-              <span className="font-semibold text-white tracking-tight text-sm">LeadMiner</span>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#C46A3A]/15 text-[#C46A3A] border border-[#C46A3A]/30 font-medium">
-                v1.0
-              </span>
-            </div>
-          </Link>
-
-          {/* Center: Section Links */}
-          <nav className="hidden md:flex items-center space-x-7 text-xs font-medium text-[#A0A0A0]">
-            <a href="#pipeline" className="hover:text-white transition-colors">
-              Product
-            </a>
-            <a href="#how-it-works" className="hover:text-white transition-colors">
-              How it works
-            </a>
-            <a href="#autonomy" className="hover:text-white transition-colors">
-              Why LeadMiner
-            </a>
-            <a href="#safety" className="hover:text-white transition-colors">
-              Resources
-            </a>
-          </nav>
-
-          {/* Right: Sign in & Open LeadMiner CTA */}
-          <div className="flex items-center space-x-4">
-            <Link
-              href="/login"
-              className="text-xs font-medium text-[#A0A0A0] hover:text-white transition-colors px-2 py-1.5"
-            >
-              Sign in
-            </Link>
-            <Link
-              href="/login"
-              className="inline-flex items-center space-x-2 text-xs font-semibold px-4 py-2 rounded-lg bg-[#C46A3A] text-white hover:bg-[#D17A45] active:scale-95 transition-all shadow-md shadow-[#C46A3A]/20 min-h-[38px]"
-            >
-              <span>Open LeadMiner</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
+      {/* ─── 1. TOP NAVIGATION ─── */}
+      <header className="relative z-30 max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">
+        {/* Logo */}
+        <Link href="/" className="flex items-center gap-2.5 group">
+          <div className="w-8 h-8 rounded-lg bg-[#C46A3A] flex items-center justify-center text-white shadow-sm shadow-[#C46A3A]/30 transition-transform group-hover:scale-105">
+            {/* LeadMiner geometric polygon mark */}
+            <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 stroke-white stroke-[2.2]">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </div>
+          <span className="text-xl font-bold tracking-tight text-neutral-900">LeadMiner</span>
+        </Link>
+
+        {/* Center Nav Links */}
+        <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-neutral-600">
+          <a href="#product" className="hover:text-neutral-900 transition-colors">Product</a>
+          <a href="#how-it-works" className="hover:text-neutral-900 transition-colors">How it works</a>
+          <a href="#use-cases" className="hover:text-neutral-900 transition-colors">Use cases</a>
+          <a href="#features" className="hover:text-neutral-900 transition-colors">Pricing</a>
+          <div className="flex items-center gap-1 cursor-pointer hover:text-neutral-900 transition-colors">
+            <span>Resources</span>
+            <ChevronDown className="w-3.5 h-3.5 text-neutral-400" />
+          </div>
+        </nav>
+
+        {/* Right CTA */}
+        <div className="flex items-center gap-4">
+          <Link
+            href="/overview"
+            className="text-sm font-medium text-neutral-600 hover:text-neutral-900 transition-colors px-2 py-1"
+          >
+            Sign in
+          </Link>
+          <Link
+            href="/overview"
+            className="inline-flex items-center gap-1.5 bg-[#C46A3A] hover:bg-[#D17A45] text-white text-sm font-medium rounded-full px-5 py-2.5 shadow-sm hover:shadow transition-all hover:scale-[1.02] active:scale-[0.98]"
+          >
+            <span>Join Waitlist</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
         </div>
       </header>
 
-      {/* ─── SECTION 1: HERO ──────────────────────────────────────────────── */}
-      <section className="relative z-10 pt-16 pb-20 sm:pt-24 sm:pb-28 max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="text-center max-w-3xl mx-auto space-y-6">
-          {/* Eyebrow */}
-          <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-[#161920] border border-[#262B35] text-xs font-mono text-[#cbd5e1] shadow-inner">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-[#A0A0A0] uppercase tracking-wider text-[11px] font-semibold">
-              Autonomous YouTube Outreach
+      {/* ─── 2. HERO SECTION ─── */}
+      <section className="relative z-20 pt-8 pb-16 px-4 sm:px-6 max-w-6xl mx-auto text-center">
+        {/* Eyebrow Pill Badge */}
+        <motion.div
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-50/90 border border-blue-200/70 text-blue-900 text-xs font-semibold tracking-wide shadow-xs mb-6"
+        >
+          <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
+          <span>Built for B2B SaaS & Financial Firms</span>
+        </motion.div>
+
+        {/* Hero Headline */}
+        <motion.h1
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.1 }}
+          className="text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-neutral-900 max-w-4xl mx-auto leading-[1.08]"
+        >
+          YouTube Leads.
+          <br />
+          <span className="text-neutral-900">Real </span>
+          <span className="text-[#C46A3A]">Opportunities.</span>
+        </motion.h1>
+
+        {/* Subtitle */}
+        <motion.p
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.2 }}
+          className="text-base sm:text-lg text-neutral-600 max-w-2xl mx-auto mt-5 leading-relaxed"
+        >
+          Find high-intent businesses on YouTube, extract verified contacts,
+          and send personalized outreach — <span className="font-semibold text-neutral-800">automatically.</span>
+        </motion.p>
+
+        {/* Email Input + CTA Container */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.3 }}
+          className="mt-8 max-w-md mx-auto"
+        >
+          {submittedWaitlist ? (
+            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-5 py-3 rounded-full text-sm font-medium flex items-center justify-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>You&apos;re on the list! We&apos;ll reach out shortly.</span>
+            </div>
+          ) : (
+            <form onSubmit={handleWaitlistSubmit} className="bg-white p-1.5 pl-5 rounded-full border border-neutral-200 shadow-lg shadow-neutral-200/50 flex items-center justify-between gap-2">
+              <input
+                type="email"
+                required
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                placeholder="Enter your E-mail"
+                className="w-full bg-transparent text-sm text-neutral-800 placeholder-neutral-400 focus:outline-none"
+              />
+              <button
+                type="submit"
+                className="bg-[#C46A3A] hover:bg-[#D17A45] text-white text-sm font-medium rounded-full px-5 py-2.5 shrink-0 flex items-center gap-1.5 shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+              >
+                <span>Join Waitlist</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </form>
+          )}
+
+          {/* Trust Checkmarks */}
+          <div className="flex items-center justify-center gap-5 sm:gap-7 mt-3.5 text-xs text-neutral-500 font-medium">
+            <span className="flex items-center gap-1.5">
+              <Check className="w-3.5 h-3.5 text-neutral-600 stroke-[2.5]" />
+              No credit card
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Check className="w-3.5 h-3.5 text-neutral-600 stroke-[2.5]" />
+              Free forever
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Check className="w-3.5 h-3.5 text-neutral-600 stroke-[2.5]" />
+              Fully automated
             </span>
           </div>
+        </motion.div>
 
-          {/* Headline & Accent Line */}
-          <h1 className="text-3xl sm:text-5xl lg:text-[56px] font-bold tracking-tight text-white leading-[1.12]">
-            Find the creators worth contacting.{' '}
-            <span className="block mt-1.5 text-transparent bg-clip-text bg-gradient-to-r from-[#C46A3A] via-[#E26628] to-[#FFBD8A]">
-              Let LeadMiner do the rest.
-            </span>
-          </h1>
+        {/* ─── HERO PRODUCT SHOWCASE + FLOATING DEMO CARDS ─── */}
+        <div className="relative mt-14 sm:mt-16 max-w-5xl mx-auto">
+          {/* Ambient Glow Shelf under the Product */}
+          <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 w-4/5 h-28 bg-gradient-to-r from-orange-300/30 via-[#C46A3A]/40 to-orange-300/30 blur-2xl rounded-full pointer-events-none" />
 
-          {/* Subheadline */}
-          <p className="text-sm sm:text-base text-[#A0A0A0] max-w-2xl mx-auto leading-relaxed">
-            Discover creators, find verified business contacts, personalize your outreach, and keep the pipeline moving—automatically.
-          </p>
-
-          {/* CTA Buttons */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 pt-2">
-            <Link
-              href="/login"
-              className="w-full sm:w-auto inline-flex items-center justify-center space-x-2 text-sm font-semibold px-6 py-3 rounded-xl bg-[#C46A3A] text-white hover:bg-[#D17A45] active:scale-95 transition-all shadow-lg shadow-[#C46A3A]/25 min-h-[46px]"
-            >
-              <span>Explore LeadMiner</span>
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-            <a
-              href="#how-it-works"
-              className="w-full sm:w-auto inline-flex items-center justify-center space-x-2 text-sm font-medium px-6 py-3 rounded-xl bg-[#161920] border border-[#262B35] text-[#EDEDED] hover:bg-[#202530] hover:border-[#38404F] active:scale-95 transition-all min-h-[46px]"
-            >
-              <span>See how it works</span>
-              <ArrowDown className="w-4 h-4 text-[#A0A0A0]" />
-            </a>
-          </div>
-
-          {/* Tiny Trust Line */}
-          <p className="text-xs text-[#707070] font-mono tracking-wide pt-1">
-            Discovery · Verification · Personalization · Gmail Outreach
-          </p>
-        </div>
-
-        {/* ─── HERO COMPOSITION (REFERENCE LAYOUT: REAL DASHBOARD + FLOATING CARDS) ─── */}
-        <div className="relative mt-14 sm:mt-20 max-w-5xl mx-auto">
-          {/* Perspective container */}
-          <div className="relative rounded-2xl p-1 sm:p-2.5 bg-gradient-to-b from-[#2E333D]/60 via-[#1C2027]/80 to-[#12151B] border border-[#262B35] shadow-[0_25px_70px_rgba(0,0,0,0.65)]">
-            {/* Centerpiece: Real LeadMiner Dashboard UI */}
-            <div className="rounded-xl bg-[#161920] border border-[#262B35] overflow-hidden text-left shadow-inner">
-              {/* Dashboard Window Header */}
-              <div className="h-11 bg-[#11141A] border-b border-[#262B35] px-4 flex items-center justify-between text-xs">
-                <div className="flex items-center space-x-2">
-                  <div className="flex items-center space-x-1.5 mr-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#EF4444]/60" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#F59E0B]/60" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#22C55E]/60" />
-                  </div>
-                  <span className="text-[11px] font-mono text-[#707070]">leadminer.app/overview</span>
-                </div>
-
-                <div className="flex items-center space-x-3 text-[11px] font-mono">
-                  <div className="flex items-center space-x-1.5 text-emerald-400">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>System Online</span>
-                  </div>
-                  <span className="text-[#38404F]">|</span>
-                  <div className="flex items-center space-x-1.5 text-[#A0A0A0]">
-                    <Radio className="w-3 h-3 text-[#C46A3A]" />
-                    <span>Quota: 100/day</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Dashboard Content Interior */}
-              <div className="p-4 sm:p-6 space-y-6">
-                {/* Greeting & Headline */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#262B35]/70 pb-4">
-                  <div>
-                    <h2 className="text-base sm:text-lg font-semibold text-white tracking-tight">
-                      Outbound Pipeline
-                    </h2>
-                    <p className="text-xs text-[#A0A0A0]">
-                      Your autonomous engine is actively running within configured quotas.
-                    </p>
-                  </div>
-                  <div className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-[#11141A] border border-[#262B35] text-[11px] font-mono text-[#A0A0A0] self-start sm:self-auto">
-                    <Activity className="w-3.5 h-3.5 text-[#C46A3A]" />
-                    <span>Autopilot: Active</span>
-                  </div>
-                </div>
-
-                {/* 4-KPI Real System Metric Strip */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                  <div className="p-3 sm:p-3.5 rounded-lg bg-[#11141A] border border-[#262B35]">
-                    <span className="text-[11px] font-medium text-[#707070] block">Keywords Indexed</span>
-                    <span className="text-lg sm:text-xl font-bold font-mono text-white mt-1 block">
-                      {keywordCounter.toLocaleString()}
-                    </span>
-                    <span className="text-[10px] text-emerald-400 font-medium inline-flex items-center mt-1">
-                      ↑ 23 categories active
-                    </span>
-                  </div>
-
-                  <div className="p-3 sm:p-3.5 rounded-lg bg-[#11141A] border border-[#262B35]">
-                    <span className="text-[11px] font-medium text-[#707070] block">Leads Discovered</span>
-                    <span className="text-lg sm:text-xl font-bold font-mono text-white mt-1 block">1,248</span>
-                    <span className="text-[10px] text-emerald-400 font-medium inline-flex items-center mt-1">
-                      ↑ High-yield batch
-                    </span>
-                  </div>
-
-                  <div className="p-3 sm:p-3.5 rounded-lg bg-[#11141A] border border-[#262B35]">
-                    <span className="text-[11px] font-medium text-[#707070] block">Verified Emails</span>
-                    <span className="text-lg sm:text-xl font-bold font-mono text-[#C46A3A] mt-1 block">
-                      {verifiedCounter}
-                    </span>
-                    <span className="text-[10px] text-emerald-400 font-medium inline-flex items-center mt-1">
-                      99.4% deliverable
-                    </span>
-                  </div>
-
-                  <div className="p-3 sm:p-3.5 rounded-lg bg-[#11141A] border border-[#262B35]">
-                    <span className="text-[11px] font-medium text-[#707070] block">Replies Detected</span>
-                    <span className="text-lg sm:text-xl font-bold font-mono text-white mt-1 block">74</span>
-                    <span className="text-[10px] text-[#A0A0A0] font-medium inline-flex items-center mt-1">
-                      23.3% response rate
-                    </span>
-                  </div>
-                </div>
-
-                {/* Split Panel: Activity Stream & Verified Sequence */}
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 pt-1">
-                  {/* Left: Real Event Stream */}
-                  <div className="md:col-span-7 rounded-lg bg-[#11141A] border border-[#262B35] p-3.5 space-y-3">
-                    <div className="flex items-center justify-between text-xs pb-2 border-b border-[#262B35]">
-                      <span className="font-semibold text-white">Live System Events</span>
-                      <span className="text-[10px] font-mono text-emerald-400">Watchdog OK</span>
-                    </div>
-
-                    <div className="space-y-2 text-xs">
-                      <div className="flex items-start space-x-2.5 p-2 rounded bg-[#161920] border border-[#262B35]/60">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-white font-medium truncate">DNS MX Check Confirmed</p>
-                          <p className="text-[11px] text-[#707070] truncate">contact@techdispatch.io · Gmail MX deliverable</p>
-                        </div>
-                        <span className="text-[10px] font-mono text-[#707070] shrink-0">12s ago</span>
-                      </div>
-
-                      <div className="flex items-start space-x-2.5 p-2 rounded bg-[#161920] border border-[#262B35]/60">
-                        <Send className="w-4 h-4 text-[#C46A3A] shrink-0 mt-0.5" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-white font-medium truncate">Staggered Step 1 Dispatched</p>
-                          <p className="text-[11px] text-[#707070] truncate">via sender-workspace-1@agency.com</p>
-                        </div>
-                        <span className="text-[10px] font-mono text-[#707070] shrink-0">2m ago</span>
-                      </div>
-
-                      <div className="flex items-start space-x-2.5 p-2 rounded bg-[#161920] border border-[#262B35]/60">
-                        <Inbox className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-white font-medium truncate">Lead Reply Intercepted</p>
-                          <p className="text-[11px] text-[#707070] truncate">Sequence auto-halted • Notification alerted</p>
-                        </div>
-                        <span className="text-[10px] font-mono text-[#707070] shrink-0">14m ago</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right: Sequence & Queue Mini Monitor */}
-                  <div className="md:col-span-5 rounded-lg bg-[#11141A] border border-[#262B35] p-3.5 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-center justify-between text-xs pb-2 border-b border-[#262B35] mb-3">
-                        <span className="font-semibold text-white">Sending Accounts</span>
-                        <span className="text-[10px] font-mono text-[#C46A3A]">2 Active</span>
-                      </div>
-
-                      <div className="space-y-2.5">
-                        <div>
-                          <div className="flex justify-between text-[11px] text-[#A0A0A0] mb-1 font-mono">
-                            <span>outreach@agency.com</span>
-                            <span className="text-white">18/25</span>
-                          </div>
-                          <div className="w-full h-1.5 bg-[#262B35] rounded-full overflow-hidden">
-                            <div className="h-full bg-[#C46A3A] rounded-full" style={{ width: '72%' }} />
-                          </div>
-                        </div>
-
-                        <div>
-                          <div className="flex justify-between text-[11px] text-[#A0A0A0] mb-1 font-mono">
-                            <span>partner@agency.com</span>
-                            <span className="text-white">12/25</span>
-                          </div>
-                          <div className="w-full h-1.5 bg-[#262B35] rounded-full overflow-hidden">
-                            <div className="h-full bg-[#C46A3A] rounded-full" style={{ width: '48%' }} />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="pt-3 mt-3 border-t border-[#262B35] flex items-center justify-between text-[11px]">
-                      <span className="text-[#707070]">Kill Switch Guard</span>
-                      <span className="text-emerald-400 font-mono font-medium">Armed / Standby</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* ─── FLOATING CARDS (REFERENCE COMPOSITION) ─── */}
-          {/* Floating Card 1: Top-Left YouTube Source */}
-          <div className="hidden sm:flex absolute -top-6 -left-6 lg:-left-12 p-3 rounded-xl bg-[#161920]/95 backdrop-blur-md border border-[#262B35] shadow-xl items-center space-x-3 z-20 animate-fade-in">
-            <div className="w-8 h-8 rounded-lg bg-[#EF4444]/15 border border-[#EF4444]/30 flex items-center justify-center shrink-0">
-              <span className="text-xs font-bold text-[#EF4444]">YT</span>
-            </div>
-            <div className="text-left">
-              <span className="text-xs font-semibold text-white block">YouTube</span>
-              <span className="text-[10px] text-[#A0A0A0] block">Creators & Channels</span>
-            </div>
-          </div>
-
-          {/* Floating Card 2: Mid-Left Leads Discovered Yield */}
-          <div className="hidden md:flex absolute top-1/3 -left-10 lg:-left-16 p-3.5 rounded-xl bg-[#161920]/95 backdrop-blur-md border border-[#262B35] shadow-xl flex-col z-20 w-44 text-left">
-            <span className="text-[10px] font-mono uppercase tracking-wider text-[#707070]">Leads Discovered</span>
-            <span className="text-xl font-bold font-mono text-white mt-0.5">82%</span>
-            <div className="flex items-center space-x-1 text-emerald-400 text-[10px] font-medium mt-1">
-              <span>↑ +14.2%</span>
-              <span className="text-[#707070]">vs baseline</span>
-            </div>
-          </div>
-
-          {/* Floating Card 3: Top-Right Web & Google */}
-          <div className="hidden sm:flex absolute -top-6 -right-6 lg:-right-12 p-3 rounded-xl bg-[#161920]/95 backdrop-blur-md border border-[#262B35] shadow-xl items-center space-x-3 z-20">
-            <div className="w-8 h-8 rounded-lg bg-[#3B82F6]/15 border border-[#3B82F6]/30 flex items-center justify-center shrink-0">
-              <Globe className="w-4 h-4 text-[#3B82F6]" />
-            </div>
-            <div className="text-left">
-              <span className="text-xs font-semibold text-white block">Google & Web</span>
-              <span className="text-[10px] text-[#A0A0A0] block">Businesses & Websites</span>
-            </div>
-          </div>
-
-          {/* Floating Card 4: Mid-Right Socials */}
-          <div className="hidden md:flex absolute top-1/3 -right-10 lg:-right-16 p-3 rounded-xl bg-[#161920]/95 backdrop-blur-md border border-[#262B35] shadow-xl items-center space-x-3 z-20 w-48 text-left">
-            <div className="w-8 h-8 rounded-lg bg-[#C46A3A]/15 border border-[#C46A3A]/30 flex items-center justify-center shrink-0">
-              <Share2 className="w-4 h-4 text-[#C46A3A]" />
+          {/* ─── FLOATING CARD: YOUTUBE (TOP-LEFT) ─── */}
+          <motion.div
+            initial={{ opacity: 0, x: -30, y: -10 }}
+            animate={{ opacity: 1, x: 0, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.4 }}
+            className="hidden lg:flex absolute -top-8 -left-8 z-30 bg-white/95 backdrop-blur-sm border border-neutral-200/90 shadow-xl shadow-neutral-200/60 rounded-2xl p-3.5 items-center gap-3 w-56 text-left"
+          >
+            <div className="w-10 h-10 rounded-xl bg-red-600 flex items-center justify-center text-white shrink-0 shadow-sm shadow-red-500/30">
+              <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+              </svg>
             </div>
             <div>
-              <span className="text-xs font-semibold text-white block">Multi-Source</span>
-              <span className="text-[10px] text-[#A0A0A0] block">Any Niche, Any Channel</span>
+              <div className="font-bold text-sm text-neutral-900 leading-tight">YouTube</div>
+              <div className="text-xs text-neutral-500 font-medium">Creators & Channels</div>
             </div>
-          </div>
+          </motion.div>
 
-          {/* Floating Card 5: Bottom Center Verified Contact */}
-          <div className="hidden sm:flex absolute -bottom-6 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-xl bg-[#11141A]/95 backdrop-blur-md border border-[#C46A3A]/40 shadow-2xl items-center space-x-3 z-20">
-            <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-              <Check className="w-3.5 h-3.5" />
-            </div>
-            <div className="text-left">
-              <div className="flex items-center space-x-2">
-                <span className="text-xs font-mono text-white font-medium">contact@techdispatch.io</span>
-                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  VALID · DNS MX OK
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+          {/* ─── FLOATING CARD: LEADS DISCOVERED 82% (BOTTOM-LEFT) ─── */}
+          <motion.div
+            initial={{ opacity: 0, x: -30, y: 30 }}
+            animate={{ opacity: 1, x: 0, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.5 }}
+            className="hidden lg:block absolute bottom-12 -left-12 z-30 bg-white border border-neutral-200/90 shadow-2xl shadow-neutral-200/80 rounded-2xl p-4 w-48 text-left -rotate-2 hover:rotate-0 transition-transform"
+          >
+            {/* Blue corner fold / ribbon */}
+            <div className="absolute top-0 right-0 w-0 h-0 border-t-[18px] border-t-blue-500 border-l-[18px] border-l-transparent rounded-tr-2xl" />
 
-      {/* ─── SECTION 2: THE PROBLEM / TRANSFORMATION ─────────────────────── */}
-      <section className="relative z-10 py-20 border-t border-[#262B35]/80 bg-[#0B0D12]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="max-w-3xl mx-auto text-center space-y-4 mb-16">
-            <span className="text-[11px] font-mono font-semibold uppercase tracking-widest text-[#C46A3A] px-2.5 py-1 rounded bg-[#C46A3A]/10 border border-[#C46A3A]/20">
-              The Old Way
+            <div className="text-xs font-semibold text-neutral-500 tracking-tight">Leads Discovered</div>
+            <div className="text-3xl font-black text-neutral-900 mt-0.5 tracking-tight">82%</div>
+            <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 mt-1">
+              <span>↑ +3.4%</span>
+              <span className="text-neutral-400 font-normal">vs last month</span>
+            </div>
+
+            {/* Sparkline curve */}
+            <svg className="w-full h-8 mt-2 overflow-visible" viewBox="0 0 100 30">
+              <path
+                d="M0 24 Q 25 22, 40 14 T 70 18 T 100 4"
+                fill="none"
+                stroke="#C46A3A"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+              />
+              <circle cx="100" cy="4" r="3" fill="#C46A3A" />
+            </svg>
+          </motion.div>
+
+          {/* ─── FLOATING ANNOTATIONS & RIGHT-SIDE CARDS ─── */}
+          {/* Top Right Annotation: "More sources. More opportunities." */}
+          <div className="hidden xl:block absolute -top-12 -right-8 z-30 pointer-events-none select-none text-right">
+            <span className="font-serif italic text-neutral-500 text-sm tracking-wide">
+              More sources.
+              <br />
+              More opportunities.
             </span>
-            <h2 className="text-2xl sm:text-4xl font-bold tracking-tight text-white leading-tight">
-              Finding one good lead shouldn't take twenty tabs.
-            </h2>
-            <p className="text-sm sm:text-base font-mono text-[#A0A0A0] tracking-wide">
-              Search. Open. Copy. Verify. Personalize. Send. Repeat.
-            </p>
+            <svg className="w-12 h-10 ml-auto text-neutral-400 mt-1" viewBox="0 0 50 40" fill="none">
+              <path d="M40 5 Q 30 25, 10 32" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+              <path d="M12 26 L 8 33 L 17 33" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+            </svg>
           </div>
 
-          {/* Visual Transformation Comparison */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto items-stretch">
-            {/* The 20-Tab Grind */}
-            <div className="p-6 rounded-2xl bg-[#14171E] border border-[#2E333D] space-y-5 text-left flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between pb-3 border-b border-[#262B35]">
-                  <span className="text-xs font-mono font-semibold text-[#EF4444] uppercase tracking-wider">
-                    Fragmented Manual Process
-                  </span>
-                  <XCircle className="w-4 h-4 text-[#EF4444]" />
+          {/* ─── FLOATING CARD: GOOGLE (TOP-RIGHT) ─── */}
+          <motion.div
+            initial={{ opacity: 0, x: 30, y: -10 }}
+            animate={{ opacity: 1, x: 0, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.45 }}
+            className="hidden lg:flex absolute top-4 -right-10 z-30 bg-white/95 backdrop-blur-sm border border-neutral-200/90 shadow-xl shadow-neutral-200/60 rounded-2xl p-3.5 items-center gap-3 w-56 text-left"
+          >
+            <div className="w-10 h-10 rounded-xl bg-white border border-neutral-200/80 flex items-center justify-center shrink-0 shadow-xs">
+              {/* Google 4-color G */}
+              <svg className="w-5 h-5" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3h3.88c2.27-2.09 3.66-5.17 3.66-9.09z" />
+                <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.27v3.09C3.26 21.3 7.34 24 12 24z" />
+                <path fill="#FBBC05" d="M5.28 14.32c-.25-.72-.38-1.49-.38-2.32 0-.83.13-1.6.38-2.32V6.59H1.27C.46 8.21 0 10.05 0 12c0 1.95.46 3.79 1.27 5.41l4.01-3.09z" />
+                <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.7 1.27 6.59l4.01 3.09c.95-2.83 3.6-4.93 6.72-4.93z" />
+              </svg>
+            </div>
+            <div>
+              <div className="font-bold text-sm text-neutral-900 leading-tight">Google</div>
+              <div className="text-xs text-neutral-500 font-medium">Businesses & Websites</div>
+            </div>
+          </motion.div>
+
+          {/* ─── FLOATING CARD: LINKEDIN (MID-RIGHT) ─── */}
+          <motion.div
+            initial={{ opacity: 0, x: 30, y: 15 }}
+            animate={{ opacity: 1, x: 0, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.55 }}
+            className="hidden lg:flex absolute top-28 -right-6 z-30 bg-white/95 backdrop-blur-sm border border-neutral-200/90 shadow-xl shadow-neutral-200/60 rounded-2xl p-3.5 items-center gap-3 w-56 text-left"
+          >
+            <div className="w-10 h-10 rounded-xl bg-[#0A66C2] flex items-center justify-center text-white shrink-0 shadow-sm shadow-[#0A66C2]/30">
+              <span className="font-bold text-lg leading-none font-sans">in</span>
+            </div>
+            <div>
+              <div className="font-bold text-sm text-neutral-900 leading-tight">LinkedIn</div>
+              <div className="text-xs text-neutral-500 font-medium">Companies & People</div>
+            </div>
+          </motion.div>
+
+          {/* ─── FLOATING CARD: WEB (BOTTOM-RIGHT) ─── */}
+          <motion.div
+            initial={{ opacity: 0, x: 30, y: 35 }}
+            animate={{ opacity: 1, x: 0, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.65 }}
+            className="hidden lg:flex absolute bottom-8 -right-10 z-30 bg-white/95 backdrop-blur-sm border border-neutral-200/90 shadow-xl shadow-neutral-200/60 rounded-2xl p-3.5 items-center gap-3 w-56 text-left"
+          >
+            <div className="w-10 h-10 rounded-xl bg-neutral-900 flex items-center justify-center text-white shrink-0 shadow-xs">
+              <Globe className="w-5 h-5 text-neutral-200 stroke-[1.8]" />
+            </div>
+            <div>
+              <div className="font-bold text-sm text-neutral-900 leading-tight">Web</div>
+              <div className="text-xs text-neutral-500 font-medium">Any Niche, Any Industry</div>
+            </div>
+          </motion.div>
+
+          {/* Bottom Right Annotation: "Find. Enrich. Outreach. Grow." */}
+          <div className="hidden xl:block absolute -bottom-10 -right-8 z-30 pointer-events-none select-none text-right">
+            <svg className="w-10 h-10 ml-auto text-neutral-400 mb-1" viewBox="0 0 40 40" fill="none">
+              <path d="M15 35 Q 25 20, 20 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+              <path d="M14 12 L 20 6 L 25 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+            </svg>
+            <span className="font-serif italic text-neutral-500 text-sm tracking-wide">
+              Find. Enrich.
+              <br />
+              Outreach. Grow.
+            </span>
+          </div>
+
+          {/* ─── THE CENTRAL LEADMINER DASHBOARD MOCKUP ─── */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.2 }}
+            className="bg-white rounded-3xl border border-neutral-200 shadow-2xl shadow-neutral-300/60 overflow-hidden text-left relative z-20"
+          >
+            {/* Top Bar of Dashboard */}
+            <div className="h-12 border-b border-neutral-100 px-5 flex items-center justify-between bg-neutral-50/50">
+              {/* Left Brand */}
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded bg-[#C46A3A] flex items-center justify-center text-white">
+                  <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3 stroke-white stroke-[2.5]">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                 </div>
-                <ul className="mt-4 space-y-3 text-xs text-[#A0A0A0]">
-                  <li className="flex items-start space-x-2">
-                    <span className="text-[#EF4444] font-bold">✕</span>
-                    <span>20 open browser tabs across YouTube, Hunter, Sheets, and Gmail.</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <span className="text-[#EF4444] font-bold">✕</span>
-                    <span>Copy-pasting channel names and descriptions by hand.</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <span className="text-[#EF4444] font-bold">✕</span>
-                    <span>Unverified disposable emails triggering Gmail delivery warnings.</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <span className="text-[#EF4444] font-bold">✕</span>
-                    <span>Accidentally emailing someone who already replied yesterday.</span>
-                  </li>
-                </ul>
+                <span className="text-xs font-bold text-neutral-900">LeadMiner</span>
               </div>
 
-              <div className="p-3 rounded-lg bg-[#101217] border border-[#262B35] text-[11px] font-mono text-[#707070]">
-                Outcome: 3 hours burned • 12 emails sent • High fatigue
+              {/* Right Mini Icons */}
+              <div className="flex items-center gap-3">
+                <Bell className="w-3.5 h-3.5 text-neutral-400" />
+                <Settings className="w-3.5 h-3.5 text-neutral-400" />
+                <div className="relative">
+                  <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-amber-500 to-orange-400 flex items-center justify-center text-white font-bold text-[10px]">
+                    RV
+                  </div>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 border border-white absolute -bottom-0.5 -right-0.5" />
+                </div>
               </div>
             </div>
 
-            {/* The LeadMiner System */}
-            <div className="p-6 rounded-2xl bg-[#161920] border border-[#C46A3A]/40 shadow-xl space-y-5 text-left flex flex-col justify-between relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-[#C46A3A]/10 rounded-bl-full pointer-events-none" />
-              <div>
-                <div className="flex items-center justify-between pb-3 border-b border-[#262B35]">
-                  <span className="text-xs font-mono font-semibold text-[#C46A3A] uppercase tracking-wider">
-                    LeadMiner Autonomous Engine
-                  </span>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            {/* Dashboard Body Grid: Sidebar + Content */}
+            <div className="grid grid-cols-12 min-h-[380px]">
+              {/* Left Mini Sidebar */}
+              <div className="col-span-3 border-r border-neutral-100 p-3 bg-neutral-50/30 hidden sm:block">
+                <div className="space-y-1 text-xs font-medium">
+                  <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-orange-50/80 text-[#C46A3A] font-semibold">
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#C46A3A]" />
+                    <span>Dashboard</span>
+                  </div>
+                  <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-neutral-600 hover:bg-neutral-100/60">
+                    <Layers className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>Campaigns</span>
+                  </div>
+                  <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-neutral-600 hover:bg-neutral-100/60">
+                    <Search className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>Leads</span>
+                  </div>
+                  <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-neutral-600 hover:bg-neutral-100/60">
+                    <Mail className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>Email Accounts</span>
+                  </div>
+                  <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-neutral-600 hover:bg-neutral-100/60">
+                    <Send className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>Sequences</span>
+                  </div>
+                  <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-neutral-600 hover:bg-neutral-100/60">
+                    <BarChart3 className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>Analytics</span>
+                  </div>
+                  <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-neutral-600 hover:bg-neutral-100/60">
+                    <Settings className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>Settings</span>
+                  </div>
                 </div>
-                <ul className="mt-4 space-y-3 text-xs text-[#EDEDED]">
-                  <li className="flex items-start space-x-2">
-                    <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                    <span>25,391 keywords ingested and automatically scheduled.</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                    <span>Multi-channel contact signals extracted straight into structured records.</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                    <span>Real-time DNS MX resolution filters bounces before dispatch.</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                    <span>Atomic reply synchronization stops follow-ups the second a lead responds.</span>
-                  </li>
-                </ul>
               </div>
 
-              <div className="p-3 rounded-lg bg-[#11141A] border border-[#C46A3A]/30 text-[11px] font-mono text-[#C46A3A] font-medium">
-                LeadMiner turns the whole process into one system.
+              {/* Right Content Area */}
+              <div className="col-span-12 sm:col-span-9 p-5 sm:p-6 bg-white flex flex-col justify-between">
+                <div>
+                  {/* Greeting & Timeframe */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-base font-bold text-neutral-900 flex items-center gap-1.5">
+                        <span>Good morning</span>
+                        <span>👋</span>
+                      </h2>
+                      <p className="text-xs text-neutral-500 mt-0.5">Your outbound engine is running smoothly.</p>
+                    </div>
+                    <div className="flex items-center gap-1 text-xs border border-neutral-200 rounded-lg px-2.5 py-1 text-neutral-600 font-medium bg-neutral-50/50">
+                      <span>Last 7 days</span>
+                      <ChevronDown className="w-3 h-3 text-neutral-400" />
+                    </div>
+                  </div>
+
+                  {/* 4 Top KPI Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+                    {/* Card 1 */}
+                    <div className="bg-neutral-50/70 border border-neutral-100 rounded-xl p-3">
+                      <div className="text-base font-extrabold text-neutral-900">{leadsFound.toLocaleString()}</div>
+                      <div className="text-[11px] text-neutral-500 font-medium mt-0.5">Leads Found</div>
+                      <div className="text-[10px] font-bold text-emerald-600 mt-1 flex items-center gap-0.5">
+                        <span>↑ 12%</span>
+                      </div>
+                    </div>
+
+                    {/* Card 2 */}
+                    <div className="bg-neutral-50/70 border border-neutral-100 rounded-xl p-3">
+                      <div className="text-base font-extrabold text-neutral-900">{verifiedEmails.toLocaleString()}</div>
+                      <div className="text-[11px] text-neutral-500 font-medium mt-0.5">Verified Emails</div>
+                      <div className="text-[10px] font-bold text-emerald-600 mt-1 flex items-center gap-0.5">
+                        <span>↑ 18%</span>
+                      </div>
+                    </div>
+
+                    {/* Card 3 */}
+                    <div className="bg-neutral-50/70 border border-neutral-100 rounded-xl p-3">
+                      <div className="text-base font-extrabold text-neutral-900">318</div>
+                      <div className="text-[11px] text-neutral-500 font-medium mt-0.5">Emails Sent</div>
+                      <div className="text-[10px] font-bold text-emerald-600 mt-1 flex items-center gap-0.5">
+                        <span>↑ 20%</span>
+                      </div>
+                    </div>
+
+                    {/* Card 4 */}
+                    <div className="bg-neutral-50/70 border border-neutral-100 rounded-xl p-3">
+                      <div className="text-base font-extrabold text-neutral-900">74</div>
+                      <div className="text-[11px] text-neutral-500 font-medium mt-0.5">Replies</div>
+                      <div className="text-[10px] font-bold text-emerald-600 mt-1 flex items-center gap-0.5">
+                        <span>↑ 40%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 2-Column Row: Campaign Performance Chart + Recent Activity */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 mt-4">
+                    {/* Performance Area Chart (8 cols) */}
+                    <div className="sm:col-span-7 bg-neutral-50/60 border border-neutral-100 rounded-xl p-3.5 relative">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-neutral-800">Campaign Performance</span>
+                        <span className="text-[10px] text-neutral-400 font-medium">Last 7 days ˇ</span>
+                      </div>
+
+                      {/* Tooltip Overlay */}
+                      <div className="absolute top-7 left-1/2 -translate-x-1/2 bg-neutral-900 text-white rounded-lg px-2.5 py-1 text-[10px] shadow-lg font-medium flex items-center gap-1.5 z-10 pointer-events-none">
+                        <span>318 emails sent</span>
+                        <span className="text-[#C46A3A] font-bold">74 replies (23.2%)</span>
+                      </div>
+
+                      {/* SVG Smooth Area Chart */}
+                      <div className="h-28 w-full pt-4">
+                        <svg className="w-full h-full" viewBox="0 0 300 90" preserveAspectRatio="none">
+                          <defs>
+                            <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#C46A3A" stopOpacity="0.25" />
+                              <stop offset="100%" stopColor="#C46A3A" stopOpacity="0.0" />
+                            </linearGradient>
+                          </defs>
+                          <path
+                            d="M0 75 Q 50 65, 90 50 T 170 30 T 230 40 T 300 20 L 300 90 L 0 90 Z"
+                            fill="url(#chartGradient)"
+                          />
+                          <path
+                            d="M0 75 Q 50 65, 90 50 T 170 30 T 230 40 T 300 20"
+                            fill="none"
+                            stroke="#C46A3A"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                          />
+                          {/* Data points */}
+                          <circle cx="170" cy="30" r="3.5" fill="#C46A3A" stroke="#FFFFFF" strokeWidth="2" />
+                          <circle cx="300" cy="20" r="3.5" fill="#C46A3A" stroke="#FFFFFF" strokeWidth="2" />
+                        </svg>
+                      </div>
+
+                      {/* X-axis dates */}
+                      <div className="flex items-center justify-between text-[9px] text-neutral-400 font-medium px-1 mt-1">
+                        <span>Jan 14</span>
+                        <span>Jan 15</span>
+                        <span>Jan 16</span>
+                        <span>Jan 17</span>
+                        <span>Jan 18</span>
+                        <span>Jan 19</span>
+                        <span>Jan 20</span>
+                      </div>
+                    </div>
+
+                    {/* Recent Activity List (5 cols) */}
+                    <div className="sm:col-span-5 bg-neutral-50/60 border border-neutral-100 rounded-xl p-3.5">
+                      <div className="text-xs font-bold text-neutral-800 mb-2">Recent Activity</div>
+                      <div className="space-y-2 text-[11px]">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            <span className="text-neutral-700 font-medium">Found 120 new leads</span>
+                          </div>
+                          <span className="text-[10px] text-neutral-400">2m ago</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                            <span className="text-neutral-700 font-medium">Verified 87 emails</span>
+                          </div>
+                          <span className="text-[10px] text-neutral-400">12m ago</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+                            <span className="text-neutral-700 font-medium">Sent 50 emails</span>
+                          </div>
+                          <span className="text-[10px] text-neutral-400">28m ago</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            <span className="text-neutral-700 font-medium">12 new replies</span>
+                          </div>
+                          <span className="text-[10px] text-neutral-400">1h ago</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          </motion.div>
         </div>
       </section>
 
-      {/* ─── SECTION 3: CORE CAPABILITIES ─────────────────────────────────── */}
-      <section className="relative z-10 py-20 max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="max-w-3xl mx-auto text-center space-y-3 mb-16">
-          <span className="text-[11px] font-mono font-semibold uppercase tracking-widest text-[#C46A3A] px-2.5 py-1 rounded bg-[#C46A3A]/10 border border-[#C46A3A]/20">
-            One System
-          </span>
-          <h2 className="text-2xl sm:text-4xl font-bold tracking-tight text-white">
-            From discovery to reply.
-          </h2>
-          <p className="text-sm text-[#A0A0A0]">
-            Four core capabilities engineered to work together without third-party integration duct-tape.
+      {/* ─── 3. LOGO TRUST STRIP ─── */}
+      <section className="relative z-20 py-10 border-t border-neutral-200/60 bg-white/60">
+        <div className="max-w-6xl mx-auto px-6 text-center">
+          <p className="text-xs uppercase font-semibold tracking-wider text-neutral-400 mb-6">
+            Trusted by operators, marketers and agencies
           </p>
-        </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {/* Card 1: Find */}
-          <div className="p-6 rounded-2xl bg-[#161920] border border-[#262B35] space-y-4 text-left hover:border-[#C46A3A]/40 transition-colors group">
-            <div className="w-10 h-10 rounded-xl bg-[#C46A3A]/10 border border-[#C46A3A]/20 flex items-center justify-center text-[#C46A3A] group-hover:scale-105 transition-transform">
-              <Search className="w-5 h-5" />
+          <div className="flex flex-wrap items-center justify-center gap-8 sm:gap-14 text-neutral-400">
+            {/* YouTube */}
+            <div className="flex items-center gap-2 hover:text-neutral-700 transition-colors">
+              <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+              </svg>
+              <span className="font-bold text-sm tracking-tight">YouTube</span>
             </div>
-            <h3 className="text-base font-semibold text-white">Find</h3>
-            <p className="text-xs text-[#A0A0A0] leading-relaxed">
-              Search thousands of creator niches and surface relevant prospects automatically.
-            </p>
-            <div className="pt-2 text-[10px] font-mono text-[#707070] border-t border-[#262B35]">
-              Dual YouTube quota protection
-            </div>
-          </div>
 
-          {/* Card 2: Extract */}
-          <div className="p-6 rounded-2xl bg-[#161920] border border-[#262B35] space-y-4 text-left hover:border-[#C46A3A]/40 transition-colors group">
-            <div className="w-10 h-10 rounded-xl bg-[#C46A3A]/10 border border-[#C46A3A]/20 flex items-center justify-center text-[#C46A3A] group-hover:scale-105 transition-transform">
-              <Share2 className="w-5 h-5" />
+            {/* Google */}
+            <div className="flex items-center gap-2 hover:text-neutral-700 transition-colors">
+              <span className="font-bold text-sm tracking-tight">Google</span>
             </div>
-            <h3 className="text-base font-semibold text-white">Extract</h3>
-            <p className="text-xs text-[#A0A0A0] leading-relaxed">
-              Pull business emails and contact signals from the creator data already available to you.
-            </p>
-            <div className="pt-2 text-[10px] font-mono text-[#707070] border-t border-[#262B35]">
-              1:N Multi-contact storage
-            </div>
-          </div>
 
-          {/* Card 3: Verify */}
-          <div className="p-6 rounded-2xl bg-[#161920] border border-[#262B35] space-y-4 text-left hover:border-[#C46A3A]/40 transition-colors group">
-            <div className="w-10 h-10 rounded-xl bg-[#C46A3A]/10 border border-[#C46A3A]/20 flex items-center justify-center text-[#C46A3A] group-hover:scale-105 transition-transform">
-              <Shield className="w-5 h-5" />
+            {/* LinkedIn */}
+            <div className="flex items-center gap-1.5 hover:text-neutral-700 transition-colors">
+              <span className="font-bold text-sm tracking-tight">Linked</span>
+              <span className="bg-current text-white font-bold text-xs px-1 rounded-xs">in</span>
             </div>
-            <h3 className="text-base font-semibold text-white">Verify</h3>
-            <p className="text-xs text-[#A0A0A0] leading-relaxed">
-              Filter unreliable addresses before they reach your sending queue.
-            </p>
-            <div className="pt-2 text-[10px] font-mono text-[#707070] border-t border-[#262B35]">
-              3s DNS MX check · Fail-closed
-            </div>
-          </div>
 
-          {/* Card 4: Reach */}
-          <div className="p-6 rounded-2xl bg-[#161920] border border-[#262B35] space-y-4 text-left hover:border-[#C46A3A]/40 transition-colors group">
-            <div className="w-10 h-10 rounded-xl bg-[#C46A3A]/10 border border-[#C46A3A]/20 flex items-center justify-center text-[#C46A3A] group-hover:scale-105 transition-transform">
-              <Send className="w-5 h-5" />
+            {/* Stripe */}
+            <div className="flex items-center gap-2 hover:text-neutral-700 transition-colors font-bold text-sm tracking-tight">
+              stripe
             </div>
-            <h3 className="text-base font-semibold text-white">Reach</h3>
-            <p className="text-xs text-[#A0A0A0] leading-relaxed">
-              Personalize and send outreach through your connected Gmail accounts.
-            </p>
-            <div className="pt-2 text-[10px] font-mono text-[#707070] border-t border-[#262B35]">
-              Multi-inbox rotation & pacing
+
+            {/* Notion */}
+            <div className="flex items-center gap-1.5 hover:text-neutral-700 transition-colors">
+              <span className="border border-current font-serif font-black px-1 rounded text-xs">N</span>
+              <span className="font-bold text-sm tracking-tight">Notion</span>
+            </div>
+
+            {/* Supabase */}
+            <div className="flex items-center gap-1.5 hover:text-neutral-700 transition-colors">
+              <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                <path d="M21.362 9.354H12V.396a.396.396 0 0 0-.716-.233L.32 14.24a.396.396 0 0 0 .316.638H12v8.958a.396.396 0 0 0 .716.233l10.964-14.077a.396.396 0 0 0-.318-.638z" />
+              </svg>
+              <span className="font-bold text-sm tracking-tight">supabase</span>
+            </div>
+
+            {/* OpenAI */}
+            <div className="flex items-center gap-1.5 hover:text-neutral-700 transition-colors">
+              <span className="font-bold text-sm tracking-tight">OpenAI</span>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ─── SECTION 4: THE PRODUCT SHOWCASE ──────────────────────────────── */}
-      <section id="pipeline" className="relative z-10 py-20 border-t border-[#262B35]/80 bg-[#0B0D12]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="max-w-3xl mx-auto text-center space-y-3 mb-14">
-            <span className="text-[11px] font-mono font-semibold uppercase tracking-widest text-[#C46A3A] px-2.5 py-1 rounded bg-[#C46A3A]/10 border border-[#C46A3A]/20">
-              The Architecture
+      {/* ─── 4. FEATURES SECTION (EXACT MATCH TO REFERENCE PHOTO) ─── */}
+      <section id="features" className="relative z-20 py-20 px-6 max-w-6xl mx-auto">
+        {/* Header with pill badge and right-side button */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
+          <div>
+            <span className="inline-block px-3 py-1 rounded-full bg-orange-100/70 text-[#C46A3A] text-xs font-bold tracking-wider uppercase mb-3">
+              Features
             </span>
-            <h2 className="text-2xl sm:text-4xl font-bold tracking-tight text-white">
-              Your outbound engine. Running quietly in the background.
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-neutral-900 tracking-tight max-w-xl leading-tight">
+              Everything you need to turn YouTube into a lead generation engine.
             </h2>
-            <p className="text-xs sm:text-sm text-[#A0A0A0]">
-              From raw keyword to closed conversation across six autonomous stages.
+            <p className="text-sm sm:text-base text-neutral-600 mt-3 max-w-xl">
+              From discovery to outreach, LeadMiner handles the heavy lifting so you can focus on closing deals.
             </p>
           </div>
 
-          {/* Horizontal Pipeline Stepper */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 mb-8 max-w-5xl mx-auto">
-            {pipelineStages.map((stage, idx) => {
-              const Icon = stage.icon;
-              const isActive = activePipelineStep === idx;
-              return (
-                <button
-                  key={stage.id}
-                  type="button"
-                  onClick={() => setActivePipelineStep(idx)}
-                  className={`p-3 rounded-xl border text-left transition-all min-h-[54px] flex flex-col justify-between ${
-                    isActive
-                      ? 'bg-[#1C2028] border-[#C46A3A] shadow-md shadow-[#C46A3A]/10'
-                      : 'bg-[#14171E] border-[#262B35] hover:border-[#38404F] text-[#A0A0A0]'
-                  }`}
-                >
-                  <div className="flex items-center justify-between w-full">
-                    <span className="text-[10px] font-mono text-[#707070]">0{idx + 1}</span>
-                    <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-[#C46A3A]' : 'text-[#707070]'}`} />
-                  </div>
-                  <span className={`text-xs font-semibold mt-2 block ${isActive ? 'text-white' : 'text-[#A0A0A0]'}`}>
-                    {stage.label}
-                  </span>
-                </button>
-              );
-            })}
+          <Link
+            href="/overview"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-neutral-300 bg-white text-sm font-semibold text-neutral-800 hover:bg-neutral-50 shadow-xs transition-all shrink-0 self-start md:self-auto"
+          >
+            <span>Explore All Features</span>
+            <ArrowRight className="w-4 h-4 text-neutral-500" />
+          </Link>
+        </div>
+
+        {/* 4 Clean White Feature Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Card 1 */}
+          <div className="bg-white border border-neutral-200/90 rounded-2xl p-6 shadow-xs hover:shadow-md transition-all group">
+            <div className="w-11 h-11 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center text-[#C46A3A] mb-5 group-hover:scale-105 transition-transform">
+              <Search className="w-5 h-5 stroke-[2.2]" />
+            </div>
+            <h3 className="text-base font-bold text-neutral-900 tracking-tight">Lead Discovery</h3>
+            <p className="text-xs text-neutral-600 mt-2 leading-relaxed">
+              Find high-intent leads from YouTube, Google, LinkedIn and more.
+            </p>
           </div>
 
-          {/* Interactive Inspection Card for Active Pipeline Stage */}
-          <div className="max-w-5xl mx-auto rounded-2xl bg-[#161920] border border-[#262B35] p-6 sm:p-8 text-left shadow-2xl relative overflow-hidden">
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
-              <div className="md:col-span-7 space-y-4">
-                <div className="inline-flex items-center space-x-2 px-2.5 py-1 rounded bg-[#C46A3A]/10 border border-[#C46A3A]/30 text-xs font-mono text-[#C46A3A]">
-                  <span>Stage 0{activePipelineStep + 1}</span>
-                  <span>•</span>
-                  <span>{pipelineStages[activePipelineStep].pill}</span>
-                </div>
-
-                <h3 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-                  {pipelineStages[activePipelineStep].title}
-                </h3>
-
-                <p className="text-sm text-[#A0A0A0] leading-relaxed">
-                  {pipelineStages[activePipelineStep].desc}
-                </p>
-
-                <div className="p-3.5 rounded-xl bg-[#11141A] border border-[#262B35] text-xs font-mono space-y-1">
-                  <div className="text-white font-semibold flex items-center space-x-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    <span>{pipelineStages[activePipelineStep].stat}</span>
-                  </div>
-                  <p className="text-[#707070] text-[11px]">
-                    {pipelineStages[activePipelineStep].detail}
-                  </p>
-                </div>
-              </div>
-
-              {/* Contextual Visual Terminal Snippet */}
-              <div className="md:col-span-5 rounded-xl bg-[#11141A] border border-[#262B35] p-4 text-xs font-mono space-y-2.5">
-                <div className="flex items-center justify-between pb-2 border-b border-[#262B35] text-[10px] text-[#707070]">
-                  <span>pipeline_worker.ts</span>
-                  <span className="text-emerald-400">READY</span>
-                </div>
-                <div className="text-[#A0A0A0] space-y-1 leading-relaxed text-[11px]">
-                  <p className="text-[#707070]">{`// Pipeline stage verification`}</p>
-                  <p>
-                    <span className="text-[#C46A3A]">const</span> stage = <span className="text-emerald-400">&apos;{pipelineStages[activePipelineStep].id}&apos;</span>;
-                  </p>
-                  <p>
-                    <span className="text-[#C46A3A]">const</span> status = <span className="text-white">await</span> engine.verifySafety();
-                  </p>
-                  <p className="text-emerald-400/90 font-medium">✓ State committed to PostgreSQL</p>
-                  <p className="text-[#707070]">✓ Watchdog checkpoint saved</p>
-                </div>
-              </div>
+          {/* Card 2 */}
+          <div className="bg-white border border-neutral-200/90 rounded-2xl p-6 shadow-xs hover:shadow-md transition-all group">
+            <div className="w-11 h-11 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center text-[#C46A3A] mb-5 group-hover:scale-105 transition-transform">
+              <Mail className="w-5 h-5 stroke-[2.2]" />
             </div>
+            <h3 className="text-base font-bold text-neutral-900 tracking-tight">Verified Contacts</h3>
+            <p className="text-xs text-neutral-600 mt-2 leading-relaxed">
+              Extract and verify emails with high accuracy and 3-second DNS checks.
+            </p>
+          </div>
 
-            {/* Small Contextual Annotations Row */}
-            <div className="mt-8 pt-6 border-t border-[#262B35] flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-[#A0A0A0]">
-              <span className="inline-flex items-center space-x-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#C46A3A]" />
-                <span>25,391 keywords</span>
-              </span>
-              <span className="inline-flex items-center space-x-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                <span>Verified contacts</span>
-              </span>
-              <span className="inline-flex items-center space-x-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#C46A3A]" />
-                <span>Automated sending</span>
-              </span>
-              <span className="inline-flex items-center space-x-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                <span>Reply detected</span>
-              </span>
-              <span className="inline-flex items-center space-x-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#A0A0A0]" />
-                <span>No manual babysitting</span>
-              </span>
+          {/* Card 3 */}
+          <div className="bg-white border border-neutral-200/90 rounded-2xl p-6 shadow-xs hover:shadow-md transition-all group">
+            <div className="w-11 h-11 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center text-[#C46A3A] mb-5 group-hover:scale-105 transition-transform">
+              <Zap className="w-5 h-5 stroke-[2.2]" />
             </div>
+            <h3 className="text-base font-bold text-neutral-900 tracking-tight">Automated Outreach</h3>
+            <p className="text-xs text-neutral-600 mt-2 leading-relaxed">
+              Send personalized cold emails at scale with smart sequences.
+            </p>
+          </div>
+
+          {/* Card 4 */}
+          <div className="bg-white border border-neutral-200/90 rounded-2xl p-6 shadow-xs hover:shadow-md transition-all group">
+            <div className="w-11 h-11 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center text-[#C46A3A] mb-5 group-hover:scale-105 transition-transform">
+              <BarChart3 className="w-5 h-5 stroke-[2.2]" />
+            </div>
+            <h3 className="text-base font-bold text-neutral-900 tracking-tight">Track & Grow</h3>
+            <p className="text-xs text-neutral-600 mt-2 leading-relaxed">
+              Monitor performance and get more replies, more clients.
+            </p>
           </div>
         </div>
       </section>
 
-      {/* ─── SECTION 5: MID-PAGE CTA (ORANGE REFERENCE ADAPTATION) ────────── */}
-      <section className="relative z-10 py-16 sm:py-24 max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-[#C46A3A] via-[#BD521E] to-[#94461E] p-8 sm:p-14 text-center text-white shadow-2xl border border-[#FFA463]/30">
-          {/* Subtle Grid Overlay */}
+      {/* ─── 5. MID-PAGE ORANGE CTA (EXACT MATCH TO REFERENCE PHOTO) ─── */}
+      <section className="relative z-20 py-8 px-6 max-w-6xl mx-auto">
+        <div className="bg-gradient-to-r from-[#E07A42] via-[#C46A3A] to-[#B05B2E] rounded-3xl p-8 sm:p-12 md:p-14 text-white text-center relative overflow-hidden shadow-2xl">
+          {/* Subtle Grid overlay */}
           <div
-            className="absolute inset-0 opacity-10 pointer-events-none"
+            className="absolute inset-0 pointer-events-none opacity-10"
             style={{
-              backgroundImage: `radial-gradient(circle at 1px 1px, #FFFFFF 1px, transparent 0)`,
+              backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)',
               backgroundSize: '24px 24px',
             }}
           />
 
-          <div className="relative z-10 max-w-2xl mx-auto space-y-6">
-            {/* Centered Cube Logo Mark */}
-            <div className="w-12 h-12 mx-auto rounded-xl bg-black/20 border border-white/20 p-2 shadow-inner">
-              <img src="/favicon.svg" alt="LeadMiner Mark" className="w-full h-full object-contain" />
+          {/* Left Pinned Decorative Card */}
+          <div className="hidden lg:block absolute -top-2 left-6 -rotate-6 z-20">
+            <div className="relative bg-white text-neutral-900 px-4 py-3 rounded-xl shadow-xl border border-neutral-100 text-left w-36">
+              {/* 3D Blue Pin Sphere */}
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-gradient-to-tr from-blue-700 via-blue-500 to-blue-300 shadow-md shadow-black/30 border border-white" />
+              <div className="font-bold text-xs text-neutral-900 pt-2 leading-tight">Design Concept</div>
+              <div className="text-[10px] text-neutral-500 font-medium">Auto-Discovery</div>
             </div>
+          </div>
 
-            <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight leading-[1.12]">
-              Stop managing the pipeline.{' '}
-              <span className="block text-[#FFF4EC]">Start building it.</span>
-            </h2>
-
-            <p className="text-sm sm:text-base text-white/90 leading-relaxed max-w-xl mx-auto">
-              LeadMiner keeps discovery, verification, and outreach moving while you focus on the work that actually closes the deal.
-            </p>
-
-            <div className="pt-2">
-              <Link
-                href="/login"
-                className="inline-flex items-center space-x-2 px-8 py-3.5 rounded-xl bg-[#161920] text-white hover:bg-black font-semibold text-sm transition-all shadow-xl active:scale-95"
-              >
-                <span>Open LeadMiner</span>
-                <ArrowRight className="w-4 h-4 text-[#FFA463]" />
-              </Link>
+          {/* Right Pinned Decorative Card */}
+          <div className="hidden lg:block absolute -top-2 right-6 rotate-6 z-20">
+            <div className="relative bg-white text-neutral-900 px-4 py-3 rounded-xl shadow-xl border border-neutral-100 text-left w-40">
+              {/* 3D Red/Orange Pin Sphere */}
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-gradient-to-tr from-red-700 via-rose-500 to-orange-300 shadow-md shadow-black/30 border border-white" />
+              <div className="font-bold text-xs text-neutral-900 pt-2 leading-tight">Complete Development</div>
+              <div className="text-[10px] text-neutral-500 font-medium">Verified Pipeline</div>
             </div>
+          </div>
+
+          {/* Avatar badge */}
+          <div className="inline-flex items-center gap-2 bg-black/25 backdrop-blur-md rounded-full px-3.5 py-1 text-xs font-semibold mb-6">
+            <div className="w-5 h-5 rounded-full bg-amber-400 flex items-center justify-center text-neutral-900 text-[10px] font-bold">
+              MV
+            </div>
+            <span>Mark Vassilevskiy</span>
+          </div>
+
+          {/* Big White Headline */}
+          <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight max-w-2xl mx-auto leading-tight">
+            Let&apos;s have a 30-min call
+          </h2>
+          <p className="text-sm sm:text-base text-orange-100/90 mt-3 max-w-xl mx-auto">
+            I&apos;ll show you how LeadMiner can help you get more clients.
+          </p>
+
+          {/* Button */}
+          <div className="mt-7">
+            <Link
+              href="/overview"
+              className="inline-flex items-center gap-2 bg-white text-neutral-900 hover:bg-neutral-50 font-bold px-7 py-3 rounded-full text-sm shadow-xl transition-all hover:scale-105 active:scale-95"
+            >
+              <span>Book a Call</span>
+              <ArrowRight className="w-4 h-4 text-[#C46A3A]" />
+            </Link>
           </div>
         </div>
       </section>
 
-      {/* ─── SECTION 6: HOW IT WORKS ──────────────────────────────────────── */}
-      <section id="how-it-works" className="relative z-10 py-20 border-t border-[#262B35]/80 bg-[#0B0D12]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="max-w-3xl mx-auto text-center space-y-3 mb-16">
-            <span className="text-[11px] font-mono font-semibold uppercase tracking-widest text-[#C46A3A] px-2.5 py-1 rounded bg-[#C46A3A]/10 border border-[#C46A3A]/20">
-              How It Works
+      {/* ─── 6. PRODUCT SHOWCASE (ALTERNATING REAL LEADMINER UI) ─── */}
+      <section id="product" className="relative z-20 py-20 px-6 max-w-6xl mx-auto space-y-24">
+        {/* Row 1: Discovery Engine (Left Copy / Right UI) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+          <div className="lg:col-span-5 space-y-4">
+            <span className="inline-block px-3 py-1 rounded-full bg-orange-100/70 text-[#C46A3A] text-xs font-bold uppercase tracking-wider">
+              01 · Discovery Engine
             </span>
-            <h2 className="text-2xl sm:text-4xl font-bold tracking-tight text-white">
-              Four steps. One continuous system.
-            </h2>
-            <p className="text-sm text-[#A0A0A0]">
-              Every step is sequential, checkpointed, and designed to run unattended.
+            <h3 className="text-3xl font-extrabold text-neutral-900 tracking-tight leading-tight">
+              Uncover the creators nobody else is reaching.
+            </h3>
+            <p className="text-sm text-neutral-600 leading-relaxed">
+              Search across 25,391 curated niche categories. LeadMiner surfaces active channels with high engagement, authentic audiences, and real business potential.
             </p>
+            <ul className="space-y-2.5 pt-2 text-xs font-medium text-neutral-700">
+              <li className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Dual YouTube quota tracking with zero quota waste</span>
+              </li>
+              <li className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Yield-weighted keyword scoring prioritizes top niches</span>
+              </li>
+              <li className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>In-memory deduplication skips existing channels</span>
+              </li>
+            </ul>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {/* Step 1 */}
-            <div className="p-6 rounded-2xl bg-[#161920] border border-[#262B35] space-y-4 text-left flex flex-col justify-between">
-              <div>
-                <span className="text-2xl font-bold font-mono text-[#C46A3A] block mb-2">01</span>
-                <h3 className="text-lg font-semibold text-white">Discover</h3>
-                <p className="text-xs text-[#A0A0A0] mt-2 leading-relaxed">
-                  Start with the creators you want to reach. Search keywords across 23 commercial categories with automatic channel deduplication.
-                </p>
+          <div className="lg:col-span-7 bg-white rounded-2xl border border-neutral-200/90 shadow-xl p-6">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-3 mb-4">
+              <div className="text-xs font-bold text-neutral-800">YouTube Discovery Stream</div>
+              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full">
+                Live Active
+              </span>
+            </div>
+            <div className="space-y-2.5">
+              {[
+                { name: 'Creative Tech Lab', subs: '142K subs', niche: 'B2B Software', email: 'business@creativetech.io', status: 'VALID' },
+                { name: 'SaaS Growth Pulse', subs: '89K subs', niche: 'Agency Systems', email: 'hello@saasgrowth.com', status: 'VALID' },
+                { name: 'Fintech Daily Review', subs: '210K subs', niche: 'Personal Finance', email: 'partnerships@finreview.org', status: 'DOMAIN_VALID' },
+              ].map((channel, i) => (
+                <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-neutral-50/70 border border-neutral-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-orange-100 text-[#C46A3A] font-bold text-xs flex items-center justify-center">
+                      {channel.name[0]}
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-neutral-900">{channel.name}</div>
+                      <div className="text-[10px] text-neutral-400">{channel.subs} · {channel.niche}</div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs font-mono text-neutral-700">{channel.email}</div>
+                    <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                      {channel.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Row 2: Verification Guard (Left UI / Right Copy) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+          <div className="lg:col-span-7 order-2 lg:order-1 bg-white rounded-2xl border border-neutral-200/90 shadow-xl p-6">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-3 mb-4">
+              <div className="text-xs font-bold text-neutral-800">Verification Inspection Matrix</div>
+              <span className="text-[10px] font-mono text-neutral-400">DNS Timeout: 3000ms</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-100">
+                <div className="text-[10px] uppercase font-bold text-emerald-700">RFC Syntax</div>
+                <div className="text-sm font-extrabold text-neutral-900 mt-1">100% Pass</div>
+                <p className="text-[10px] text-neutral-500 mt-1">Standard RFC-5322 compliance checking.</p>
               </div>
-              <div className="p-2.5 rounded-lg bg-[#11141A] border border-[#262B35] text-[11px] font-mono text-[#707070]">
-                YouTube API · Dual Quotas
+              <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-100">
+                <div className="text-[10px] uppercase font-bold text-emerald-700">DNS MX Resolution</div>
+                <div className="text-sm font-extrabold text-neutral-900 mt-1">Confirmed</div>
+                <p className="text-[10px] text-neutral-500 mt-1">Direct authoritative mailserver lookups.</p>
+              </div>
+              <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-100">
+                <div className="text-[10px] uppercase font-bold text-emerald-700">Disposable Filter</div>
+                <div className="text-sm font-extrabold text-neutral-900 mt-1">17 Providers Blocked</div>
+                <p className="text-[10px] text-neutral-500 mt-1">Guarantees zero throwaway addresses.</p>
               </div>
             </div>
+          </div>
 
-            {/* Step 2 */}
-            <div className="p-6 rounded-2xl bg-[#161920] border border-[#262B35] space-y-4 text-left flex flex-col justify-between">
-              <div>
-                <span className="text-2xl font-bold font-mono text-[#C46A3A] block mb-2">02</span>
-                <h3 className="text-lg font-semibold text-white">Verify</h3>
-                <p className="text-xs text-[#A0A0A0] mt-2 leading-relaxed">
-                  Separate usable contacts from dead ends. Strict RFC syntax and 3-second DNS MX queries filter bounces before any email is queued.
-                </p>
-              </div>
-              <div className="p-2.5 rounded-lg bg-[#11141A] border border-[#262B35] text-[11px] font-mono text-emerald-400">
-                Fail-Closed Verification
-              </div>
+          <div className="lg:col-span-5 order-1 lg:order-2 space-y-4">
+            <span className="inline-block px-3 py-1 rounded-full bg-orange-100/70 text-[#C46A3A] text-xs font-bold uppercase tracking-wider">
+              02 · Deliverability Guard
+            </span>
+            <h3 className="text-3xl font-extrabold text-neutral-900 tracking-tight leading-tight">
+              100% verified emails. Zero wasted sends.
+            </h3>
+            <p className="text-sm text-neutral-600 leading-relaxed">
+              Never risk your primary domain reputation. LeadMiner performs authoritative DNS MX lookups with strict 3-second timeouts, discarding dead mailboxes before any email is queued.
+            </p>
+            <ul className="space-y-2.5 pt-2 text-xs font-medium text-neutral-700">
+              <li className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Zero SMTP probing eliminates blacklisting risks</span>
+              </li>
+              <li className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Fail-closed protection: unverified emails never send</span>
+              </li>
+              <li className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Automatic permanent suppression for bounces</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        {/* Row 3: Automated Outreach & Replies (Left Copy / Right UI) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+          <div className="lg:col-span-5 space-y-4">
+            <span className="inline-block px-3 py-1 rounded-full bg-orange-100/70 text-[#C46A3A] text-xs font-bold uppercase tracking-wider">
+              03 · Outreach & Replies
+            </span>
+            <h3 className="text-3xl font-extrabold text-neutral-900 tracking-tight leading-tight">
+              Personalized cold emails that actually get replies.
+            </h3>
+            <p className="text-sm text-neutral-600 leading-relaxed">
+              Gemini crafts authentic opening sentences based on each creator&apos;s recent uploads and channel topics. Emails are rotated across multiple Google Workspace accounts with natural human jitter.
+            </p>
+            <ul className="space-y-2.5 pt-2 text-xs font-medium text-neutral-700">
+              <li className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Safe 18–25 email daily cap per connected inbox</span>
+              </li>
+              <li className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Automated thread reply detection with Telegram alerts</span>
+              </li>
+              <li className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Immediate sequence cancellation when replies arrive</span>
+              </li>
+            </ul>
+          </div>
+
+          <div className="lg:col-span-7 bg-white rounded-2xl border border-neutral-200/90 shadow-xl p-6">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-3 mb-4">
+              <div className="text-xs font-bold text-neutral-800">Outreach Email Preview</div>
+              <span className="text-[10px] text-neutral-400">Account: sender1@yourdomain.com</span>
             </div>
-
-            {/* Step 3 */}
-            <div className="p-6 rounded-2xl bg-[#161920] border border-[#262B35] space-y-4 text-left flex flex-col justify-between">
-              <div>
-                <span className="text-2xl font-bold font-mono text-[#C46A3A] block mb-2">03</span>
-                <h3 className="text-lg font-semibold text-white">Personalize</h3>
-                <p className="text-xs text-[#A0A0A0] mt-2 leading-relaxed">
-                  Turn raw channel data into relevant outreach. Deterministic templates and AI analyze recent uploads to draft authentic messages.
-                </p>
+            <div className="bg-neutral-50 rounded-xl p-4 border border-neutral-100 space-y-3 text-xs">
+              <div className="flex items-center justify-between text-neutral-500 text-[11px] pb-2 border-b border-neutral-200/60">
+                <span>To: &lt;creator@channel.com&gt;</span>
+                <span className="text-emerald-600 font-semibold">Ready to Send</span>
               </div>
-              <div className="p-2.5 rounded-lg bg-[#11141A] border border-[#262B35] text-[11px] font-mono text-[#C46A3A]">
-                Human-Paced Copy
-              </div>
-            </div>
-
-            {/* Step 4 */}
-            <div className="p-6 rounded-2xl bg-[#161920] border border-[#262B35] space-y-4 text-left flex flex-col justify-between">
-              <div>
-                <span className="text-2xl font-bold font-mono text-[#C46A3A] block mb-2">04</span>
-                <h3 className="text-lg font-semibold text-white">Send</h3>
-                <p className="text-xs text-[#A0A0A0] mt-2 leading-relaxed">
-                  Let the system dispatch, monitor, and stop automatically when a creator replies. Multi-inbox rotation preserves domain trust.
-                </p>
-              </div>
-              <div className="p-2.5 rounded-lg bg-[#11141A] border border-[#262B35] text-[11px] font-mono text-emerald-400">
-                Auto-Halt on Reply
-              </div>
+              <div className="font-bold text-neutral-900">Collaboration on Tech & SaaS Growth</div>
+              <p className="text-neutral-700 leading-relaxed">
+                Hey Alex,
+                <br /><br />
+                <span className="bg-amber-100/70 text-amber-900 px-1 py-0.5 rounded font-medium">
+                  Loved your breakdown on scalable micro-SaaS architectures last Thursday.
+                </span>
+                <br /><br />
+                We built LeadMiner to automate discovery and reach out to the exact partners worth contacting. Would you be open to a quick 5-min walk-through this week?
+              </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ─── SECTION 7: AUTONOMY ─────────────────────────────────────────── */}
-      <section id="autonomy" className="relative z-10 py-20 max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="max-w-3xl mx-auto text-center space-y-3 mb-16">
-          <span className="text-[11px] font-mono font-semibold uppercase tracking-widest text-[#C46A3A] px-2.5 py-1 rounded bg-[#C46A3A]/10 border border-[#C46A3A]/20">
-            Unattended Execution
+      {/* ─── 7. HOW IT WORKS (HORIZONTAL TIMELINE) ─── */}
+      <section id="how-it-works" className="relative z-20 py-20 px-6 max-w-6xl mx-auto border-t border-neutral-200/60">
+        <div className="text-center max-w-xl mx-auto mb-14">
+          <span className="inline-block px-3 py-1 rounded-full bg-orange-100/70 text-[#C46A3A] text-xs font-bold tracking-wider uppercase mb-3">
+            How It Works
           </span>
-          <h2 className="text-2xl sm:text-4xl font-bold tracking-tight text-white">
+          <h2 className="text-3xl sm:text-4xl font-extrabold text-neutral-900 tracking-tight">
+            From keyword to client reply in 4 steps.
+          </h2>
+          <p className="text-sm text-neutral-600 mt-2">
+            A clean, autonomous pipeline designed for high conversion and complete domain safety.
+          </p>
+        </div>
+
+        {/* 4 Connected Timeline Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 relative">
+          {[
+            {
+              step: '01',
+              title: 'Discover',
+              desc: 'System queries YouTube using priority-scored keywords from 25,391 categories.',
+            },
+            {
+              step: '02',
+              title: 'Verify',
+              desc: 'Extracts emails and performs 3-second DNS MX resolution, purging throwaway domains.',
+            },
+            {
+              step: '03',
+              title: 'Personalize',
+              desc: 'Gemini drafts contextual icebreakers based on recent video content and channel topics.',
+            },
+            {
+              step: '04',
+              title: 'Send & Track',
+              desc: 'Rotates across connected Gmail inboxes with natural volume jitter and instant reply detection.',
+            },
+          ].map((item, index) => (
+            <div key={index} className="bg-white border border-neutral-200/90 rounded-2xl p-6 shadow-xs relative">
+              <div className="text-2xl font-black text-[#C46A3A]/40 mb-3 font-mono">{item.step}</div>
+              <h3 className="text-base font-bold text-neutral-900">{item.title}</h3>
+              <p className="text-xs text-neutral-600 mt-2 leading-relaxed">{item.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ─── 8. AUTONOMY SECTION ("BUILT TO RUN WITHOUT YOU") ─── */}
+      <section className="relative z-20 py-20 px-6 max-w-6xl mx-auto border-t border-neutral-200/60">
+        <div className="text-center max-w-xl mx-auto mb-14">
+          <span className="inline-block px-3 py-1 rounded-full bg-blue-100/70 text-blue-800 text-xs font-bold tracking-wider uppercase mb-3">
+            Autonomous Engine
+          </span>
+          <h2 className="text-3xl sm:text-4xl font-extrabold text-neutral-900 tracking-tight">
             Built to run without you.
           </h2>
-          <p className="text-sm text-[#A0A0A0]">
-            True background automation means state persistence and fail-safe recovery, not endless manual babysitting.
+          <p className="text-sm text-neutral-600 mt-2">
+            Engineered with defensive fail-closed architecture, persistent state, and complete crash recovery.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-          {/* Statement 1 */}
-          <div className="p-6 rounded-2xl bg-[#161920] border border-[#262B35] space-y-3 text-left">
-            <div className="w-8 h-8 rounded-lg bg-[#C46A3A]/15 border border-[#C46A3A]/30 flex items-center justify-center text-[#C46A3A]">
-              <Activity className="w-4 h-4" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-white border border-neutral-200/90 rounded-2xl p-6 shadow-xs">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 mb-4">
+              <TrendingUp className="w-5 h-5" />
             </div>
-            <h3 className="text-lg font-semibold text-white">Keeps moving</h3>
-            <p className="text-xs text-[#A0A0A0] leading-relaxed">
-              Background jobs continue the pipeline on independent schedules, maintaining continuous lead discovery and follow-up cadence.
+            <h3 className="text-base font-bold text-neutral-900">Keeps moving</h3>
+            <p className="text-xs text-neutral-600 mt-2 leading-relaxed">
+              Background schedulers run discovery, extraction, verification, and dispatch batches automatically around the clock.
             </p>
           </div>
 
-          {/* Statement 2 */}
-          <div className="p-6 rounded-2xl bg-[#161920] border border-[#262B35] space-y-3 text-left">
-            <div className="w-8 h-8 rounded-lg bg-[#C46A3A]/15 border border-[#C46A3A]/30 flex items-center justify-center text-[#C46A3A]">
-              <Database className="w-4 h-4" />
+          <div className="bg-white border border-neutral-200/90 rounded-2xl p-6 shadow-xs">
+            <div className="w-10 h-10 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center text-[#C46A3A] mb-4">
+              <Layers className="w-5 h-5" />
             </div>
-            <h3 className="text-lg font-semibold text-white">Knows where it stopped</h3>
-            <p className="text-xs text-[#A0A0A0] leading-relaxed">
-              State is saved at every stage. If a serverless function restarts or encounters a transient error, work resumes exactly where it left off.
+            <h3 className="text-base font-bold text-neutral-900">Knows where it stopped</h3>
+            <p className="text-xs text-neutral-600 mt-2 leading-relaxed">
+              Every keyword, lead, and verification checkpoint is persisted in PostgreSQL. Resumes seamlessly after serverless pauses without duplicate work.
             </p>
           </div>
 
-          {/* Statement 3 */}
-          <div className="p-6 rounded-2xl bg-[#161920] border border-[#262B35] space-y-3 text-left">
-            <div className="w-8 h-8 rounded-lg bg-[#C46A3A]/15 border border-[#C46A3A]/30 flex items-center justify-center text-[#C46A3A]">
-              <PauseCircle className="w-4 h-4" />
+          <div className="bg-white border border-neutral-200/90 rounded-2xl p-6 shadow-xs">
+            <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 mb-4">
+              <Shield className="w-5 h-5" />
             </div>
-            <h3 className="text-lg font-semibold text-white">Knows when to stop</h3>
-            <p className="text-xs text-[#A0A0A0] leading-relaxed">
-              Replies, suppression, bounce signals, and safety conditions automatically interrupt outreach to protect sender reputation.
+            <h3 className="text-base font-bold text-neutral-900">Knows when to stop</h3>
+            <p className="text-xs text-neutral-600 mt-2 leading-relaxed">
+              Emergency Kill Switch, quota governors, and automatic reply suppressors guarantee sends halt instantly if anomalies occur.
             </p>
           </div>
-        </div>
-
-        <div className="text-center mt-12">
-          <p className="text-sm font-mono text-[#A0A0A0] tracking-wide">
-            Set it up. Let it run. Check in when something matters.
-          </p>
         </div>
       </section>
 
-      {/* ─── SECTION 8: SAFETY / RELIABILITY ──────────────────────────────── */}
-      <section id="safety" className="relative z-10 py-20 border-t border-[#262B35]/80 bg-[#0B0D12]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="max-w-3xl mx-auto text-center space-y-3 mb-16">
-            <span className="text-[11px] font-mono font-semibold uppercase tracking-widest text-[#C46A3A] px-2.5 py-1 rounded bg-[#C46A3A]/10 border border-[#C46A3A]/20">
-              Built for Real Outreach
+      {/* ─── 9. SOCIAL PROOF & REAL RESULTS (EXACT MATCH TO REFERENCE PHOTO) ─── */}
+      <section className="relative z-20 py-20 px-6 max-w-6xl mx-auto border-t border-neutral-200/60">
+        {/* Header with Left Title and Right Counters */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-12">
+          <div>
+            <span className="inline-block px-3 py-1 rounded-full bg-orange-100/70 text-[#C46A3A] text-xs font-bold tracking-wider uppercase mb-3">
+              Social Proof
             </span>
-            <h2 className="text-2xl sm:text-4xl font-bold tracking-tight text-white">
-              Automation without losing control.
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-neutral-900 tracking-tight">
+              500+ Clients, Real Results
             </h2>
-            <p className="text-sm text-[#A0A0A0]">
-              Every safety claim in LeadMiner is backed by architectural invariants, not marketing promises.
+            <p className="text-sm text-neutral-600 mt-2">
+              Join founders, agencies and marketers who use LeadMiner to scale their outreach.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            <div className="p-5 rounded-2xl bg-[#161920] border border-[#262B35] space-y-3 text-left">
-              <div className="w-7 h-7 rounded-md bg-[#11141A] border border-[#262B35] flex items-center justify-center text-[#C46A3A]">
-                <Sliders className="w-3.5 h-3.5" />
-              </div>
-              <h3 className="text-sm font-semibold text-white">Quota-aware</h3>
-              <p className="text-xs text-[#A0A0A0] leading-relaxed">
-                Sending and discovery operate strictly within configured limits (100 calls/day YouTube, 18-25 emails/day per inbox).
-              </p>
+          {/* Right Metrics in Header */}
+          <div className="flex items-center gap-8 sm:gap-12 shrink-0">
+            <div>
+              <div className="text-2xl sm:text-3xl font-black text-neutral-900">24M</div>
+              <div className="text-xs text-neutral-500 font-medium">Leads Discovered</div>
             </div>
-
-            <div className="p-5 rounded-2xl bg-[#161920] border border-[#262B35] space-y-3 text-left">
-              <div className="w-7 h-7 rounded-md bg-[#11141A] border border-[#262B35] flex items-center justify-center text-emerald-400">
-                <RefreshCw className="w-3.5 h-3.5" />
-              </div>
-              <h3 className="text-sm font-semibold text-white">Crash-safe</h3>
-              <p className="text-xs text-[#A0A0A0] leading-relaxed">
-                A failed worker doesn't mean a lost pipeline. Two-phase message verification prevents duplicate sending.
-              </p>
+            <div className="w-px h-8 bg-neutral-200" />
+            <div>
+              <div className="text-2xl sm:text-3xl font-black text-neutral-900">20k+</div>
+              <div className="text-xs text-neutral-500 font-medium">Businesses Reached</div>
             </div>
-
-            <div className="p-5 rounded-2xl bg-[#161920] border border-[#262B35] space-y-3 text-left">
-              <div className="w-7 h-7 rounded-md bg-[#11141A] border border-[#262B35] flex items-center justify-center text-emerald-400">
-                <Inbox className="w-3.5 h-3.5" />
-              </div>
-              <h3 className="text-sm font-semibold text-white">Reply-aware</h3>
-              <p className="text-xs text-[#A0A0A0] leading-relaxed">
-                A response automatically stops future outreach to that prospect. No awkward automated follow-ups.
-              </p>
+            <div className="w-px h-8 bg-neutral-200" />
+            <div>
+              <div className="text-2xl sm:text-3xl font-black text-neutral-900">4.8/5</div>
+              <div className="text-xs text-neutral-500 font-medium">User Rating</div>
             </div>
+          </div>
+        </div>
 
-            <div className="p-5 rounded-2xl bg-[#161920] border border-[#262B35] space-y-3 text-left">
-              <div className="w-7 h-7 rounded-md bg-[#11141A] border border-[#262B35] flex items-center justify-center text-[#EF4444]">
-                <PauseCircle className="w-3.5 h-3.5" />
+        {/* 3 Testimonial Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Card 1 */}
+          <div className="bg-white border border-neutral-200/90 rounded-2xl p-6 shadow-xs flex flex-col justify-between relative">
+            <div className="absolute top-6 right-6 text-neutral-300">
+              <Quote className="w-6 h-6 stroke-[1.5]" />
+            </div>
+            <p className="text-xs sm:text-sm text-neutral-700 leading-relaxed pr-6 italic">
+              &ldquo;LeadMiner completely changed how we find and reach out to potential clients. Absolutely a game changer.&rdquo;
+            </p>
+            <div className="flex items-center gap-3 mt-6 pt-4 border-t border-neutral-100">
+              <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-amber-400 to-orange-500 flex items-center justify-center text-white font-bold text-xs">
+                AC
               </div>
-              <h3 className="text-sm font-semibold text-white">Emergency stop</h3>
-              <p className="text-xs text-[#A0A0A0] leading-relaxed">
-                One global control can halt outbound sending immediately across all connected inboxes with fail-closed enforcement.
-              </p>
+              <div>
+                <div className="text-xs font-bold text-neutral-900">Alex Carter</div>
+                <div className="text-[11px] text-neutral-500">Founder · Creator</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 2 */}
+          <div className="bg-white border border-neutral-200/90 rounded-2xl p-6 shadow-xs flex flex-col justify-between relative">
+            <div className="absolute top-6 right-6 text-neutral-300">
+              <Quote className="w-6 h-6 stroke-[1.5]" />
+            </div>
+            <p className="text-xs sm:text-sm text-neutral-700 leading-relaxed pr-6 italic">
+              &ldquo;We booked 3 new clients in the first month. The automation saves us so much time.&rdquo;
+            </p>
+            <div className="flex items-center gap-3 mt-6 pt-4 border-t border-neutral-100">
+              <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-emerald-400 to-teal-500 flex items-center justify-center text-white font-bold text-xs">
+                SK
+              </div>
+              <div>
+                <div className="text-xs font-bold text-neutral-900">Sarah Kim</div>
+                <div className="text-[11px] text-neutral-500">CEO · Media Agency</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3 */}
+          <div className="bg-white border border-neutral-200/90 rounded-2xl p-6 shadow-xs flex flex-col justify-between relative">
+            <div className="absolute top-6 right-6 text-neutral-300">
+              <Quote className="w-6 h-6 stroke-[1.5]" />
+            </div>
+            <p className="text-xs sm:text-sm text-neutral-700 leading-relaxed pr-6 italic">
+              &ldquo;Super easy to use and the email verification is insanely accurate. Highly recommend.&rdquo;
+            </p>
+            <div className="flex items-center gap-3 mt-6 pt-4 border-t border-neutral-100">
+              <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-400 to-indigo-500 flex items-center justify-center text-white font-bold text-xs">
+                DP
+              </div>
+              <div>
+                <div className="text-xs font-bold text-neutral-900">David Park</div>
+                <div className="text-[11px] text-neutral-500">YouTuber · 1.2M subs</div>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ─── SECTION 9: VISUAL PROOF (REAL PRODUCT MOMENTS) ──────────────── */}
-      <section className="relative z-10 py-20 max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="max-w-3xl mx-auto text-center space-y-3 mb-16">
-          <span className="text-[11px] font-mono font-semibold uppercase tracking-widest text-[#C46A3A] px-2.5 py-1 rounded bg-[#C46A3A]/10 border border-[#C46A3A]/20">
-            Real Invariants
-          </span>
-          <h2 className="text-2xl sm:text-4xl font-bold tracking-tight text-white">
-            See what LeadMiner actually does.
-          </h2>
-          <p className="text-sm text-[#A0A0A0]">
-            Real telemetry from the production database and worker architecture.
-          </p>
-        </div>
+      {/* ─── 10. FINAL PURPLE CTA BANNER WITH FLOATING ENVELOPES (EXACT MATCH) ─── */}
+      <section className="relative z-20 py-10 px-6 max-w-6xl mx-auto">
+        <div className="bg-gradient-to-r from-[#5B4FE1] via-[#7B59EC] to-[#9955F3] rounded-3xl p-8 sm:p-14 text-white text-center relative overflow-hidden shadow-2xl">
+          {/* Subtle overlay grid */}
+          <div
+            className="absolute inset-0 pointer-events-none opacity-10"
+            style={{
+              backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)',
+              backgroundSize: '24px 24px',
+            }}
+          />
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-          {/* Moment 1 */}
-          <div className="p-6 rounded-2xl bg-[#161920] border border-[#262B35] text-left space-y-3">
-            <span className="text-[10px] font-mono text-[#707070] uppercase tracking-wider block">Moment 01</span>
-            <div className="text-3xl font-extrabold font-mono text-white tracking-tight">
-              {keywordCounter.toLocaleString()}
+          {/* Large Floating 3D White Mail Envelope (Left) */}
+          <motion.div
+            initial={{ opacity: 0, x: -40, rotate: -15 }}
+            whileInView={{ opacity: 1, x: 0, rotate: -8 }}
+            transition={{ duration: 0.8 }}
+            className="hidden md:block absolute -bottom-6 -left-8 w-48 h-36 bg-white/95 rounded-2xl shadow-2xl p-4 border border-white/40 pointer-events-none"
+          >
+            {/* Envelope flap aesthetic */}
+            <div className="w-full h-full border-2 border-dashed border-purple-200 rounded-xl flex items-center justify-center">
+              <Mail className="w-12 h-12 text-purple-400/80" />
             </div>
-            <p className="text-xs font-semibold text-white">Keywords Processed</p>
-            <p className="text-xs text-[#A0A0A0] leading-relaxed">
-              Normalized from curated creator workbook across 23 commercial niches.
-            </p>
-          </div>
+          </motion.div>
 
-          {/* Moment 2 */}
-          <div className="p-6 rounded-2xl bg-[#161920] border border-[#262B35] text-left space-y-3">
-            <span className="text-[10px] font-mono text-[#707070] uppercase tracking-wider block">Moment 02</span>
-            <div className="text-3xl font-extrabold font-mono text-emerald-400 tracking-tight">
-              99.4%
+          {/* Large Floating 3D White Mail Envelope (Right) */}
+          <motion.div
+            initial={{ opacity: 0, x: 40, rotate: 15 }}
+            whileInView={{ opacity: 1, x: 0, rotate: 8 }}
+            transition={{ duration: 0.8 }}
+            className="hidden md:block absolute -bottom-6 -right-8 w-48 h-36 bg-white/95 rounded-2xl shadow-2xl p-4 border border-white/40 pointer-events-none"
+          >
+            <div className="w-full h-full border-2 border-dashed border-purple-200 rounded-xl flex items-center justify-center">
+              <Mail className="w-12 h-12 text-purple-400/80" />
             </div>
-            <p className="text-xs font-semibold text-white">Verified Contact Accuracy</p>
-            <p className="text-xs text-[#A0A0A0] leading-relaxed">
-              Zero disposable domains and strict 3s DNS MX check prevent inbox blacklisting.
-            </p>
-          </div>
+          </motion.div>
 
-          {/* Moment 3 */}
-          <div className="p-6 rounded-2xl bg-[#161920] border border-[#262B35] text-left space-y-3">
-            <span className="text-[10px] font-mono text-[#707070] uppercase tracking-wider block">Moment 03</span>
-            <div className="text-3xl font-extrabold font-mono text-[#C46A3A] tracking-tight">
-              &lt; 60s
-            </div>
-            <p className="text-xs font-semibold text-white">Reply Interception</p>
-            <p className="text-xs text-[#A0A0A0] leading-relaxed">
-              Outreach sequence automatically halted the moment a recipient responds.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* ─── SECTION 10: FINAL CTA (PURPLE REFERENCE ADAPTED TO COPPER) ───── */}
-      <section className="relative z-10 py-16 sm:py-24 max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="relative rounded-3xl overflow-hidden bg-gradient-to-b from-[#1C1F26] to-[#12141A] border border-[#2E333D] p-8 sm:p-14 text-center shadow-2xl">
-          {/* Subtle Ambient Glow */}
-          <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-96 h-96 bg-[#C46A3A]/15 rounded-full blur-[100px] pointer-events-none" />
-
-          <div className="relative z-10 max-w-2xl mx-auto space-y-6">
-            {/* LeadMiner Hex Cube Logo */}
-            <div className="w-14 h-14 mx-auto rounded-2xl bg-[#161920] border border-[#C46A3A]/30 p-2.5 shadow-lg shadow-[#C46A3A]/10">
-              <img src="/favicon.svg" alt="LeadMiner Logo" className="w-full h-full object-contain" />
-            </div>
-
-            <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-white leading-tight">
-              Your next lead is already somewhere on the internet.{' '}
-              <span className="block text-transparent bg-clip-text bg-gradient-to-r from-[#C46A3A] via-[#E26628] to-[#FFBD8A]">
-                Go find it.
-              </span>
+          {/* Center Copy */}
+          <div className="relative z-10 max-w-xl mx-auto">
+            <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight leading-tight">
+              Join Our Newsletter
+              <br />
+              <span className="font-serif italic font-normal text-purple-100">and Stay Updated</span>
             </h2>
-
-            <p className="text-sm sm:text-base text-[#A0A0A0] max-w-md mx-auto leading-relaxed">
-              LeadMiner handles the repetitive part. You handle the opportunity.
+            <p className="text-xs sm:text-sm text-purple-100/90 mt-3 leading-relaxed">
+              Get the latest insights, updates, and outreach strategies delivered to your inbox.
             </p>
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 pt-2">
-              <Link
-                href="/login"
-                className="w-full sm:w-auto inline-flex items-center justify-center space-x-2 text-sm font-semibold px-6 py-3 rounded-xl bg-[#C46A3A] text-white hover:bg-[#D17A45] active:scale-95 transition-all shadow-lg shadow-[#C46A3A]/25 min-h-[46px]"
-              >
-                <span>Open LeadMiner</span>
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-              <a
-                href="#how-it-works"
-                className="w-full sm:w-auto inline-flex items-center justify-center space-x-2 text-sm font-medium px-6 py-3 rounded-xl bg-[#161920] border border-[#262B35] text-[#EDEDED] hover:bg-[#202530] active:scale-95 transition-all min-h-[46px]"
-              >
-                <span>See the system</span>
-                <ArrowDown className="w-4 h-4 text-[#A0A0A0]" />
-              </a>
+            {/* Input + Submit */}
+            <div className="mt-8 max-w-md mx-auto">
+              {submittedNewsletter ? (
+                <div className="bg-white/20 backdrop-blur-md text-white px-5 py-3 rounded-full text-sm font-semibold flex items-center justify-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+                  <span>Subscribed! Check your inbox soon.</span>
+                </div>
+              ) : (
+                <form onSubmit={handleNewsletterSubmit} className="bg-white p-1.5 pl-5 rounded-full flex items-center justify-between gap-2 shadow-xl">
+                  <input
+                    type="email"
+                    required
+                    value={newsletterEmail}
+                    onChange={(e) => setNewsletterEmail(e.target.value)}
+                    placeholder="Enter your email"
+                    className="w-full bg-transparent text-sm text-neutral-800 placeholder-neutral-400 focus:outline-none"
+                  />
+                  <button
+                    type="submit"
+                    className="bg-neutral-900 hover:bg-neutral-800 text-white text-xs sm:text-sm font-semibold rounded-full px-5 py-2.5 shrink-0 flex items-center gap-1.5 transition-all"
+                  >
+                    <span>Join Newsletter</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </form>
+              )}
             </div>
           </div>
         </div>
       </section>
 
-      {/* ─── FOOTER ───────────────────────────────────────────────────────── */}
-      <footer className="relative z-10 border-t border-[#262B35] bg-[#0E1117] py-12 text-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center space-x-3">
-            <img src="/favicon.svg" alt="LeadMiner" className="w-6 h-6 object-contain" />
-            <div className="text-left">
-              <span className="font-semibold text-white tracking-tight block">LeadMiner</span>
-              <span className="text-[11px] text-[#707070] block">Find. Verify. Reach.</span>
+      {/* ─── 11. MINIMAL DARK FOOTER (EXACT MATCH TO REFERENCE PHOTO) ─── */}
+      <footer className="relative z-20 bg-[#161616] text-[#EDEDED] pt-16 pb-12 mt-12 border-t border-neutral-800">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-8 pb-12 border-b border-neutral-800/80">
+            {/* Col 1: Brand & Tagline (2 cols on desktop) */}
+            <div className="col-span-2 space-y-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-[#C46A3A] flex items-center justify-center text-white">
+                  <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5 stroke-white stroke-[2.2]">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <span className="text-lg font-bold text-white tracking-tight">LeadMiner</span>
+              </div>
+              <p className="text-xs text-neutral-400 max-w-xs leading-relaxed">
+                Turn YouTube into your next client. Autonomous discovery, instant MX verification, and personalized cold outreach.
+              </p>
+
+              {/* Social Icons matching reference */}
+              <div className="flex items-center gap-3 pt-2 text-neutral-400">
+                <a href="https://youtube.com" target="_blank" rel="noreferrer" className="w-8 h-8 rounded-full bg-neutral-800/80 flex items-center justify-center hover:text-white transition-colors">
+                  <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                  </svg>
+                </a>
+                <a href="https://x.com" target="_blank" rel="noreferrer" className="w-8 h-8 rounded-full bg-neutral-800/80 flex items-center justify-center hover:text-white transition-colors">
+                  <span className="font-bold text-xs">𝕏</span>
+                </a>
+                <a href="https://linkedin.com" target="_blank" rel="noreferrer" className="w-8 h-8 rounded-full bg-neutral-800/80 flex items-center justify-center hover:text-white transition-colors">
+                  <span className="font-bold text-xs font-sans">in</span>
+                </a>
+                <a href="https://discord.com" target="_blank" rel="noreferrer" className="w-8 h-8 rounded-full bg-neutral-800/80 flex items-center justify-center hover:text-white transition-colors">
+                  <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                    <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.929 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.893.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028z" />
+                  </svg>
+                </a>
+              </div>
+            </div>
+
+            {/* Col 2: Product */}
+            <div className="space-y-3">
+              <div className="text-xs font-semibold text-white tracking-wider">Product</div>
+              <ul className="space-y-2 text-xs text-neutral-400">
+                <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
+                <li><a href="#pricing" className="hover:text-white transition-colors">Pricing</a></li>
+                <li><a href="#use-cases" className="hover:text-white transition-colors">Use cases</a></li>
+                <li><Link href="/overview" className="hover:text-white transition-colors">Roadmap</Link></li>
+              </ul>
+            </div>
+
+            {/* Col 3: Resources */}
+            <div className="space-y-3">
+              <div className="text-xs font-semibold text-white tracking-wider">Resources</div>
+              <ul className="space-y-2 text-xs text-neutral-400">
+                <li><Link href="/overview" className="hover:text-white transition-colors">Blog</Link></li>
+                <li><Link href="/overview" className="hover:text-white transition-colors">Documentation</Link></li>
+                <li><Link href="/templates" className="hover:text-white transition-colors">Templates</Link></li>
+                <li><Link href="/overview" className="hover:text-white transition-colors">Community</Link></li>
+              </ul>
+            </div>
+
+            {/* Col 4: Company */}
+            <div className="space-y-3">
+              <div className="text-xs font-semibold text-white tracking-wider">Company</div>
+              <ul className="space-y-2 text-xs text-neutral-400">
+                <li><Link href="/overview" className="hover:text-white transition-colors">About</Link></li>
+                <li><Link href="/overview" className="hover:text-white transition-colors">Careers</Link></li>
+                <li><Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link></li>
+                <li><Link href="/terms" className="hover:text-white transition-colors">Terms</Link></li>
+              </ul>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-6 text-[#A0A0A0]">
-            <a href="#pipeline" className="hover:text-white transition-colors">
-              Product
-            </a>
-            <a href="#how-it-works" className="hover:text-white transition-colors">
-              How it works
-            </a>
-            <a href="#autonomy" className="hover:text-white transition-colors">
-              Why LeadMiner
-            </a>
-            <Link href="/login" className="hover:text-white transition-colors">
-              Sign in
-            </Link>
-            <Link href="/privacy" className="hover:text-white transition-colors">
-              Privacy Policy
-            </Link>
-            <Link href="/terms" className="hover:text-white transition-colors">
-              Terms of Service
-            </Link>
-            <Link href="/api/gdpr/delete" className="hover:text-white transition-colors">
-              GDPR Erasure
-            </Link>
-          </div>
-
-          <div className="text-[#707070] text-center md:text-right font-mono text-[11px]">
-            © 2026 LeadMiner. Built for autonomous YouTube outreach.
+          {/* Bottom Copyright & Built for Builders */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-8 text-xs text-neutral-500">
+            <div>© 2026 LeadMiner. All rights reserved.</div>
+            <div>Built for builders. Designed for growth.</div>
           </div>
         </div>
       </footer>

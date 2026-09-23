@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { eq } from 'drizzle-orm';
+import { createClient } from '@supabase/supabase-js';
 import { env } from '../config/env';
+import { db } from '../db/client';
+import { systemSettings } from '../db/schema';
 
 // ─── Session token structure ──────────────────────────────────────────────────
-// Simple signed token: base64(payload).base64(hmac)
-// No external JWT library needed — keeps dependencies minimal.
+// Signed token: base64(payload).base64(hmac)
+// Persistent 30-day session with SameSite=Lax for reliable PWA & mobile retention.
 
 const COOKIE_NAME = 'lm_session';
-const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 interface SessionPayload {
   email: string;
@@ -51,6 +55,48 @@ function verifyToken(token: string): SessionPayload | null {
   }
 }
 
+// ─── Cryptographic Password Hashing Helpers ───────────────────────────────────
+
+export function hashPasswordWithSalt(password: string, existingSalt?: string) {
+  const salt = existingSalt || crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(password.trim(), salt, 64).toString('hex');
+  return { hash, salt };
+}
+
+export function verifyPassword(password: string, storedHash: string, salt: string): boolean {
+  try {
+    const computedHash = crypto.scryptSync(password.trim(), salt, 64).toString('hex');
+    return (
+      computedHash.length === storedHash.length &&
+      crypto.timingSafeEqual(Buffer.from(computedHash), Buffer.from(storedHash))
+    );
+  } catch {
+    return false;
+  }
+}
+
+// ─── Supabase Auth Integration ────────────────────────────────────────────────
+
+export async function verifySupabaseAuth(email: string, password: string): Promise<boolean> {
+  const url = process.env.SUPABASE_URL || env.SUPABASE_URL;
+  const anonKey = process.env.SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY;
+  if (!url || !anonKey) return false;
+
+  try {
+    const supabase = createClient(url, anonKey);
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password: password.trim(),
+    });
+    if (!error && data.user && data.session) {
+      return true;
+    }
+  } catch (err: any) {
+    console.warn('[Supabase Auth] Login check error:', err.message);
+  }
+  return false;
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export interface DashboardAuthResult {
@@ -61,6 +107,7 @@ export interface DashboardAuthResult {
 
 /**
  * Creates a signed session cookie string after successful login.
+ * Uses SameSite=Lax and Path=/ so installed PWAs and top-level navigation retain sessions.
  */
 export function createSessionCookie(email: string): string {
   const now = Date.now();
@@ -72,7 +119,7 @@ export function createSessionCookie(email: string): string {
     `${COOKIE_NAME}=${token}`,
     'Path=/',
     'HttpOnly',
-    'SameSite=Strict',
+    'SameSite=Lax',
     `Max-Age=${Math.floor(SESSION_DURATION_MS / 1000)}`,
   ];
   if (isProduction) parts.push('Secure');
@@ -84,7 +131,7 @@ export function createSessionCookie(email: string): string {
  * Cookie value to clear the session.
  */
 export function clearSessionCookie(): string {
-  return `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`;
+  return `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
 }
 
 /**
@@ -125,7 +172,53 @@ export function verifyDashboardAuth(req: NextRequest): DashboardAuthResult {
 }
 
 /**
- * Validate login credentials against env vars.
+ * Validate login credentials:
+ * 1. Primary: Supabase Auth API (auth.users)
+ * 2. Secondary: PostgreSQL system_settings (salted scrypt)
+ * 3. Fallback: Environment variables
+ */
+export async function validateLoginCredentialsAsync(email: string, password: string): Promise<boolean> {
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanPassword = password.trim();
+
+  if (!cleanEmail || !cleanPassword) return false;
+
+  // 1. Primary: Verify with Supabase Auth
+  const isSupabaseValid = await verifySupabaseAuth(cleanEmail, cleanPassword);
+  if (isSupabaseValid) return true;
+
+  // 2. Secondary: Check PostgreSQL system_settings (salted scrypt)
+  try {
+    const record = await db
+      .select()
+      .from(systemSettings)
+      .where(eq(systemSettings.key, 'admin_auth'))
+      .limit(1);
+
+    if (record.length > 0 && record[0].value) {
+      const data = record[0].value as {
+        email?: string;
+        password_hash?: string;
+        salt?: string;
+      };
+
+      if (data.email && data.password_hash && data.salt) {
+        if (data.email.trim().toLowerCase() === cleanEmail) {
+          const isMatch = verifyPassword(cleanPassword, data.password_hash, data.salt);
+          if (isMatch) return true;
+        }
+      }
+    }
+  } catch (err: any) {
+    console.warn('[Auth] Database scrypt check error:', err.message);
+  }
+
+  // 3. Fallback: Environment variables
+  return validateLoginCredentials(cleanEmail, cleanPassword);
+}
+
+/**
+ * Synchronous validation against env vars (used in unit tests and fallback).
  */
 export function validateLoginCredentials(email: string, password: string): boolean {
   const expectedEmail = (env.DASHBOARD_EMAIL || '').trim().toLowerCase();
@@ -135,7 +228,6 @@ export function validateLoginCredentials(email: string, password: string): boole
 
   if (!expectedEmail || !expectedPassword) return false;
 
-  // Constant-time comparisons for both fields
   const emailMatch =
     cleanEmail.length === expectedEmail.length &&
     crypto.timingSafeEqual(Buffer.from(cleanEmail), Buffer.from(expectedEmail));

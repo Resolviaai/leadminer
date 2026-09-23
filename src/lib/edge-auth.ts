@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 
 const COOKIE_NAME = 'lm_session';
+const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 /**
  * Edge Runtime compatible session verification using Web Crypto API.
@@ -10,7 +11,7 @@ const COOKIE_NAME = 'lm_session';
 export async function verifySessionCookieEdge(
   req: NextRequest,
   secret: string
-): Promise<{ authorized: boolean; email?: string }> {
+): Promise<{ authorized: boolean; email?: string; iat?: number; exp?: number }> {
   try {
     const cookieHeader = req.headers.get('cookie') || '';
     const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${COOKIE_NAME}=([^;]+)`));
@@ -49,10 +50,53 @@ export async function verifySessionCookieEdge(
       return { authorized: false };
     }
 
-    return { authorized: true, email: payload.email };
+    return {
+      authorized: true,
+      email: payload.email,
+      iat: payload.iat,
+      exp: payload.exp,
+    };
   } catch {
     return { authorized: false };
   }
+}
+
+/**
+ * Creates a signed session cookie string in Edge Runtime using Web Crypto API.
+ * Enables rolling session refresh in Middleware.
+ */
+export async function createSessionCookieEdge(
+  email: string,
+  secret: string,
+  isProduction: boolean
+): Promise<string> {
+  const now = Date.now();
+  const payload = { email, iat: now, exp: now + SESSION_DURATION_MS };
+  const encoder = new TextEncoder();
+  const data = btoa(JSON.stringify(payload)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sigBuffer = await crypto.subtle.sign('HMAC', key, encoder.encode(data));
+  const sig = btoa(String.fromCharCode(...new Uint8Array(sigBuffer)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+  const token = `${data}.${sig}`;
+
+  const parts = [
+    `${COOKIE_NAME}=${token}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    `Max-Age=${Math.floor(SESSION_DURATION_MS / 1000)}`,
+  ];
+  if (isProduction) parts.push('Secure');
+  return parts.join('; ');
 }
 
 export { COOKIE_NAME };

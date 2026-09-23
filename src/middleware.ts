@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifySessionCookieEdge } from './lib/edge-auth';
+import { verifySessionCookieEdge, createSessionCookieEdge } from './lib/edge-auth';
 
 /**
  * Next.js Edge Middleware — runs before every request.
  *
  * Public routes (no login required):
+ *   - / (Landing page)
+ *   - /privacy
+ *   - /terms
  *   - /login
+ *   - /manifest.json    (PWA manifest)
+ *   - /sw.js            (PWA service worker)
  *   - /api/auth/login   (POST — the login endpoint itself)
  *   - /api/auth/logout  (POST — clear cookie)
  *   - /api/unsubscribe  (GET + POST — email recipients click this)
  *   - /api/health       (GET — minimal ping)
+ *   - /api/gdpr/delete  (GET + POST — GDPR erasure portal)
  *   - /_next/*          (Next.js internal assets)
  *   - /favicon.ico
  *
@@ -23,6 +29,8 @@ const PUBLIC_PATHS = new Set([
   '/privacy',
   '/terms',
   '/login',
+  '/manifest.json',
+  '/sw.js',
   '/api/auth/login',
   '/api/auth/logout',
   '/api/unsubscribe',
@@ -39,8 +47,8 @@ function isPublic(pathname: string): boolean {
   if (pathname.startsWith('/api/workers/')) return true;
   // Google OAuth callback needs to be accessible by Google redirect
   if (pathname.startsWith('/api/auth/google/callback')) return true;
-  // Static files
-  if (pathname.match(/\.(png|jpg|jpeg|svg|ico|webp|css|js|woff2?)$/)) return true;
+  // Static files and PWA assets
+  if (pathname.match(/\.(png|jpg|jpeg|svg|ico|webp|css|js|json|woff2?)$/)) return true;
   return false;
 }
 
@@ -65,6 +73,7 @@ export async function middleware(req: NextRequest) {
 
   // Skip public paths for unauthenticated visitors
   if (isPublic(pathname)) return NextResponse.next();
+
   if (!auth.authorized) {
     // API routes → 401 JSON (so frontend can handle)
     if (pathname.startsWith('/api/')) {
@@ -79,7 +88,20 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  return NextResponse.next();
+  const res = NextResponse.next();
+
+  // Rolling session: if session was issued more than 24h ago, refresh with a new 30-day cookie
+  if (auth.authorized && auth.email && auth.iat && Date.now() - auth.iat > 24 * 60 * 60 * 1000) {
+    try {
+      const isProduction = process.env.NODE_ENV === 'production';
+      const refreshedCookie = await createSessionCookieEdge(auth.email, sessionSecret, isProduction);
+      res.headers.set('Set-Cookie', refreshedCookie);
+    } catch {
+      // Non-fatal if refresh signing fails
+    }
+  }
+
+  return res;
 }
 
 export const config = {
