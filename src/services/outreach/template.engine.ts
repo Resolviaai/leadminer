@@ -113,7 +113,18 @@ export class TemplateEngine {
     return Array.from(new Set(matches.map((m) => m.replace(/[{}]/g, '').trim())));
   }
 
-  public extractFirstName(channelTitle: string): string {
+  /**
+   * P3-4: Strip deceptive fake Re: / Fwd: on initial cold outreach step 1
+   */
+  public sanitizeSubject(subject: string, stepNumber: number = 1): string {
+    let clean = this.sanitizeVar(subject).trim();
+    if (stepNumber === 1) {
+      clean = clean.replace(/^(re|fwd|fw):\s*/i, '');
+    }
+    return clean;
+  }
+
+  public extractFirstName(channelTitle: string, useNeutralFallback = false): string {
     if (!channelTitle) return 'there';
 
     const clean = channelTitle.replace(/[\(\[].*?[\)\]]/g, '').trim();
@@ -121,13 +132,13 @@ export class TemplateEngine {
 
     // If channel is "Joe Rogan Clips" -> "Joe"
     if (parts.length > 0 && /^[a-zA-Z]{2,15}$/.test(parts[0])) {
-      const nonNames = ['the', 'top', 'daily', 'official', 'best', 'mr', 'team'];
+      const nonNames = ['the', 'top', 'daily', 'official', 'best', 'mr', 'team', 'channel', 'media', 'tv', 'news', 'clips', 'network', 'podcast', 'podcasts', 'show', 'hub'];
       if (!nonNames.includes(parts[0].toLowerCase())) {
         return parts[0].charAt(0).toUpperCase() + parts[0].slice(1).toLowerCase();
       }
     }
 
-    return channelTitle;
+    return useNeutralFallback ? 'there' : channelTitle;
   }
 
   private formatSubscribers(subs?: number | string): string {

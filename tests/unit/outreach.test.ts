@@ -27,6 +27,14 @@ describe('Template Engine', () => {
     expect(templateEngine.extractFirstName('Joe Rogan Podcast')).toBe('Joe');
     expect(templateEngine.extractFirstName('Lex Fridman Clips')).toBe('Lex');
     expect(templateEngine.extractFirstName('Daily Motivation Hub')).toBe('Daily Motivation Hub');
+    expect(templateEngine.extractFirstName('Daily Motivation Hub', true)).toBe('there');
+  });
+
+  it('should strip deceptive fake Re: / Fwd: from step 1 subjects but preserve on follow-ups (P3-4)', () => {
+    expect(templateEngine.sanitizeSubject('Re: Quick question about your channel', 1)).toBe('Quick question about your channel');
+    expect(templateEngine.sanitizeSubject('Fwd: Video collaboration proposal', 1)).toBe('Video collaboration proposal');
+    expect(templateEngine.sanitizeSubject('re: Partnership idea', 1)).toBe('Partnership idea');
+    expect(templateEngine.sanitizeSubject('Re: Following up on our chat', 2)).toBe('Re: Following up on our chat');
   });
 
   it('should detect template variables', () => {

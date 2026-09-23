@@ -7,8 +7,10 @@ import { sequenceService } from "../../../services/outreach/sequence.service";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const lastId = parseInt(searchParams.get("lastId") ?? "0", 10);
-  const limit = Math.min(parseInt(searchParams.get("limit") ?? "50", 10), 100);
+  const rawLastId = parseInt(searchParams.get("lastId") ?? "0", 10);
+  const lastId = isNaN(rawLastId) ? 0 : Math.max(0, rawLastId);
+  const rawLimit = parseInt(searchParams.get("limit") ?? "50", 10);
+  const limit = isNaN(rawLimit) ? 50 : Math.max(1, Math.min(100, rawLimit));
   try {
     const data = await db
       .select({

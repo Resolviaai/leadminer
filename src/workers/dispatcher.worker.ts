@@ -271,7 +271,7 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
 
     // Render Template (resolves variables and applies Spintax word rotation)
     // BUG-10: pass leadId as seed so retries produce identical wording for the same lead
-    const firstName = templateEngine.extractFirstName(item.channelTitle);
+    const firstName = templateEngine.extractFirstName(item.channelTitle, true);
     const renderedSubject = templateEngine.render(template.subject, {
       first_name: firstName,
       channel_name: item.channelTitle,
@@ -287,11 +287,13 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
       custom_line: customLine,
     }, item.leadId);
 
-    // In-Thread Subject Bumping for Follow-Up Steps (2..N)
+    // In-Thread Subject Bumping for Follow-Up Steps (2..N), sanitize Step 1 (P3-4)
     let finalSubject = renderedSubject;
     if (item.stepNumber > 1) {
       const isAlreadyRe = finalSubject.toLowerCase().startsWith('re:');
       finalSubject = isAlreadyRe ? finalSubject : `Re: ${finalSubject}`;
+    } else {
+      finalSubject = templateEngine.sanitizeSubject(finalSubject, 1);
     }
 
     const idempotencyKey = `camp_${item.campaignId}_lead_${item.leadId}_cnt_${item.contactId}_step_${item.stepNumber}`;

@@ -5,9 +5,12 @@ import { desc, asc, lt, gte, gt, and, eq, ilike, or } from "drizzle-orm";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const lastId = parseInt(searchParams.get("lastId") ?? "0", 10);
-  const offset = parseInt(searchParams.get("offset") ?? "0", 10);
-  const limit = Math.min(parseInt(searchParams.get("limit") ?? "50", 10), 100);
+  const rawLastId = parseInt(searchParams.get("lastId") ?? "0", 10);
+  const lastId = isNaN(rawLastId) ? 0 : Math.max(0, rawLastId);
+  const rawOffset = parseInt(searchParams.get("offset") ?? "0", 10);
+  const offset = isNaN(rawOffset) ? 0 : Math.max(0, rawOffset);
+  const rawLimit = parseInt(searchParams.get("limit") ?? "50", 10);
+  const limit = isNaN(rawLimit) ? 50 : Math.max(1, Math.min(100, rawLimit));
   const statusFilter = searchParams.get("status");
   const searchQuery = searchParams.get("search")?.trim();
   const sortBy = searchParams.get("sortBy") || "id";

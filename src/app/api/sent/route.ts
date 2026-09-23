@@ -5,12 +5,16 @@ import { eq, desc, lt, and, ilike, or, sql } from "drizzle-orm";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const page = parseInt(searchParams.get("page") ?? "1", 10);
-  const limit = Math.min(parseInt(searchParams.get("limit") ?? "50", 10), 100);
-  const offset = searchParams.has("offset")
+  const rawPage = parseInt(searchParams.get("page") ?? "1", 10);
+  const page = isNaN(rawPage) ? 1 : Math.max(1, rawPage);
+  const rawLimit = parseInt(searchParams.get("limit") ?? "50", 10);
+  const limit = isNaN(rawLimit) ? 50 : Math.max(1, Math.min(100, rawLimit));
+  const rawOffset = searchParams.has("offset")
     ? parseInt(searchParams.get("offset")!, 10)
-    : (Math.max(1, page) - 1) * limit;
-  const lastId = parseInt(searchParams.get("lastId") ?? "0", 10);
+    : (page - 1) * limit;
+  const offset = isNaN(rawOffset) ? 0 : Math.max(0, rawOffset);
+  const rawLastId = parseInt(searchParams.get("lastId") ?? "0", 10);
+  const lastId = isNaN(rawLastId) ? 0 : Math.max(0, rawLastId);
   const accountId = searchParams.get("accountId");
   const q = searchParams.get("q")?.trim();
   const isPaginated = searchParams.get("paginated") === "true" || searchParams.has("page");
