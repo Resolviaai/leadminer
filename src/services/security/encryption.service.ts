@@ -30,29 +30,34 @@ export class EncryptionService {
       return `enc:v1:${iv.toString('hex')}:${tag.toString('hex')}:${encrypted}`;
     } catch (err: any) {
       console.error('[Encryption Error]:', err.message);
-      return plaintext;
+      throw new Error(`[Encryption Error] Failed to encrypt payload: ${err.message}`);
     }
   }
 
   /**
    * Decrypts ciphertext produced by encrypt().
    * If the input is plaintext (does not start with enc:v1:), returns it as-is for backward compatibility.
+   * FAILS LOUD: Throws on corrupted ciphertext, tag mismatch, or key mismatch (P2-11).
    */
   public decrypt(ciphertext?: string | null): string | null {
     if (!ciphertext) return ciphertext as any;
     if (!ciphertext.startsWith('enc:v1:')) {
-      return ciphertext; // Plaintext fallback
+      return ciphertext; // Plaintext legacy compatibility
     }
 
     try {
       const parts = ciphertext.split(':');
       if (parts.length !== 5) {
-        return ciphertext;
+        throw new Error('Malformed ciphertext envelope structure (expected 5 colon-delimited parts)');
       }
 
       const iv = Buffer.from(parts[2], 'hex');
       const tag = Buffer.from(parts[3], 'hex');
       const encryptedText = parts[4];
+
+      if (iv.length !== 12 || tag.length !== 16) {
+        throw new Error('Invalid IV or auth tag length for AES-256-GCM');
+      }
 
       const decipher = crypto.createDecipheriv('aes-256-gcm', this.key, iv);
       decipher.setAuthTag(tag);
@@ -61,9 +66,25 @@ export class EncryptionService {
       decrypted += decipher.final('utf8');
       return decrypted;
     } catch (err: any) {
-      console.warn('[Decryption Warning] Failed to decrypt token, using fallback:', err.message);
-      return ciphertext;
+      console.error('[Decryption Error] Failed to decrypt token (failing loud):', err.message);
+      throw new Error(`[Decryption Error] Cryptographic operation failed: ${err.message}`);
     }
+  }
+
+  /**
+   * Re-encrypts ciphertext under a new encryption key (for key rotation).
+   */
+  public reEncrypt(ciphertext: string, newKeyRaw: string): string {
+    const plaintext = this.decrypt(ciphertext);
+    if (!plaintext) {
+      throw new Error('Cannot re-encrypt empty plaintext');
+    }
+    const newService = new EncryptionService(newKeyRaw);
+    const reEncrypted = newService.encrypt(plaintext);
+    if (!reEncrypted) {
+      throw new Error('Failed to encrypt under new key');
+    }
+    return reEncrypted;
   }
 }
 

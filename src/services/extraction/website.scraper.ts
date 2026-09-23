@@ -1,5 +1,6 @@
 import { emailExtractor } from './email.extractor';
 import { socialExtractor, ExtractedContactItem, ContactItemType } from './social.extractor';
+import { isSafePublicUrl } from '../../lib/ssrf-guard';
 
 export interface ScrapedContacts {
   url: string;
@@ -37,33 +38,60 @@ export class WebsiteScraper {
     }
   }
 
-  private async fetchHtml(url: string, maxBytes = 102400): Promise<string | null> {
+  private async fetchHtml(initialUrl: string, maxBytes = 102400): Promise<string | null> {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      let currentUrl = initialUrl;
+      let hops = 0;
+      const MAX_HOPS = 3;
 
-      const response = await fetch(url, {
-        signal: controller.signal,
-        headers: {
-          'User-Agent': this.userAgent,
-          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        },
-        redirect: 'follow',
-      });
+      while (hops <= MAX_HOPS) {
+        // SSRF protection: reject loopback, internal IP, or cloud metadata addresses (P2-2)
+        if (!(await isSafePublicUrl(currentUrl))) {
+          console.warn(`[SSRF Guard] Blocked unsafe target URL: ${currentUrl}`);
+          return null;
+        }
 
-      clearTimeout(timeoutId);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-      if (!response.ok) {
-        return null;
+        const response = await fetch(currentUrl, {
+          signal: controller.signal,
+          headers: {
+            'User-Agent': this.userAgent,
+            Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          },
+          redirect: 'manual',
+        });
+
+        clearTimeout(timeoutId);
+
+        // Handle redirects safely with per-hop IP verification
+        if ([301, 302, 307, 308].includes(response.status)) {
+          const location = response.headers.get('location');
+          if (!location) return null;
+          currentUrl = new URL(location, currentUrl).toString();
+          hops++;
+          continue;
+        }
+
+        if (!response.ok) {
+          return null;
+        }
+
+        const contentType = response.headers.get('content-type') || '';
+        if (
+          !contentType.includes('text/html') &&
+          !contentType.includes('application/xhtml+xml') &&
+          !contentType.includes('text/plain')
+        ) {
+          return null;
+        }
+
+        const text = await response.text();
+        return text.slice(0, maxBytes);
       }
 
-      const contentType = response.headers.get('content-type') || '';
-      if (!contentType.includes('text/html') && !contentType.includes('application/xhtml+xml') && !contentType.includes('text/plain')) {
-        return null;
-      }
-
-      const text = await response.text();
-      return text.slice(0, maxBytes);
+      return null;
     } catch (err) {
       // Gracefully return null on timeout, network error, SSL failure
       return null;

@@ -3,8 +3,22 @@ import { db } from '../../../db/client';
 import { suppressions, leads, contacts } from '../../../db/schema';
 import { eq, sql, and } from 'drizzle-orm';
 import { telegramService } from '../../../services/notifications/telegram.service';
+import { verifyUnsubscribeToken } from '../../../lib/unsubscribe-token';
 
 export const dynamic = 'force-dynamic';
+
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + 60000 });
+    return false;
+  }
+  if (entry.count >= 20) return true;
+  entry.count++;
+  return false;
+}
 
 function escapeHtml(str: string): string {
   return str
@@ -98,9 +112,18 @@ async function handleUnsubscribe(email: string, leadIdStr?: string | null) {
 }
 
 export async function GET(req: NextRequest) {
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() || '127.0.0.1';
+  if (isRateLimited(ip)) {
+    return new NextResponse(
+      '<!DOCTYPE html><html><body style="font-family:sans-serif;background:#161616;color:#e2e8f0;padding:2rem;text-align:center;"><h2>Too Many Requests</h2><p>Please wait a moment before trying again.</p></body></html>',
+      { headers: { 'Content-Type': 'text/html; charset=utf-8' }, status: 429 }
+    );
+  }
+
   const { searchParams } = new URL(req.url);
   const email = searchParams.get('email');
   const leadId = searchParams.get('leadId') || '';
+  const token = searchParams.get('token') || '';
 
   if (!email) {
     return new NextResponse(
@@ -110,8 +133,19 @@ export async function GET(req: NextRequest) {
   }
 
   const cleanEmail = email.toLowerCase().trim();
+
+  // Validate HMAC signature if provided or required
+  if (token && !verifyUnsubscribeToken(cleanEmail, leadId, token)) {
+    console.warn(`[Unsubscribe Audit] Invalid token attempt for ${cleanEmail} from IP ${ip}`);
+    return new NextResponse(
+      '<!DOCTYPE html><html><body style="font-family:sans-serif;background:#161616;color:#e2e8f0;padding:2rem;text-align:center;"><h2>Security Check Failed</h2><p>Invalid or expired unsubscribe signature.</p></body></html>',
+      { headers: { 'Content-Type': 'text/html; charset=utf-8' }, status: 403 }
+    );
+  }
+
   const escapedEmail = escapeHtml(cleanEmail);
   const escapedLeadId = escapeHtml(leadId);
+  const escapedToken = escapeHtml(token);
 
   // BUG-04 & BUG-28: Render confirmation form on GET without modifying database.
   // Prevents automated email security scanners and link prefetchers from auto-unsubscribing recipients!
@@ -149,6 +183,7 @@ export async function GET(req: NextRequest) {
     <form method="POST" action="/api/unsubscribe">
       <input type="hidden" name="email" value="${escapedEmail}" />
       <input type="hidden" name="leadId" value="${escapedLeadId}" />
+      <input type="hidden" name="token" value="${escapedToken}" />
       <button type="submit" class="btn-submit">Confirm Unsubscribe</button>
     </form>
     <div class="secondary-note">Once confirmed, you will be permanently suppressed from all future campaigns.</div>
@@ -168,8 +203,17 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() || '127.0.0.1';
+  if (isRateLimited(ip)) {
+    return new NextResponse(
+      '<!DOCTYPE html><html><body style="font-family:sans-serif;background:#161616;color:#e2e8f0;padding:2rem;text-align:center;"><h2>Too Many Requests</h2><p>Please wait a moment before trying again.</p></body></html>',
+      { headers: { 'Content-Type': 'text/html; charset=utf-8' }, status: 429 }
+    );
+  }
+
   let email: string | null = null;
   let leadId: string | null = null;
+  let token: string | null = null;
   let isHtmlRequest = false;
 
   const contentType = req.headers.get('content-type') || '';
@@ -182,17 +226,20 @@ export async function POST(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   email = searchParams.get('email');
   leadId = searchParams.get('leadId');
+  token = searchParams.get('token');
 
-  if (!email) {
+  if (!email || !token) {
     try {
       if (contentType.includes('application/json')) {
         const body = await req.json();
-        email = body.email;
-        leadId = body.leadId?.toString();
+        email = email || body.email;
+        leadId = leadId || body.leadId?.toString();
+        token = token || body.token;
       } else if (contentType.includes('application/x-www-form-urlencoded')) {
         const formData = await req.formData();
-        email = formData.get('email')?.toString() || null;
-        leadId = formData.get('leadId')?.toString() || null;
+        email = email || formData.get('email')?.toString() || null;
+        leadId = leadId || formData.get('leadId')?.toString() || null;
+        token = token || formData.get('token')?.toString() || null;
       }
     } catch {}
   }
@@ -208,9 +255,35 @@ export async function POST(req: NextRequest) {
   }
 
   const cleanEmail = email.toLowerCase().trim();
+
+  // Validate HMAC signature (P2-1)
+  const isProduction = process.env.NODE_ENV === 'production';
+  if (token) {
+    if (!verifyUnsubscribeToken(cleanEmail, leadId, token)) {
+      console.warn(`[Unsubscribe Audit] REJECTED invalid token for ${cleanEmail} (leadId: ${leadId}) from IP ${ip}`);
+      if (isHtmlRequest) {
+        return new NextResponse(
+          '<!DOCTYPE html><html><body style="font-family:sans-serif;background:#161616;color:#e2e8f0;padding:2rem;text-align:center;"><h2>Security Check Failed</h2><p>Invalid or expired unsubscribe signature.</p></body></html>',
+          { headers: { 'Content-Type': 'text/html; charset=utf-8' }, status: 403 }
+        );
+      }
+      return NextResponse.json({ success: false, error: 'Invalid or expired unsubscribe signature' }, { status: 403 });
+    }
+  } else if (isProduction) {
+    console.warn(`[Unsubscribe Audit] REJECTED missing token in production for ${cleanEmail} from IP ${ip}`);
+    if (isHtmlRequest) {
+      return new NextResponse(
+        '<!DOCTYPE html><html><body style="font-family:sans-serif;background:#161616;color:#e2e8f0;padding:2rem;text-align:center;"><h2>Security Check Failed</h2><p>Unsubscribe link signature required.</p></body></html>',
+        { headers: { 'Content-Type': 'text/html; charset=utf-8' }, status: 403 }
+      );
+    }
+    return NextResponse.json({ success: false, error: 'Unsubscribe signature token required' }, { status: 403 });
+  }
+
   const escapedEmail = escapeHtml(cleanEmail);
 
   try {
+    console.log(`[Unsubscribe Audit] Processing confirmed opt-out for ${cleanEmail} (leadId: ${leadId}) from IP ${ip}`);
     // BUG-04: Perform the actual database mutation on POST!
     await handleUnsubscribe(cleanEmail, leadId);
 

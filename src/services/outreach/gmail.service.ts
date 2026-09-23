@@ -6,6 +6,7 @@ import { eq, and, lt, gte, sql } from 'drizzle-orm';
 import { env } from '../../config/env';
 import { encryptionService } from '../security/encryption.service';
 import { warmupService } from './warmup.service';
+import { generateUnsubscribeToken } from '../../lib/unsubscribe-token';
 
 export interface SendEmailParams {
   leadId: number;
@@ -603,8 +604,9 @@ export class GmailSendingService {
         console.warn(`[Gmail Pre-Send Check] List reconciliation check non-fatal: ${listErr.message}`);
       }
 
-      // Construct Unsubscribe URL (RFC 2369 / RFC 8058 compliant)
-      const unsubUrl = `${env.APP_URL}/api/unsubscribe?email=${encodeURIComponent(params.recipientEmail)}&leadId=${params.leadId}`;
+      // Construct Signed Unsubscribe URL (RFC 2369 / RFC 8058 compliant, HMAC signed P2-1)
+      const unsubToken = generateUnsubscribeToken(params.recipientEmail, params.leadId);
+      const unsubUrl = `${env.APP_URL}/api/unsubscribe?email=${encodeURIComponent(params.recipientEmail)}&leadId=${params.leadId}&token=${encodeURIComponent(unsubToken)}`;
       const raw = this.createRfc2822Message(
         account.email,
         params.recipientEmail,

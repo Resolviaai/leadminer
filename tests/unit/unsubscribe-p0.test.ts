@@ -163,4 +163,37 @@ describe('BUG-04 / BUG-28 / BUG-29 Unsubscribe Safety Suite', () => {
     // But lead 999 is NOT updated!
     expect(mockDbUpdate).not.toHaveBeenCalled();
   });
+
+  it('6. POST request with invalid or tampered HMAC token is rejected with HTTP 403 (P2-1)', async () => {
+    const req = new NextRequest('http://localhost:3000/api/unsubscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'creator@channel.com',
+        leadId: '10',
+        token: 'invalid_deadbeef_forged_token',
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(403);
+    const data = await res.json();
+    expect(data.success).toBe(false);
+    expect(data.error).toContain('Invalid or expired unsubscribe signature');
+
+    // DB must never be touched on invalid token
+    expect(mockDbInsert).not.toHaveBeenCalled();
+    expect(mockDbUpdate).not.toHaveBeenCalled();
+  });
+
+  it('7. GET request with invalid HMAC token renders 403 security check failed (P2-1)', async () => {
+    const req = new NextRequest('http://localhost:3000/api/unsubscribe?email=creator%40channel.com&leadId=10&token=forged_token');
+    const res = await GET(req);
+
+    expect(res.status).toBe(403);
+    const html = await res.text();
+    expect(html).toContain('Security Check Failed');
+    expect(mockDbInsert).not.toHaveBeenCalled();
+  });
 });
+
