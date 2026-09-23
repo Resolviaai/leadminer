@@ -8,6 +8,7 @@ import {
   Radio,
   ArrowUpRight,
   ShieldAlert,
+  AlertTriangle,
 } from 'lucide-react';
 import { db } from '../../db/client';
 import { keywords, leads, contacts, messages, replies, campaigns, systemSettings } from '../../db/schema';
@@ -77,8 +78,10 @@ async function getDashboardStats() {
       campaigns: campaignStats || { active: 0 },
       quota,
       isKillSwitchActive,
+      dbError: false,
+      dbErrorMessage: null as string | null,
     };
-  } catch (e) {
+  } catch (e: any) {
     return {
       keywords: { total: 0, pending: 0, completed: 0, failed: 0 },
       leads: { total: 0, qualified: 0 },
@@ -94,6 +97,8 @@ async function getDashboardStats() {
         lastResetPt: new Date().toISOString(),
       },
       isKillSwitchActive: false,
+      dbError: true,
+      dbErrorMessage: e?.message || 'Database connection error',
     };
   }
 }
@@ -107,6 +112,19 @@ export default async function OverviewPage() {
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto w-full">
+      {stats.dbError && (
+        <div className="rounded-xl border border-red-500/30 bg-red-950/20 p-4 text-red-300 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+          <div className="space-y-1 text-xs">
+            <div className="font-semibold text-sm text-red-200">Database Connection Degraded or Offline</div>
+            <p className="text-red-300/80">
+              LeadMiner could not establish a connection to PostgreSQL ({stats.dbErrorMessage || 'Connection refused or timeout'}).
+              Metrics shown below are cached zero fallbacks and do not reflect current production state.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Grid: 4 Metric Cards (2x2 on mobile, 4-col on desktop) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
         {/* Keywords */}
@@ -213,7 +231,9 @@ export default async function OverviewPage() {
             />
             <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-text-muted pt-0.5">
               <span>Inbox status</span>
-              <span className="font-mono text-primary font-medium">Active</span>
+              <span className={`font-mono font-medium ${stats.dbError ? 'text-red-400' : 'text-primary'}`}>
+                {stats.dbError ? 'Degraded / Error' : 'Active'}
+              </span>
             </div>
           </CardContent>
         </Card>

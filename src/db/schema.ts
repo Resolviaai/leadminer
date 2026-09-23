@@ -317,7 +317,7 @@ export const sequences = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    index('idx_sequences_campaign_id').on(table.campaignId),
+    uniqueIndex('uq_sequences_campaign_id').on(table.campaignId),
     index('idx_sequences_is_active').on(table.isActive),
   ]
 );
@@ -428,6 +428,7 @@ export const messages = pgTable(
     index('idx_messages_thread_id').on(table.threadId),
     index('idx_messages_contact_id').on(table.contactId),
     index('idx_messages_rfc822_id').on(table.rfc822MessageId),
+    index('idx_messages_sent_at').on(table.sentAt),
   ]
 );
 
@@ -478,6 +479,7 @@ export const scheduledEmails = pgTable(
     index('idx_scheduled_emails_dispatch').on(table.scheduledAt, table.status),
     index('idx_scheduled_emails_lead_status').on(table.leadId, table.status),
     index('idx_scheduled_emails_account').on(table.gmailAccountId, table.scheduledAt),
+    index('idx_scheduled_emails_status_scheduled').on(table.status, table.scheduledAt),
     uniqueIndex('uq_scheduled_emails_contact_step').on(table.contactId, table.campaignId, table.stepNumber),
   ]
 );
@@ -500,7 +502,10 @@ export const jobs = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index('idx_jobs_status').on(table.status)]
+  (table) => [
+    index('idx_jobs_status').on(table.status),
+    index('idx_jobs_status_type').on(table.status, table.jobType),
+  ]
 );
 
 // 10. logs
