@@ -228,4 +228,36 @@ All development activities, audits, architectural decisions, and milestones are 
   - `npx tsc --noEmit`: 0 errors.
   - `npm run build`: 0 errors across all 33 static and dynamic routes.
 
+---
+
+## 2026-09-23 — Session 9 (Landing Page, Compliance Links, Auth Redirects & Production Verification)
+- **Agent:** Antigravity
+- **Actions Completed:**
+  - **Public Landing Page & Legal Infrastructure (`/`, `/privacy`, `/terms`):**
+    - Built animated, high-performance landing page with abstract dark background, SVG circuit geometry, and Jensen Huang SaaS grid layout.
+    - Added dedicated, comprehensive public Privacy Policy (`/privacy`) and Terms of Service (`/terms`) meeting Google OAuth verification standards and YouTube API Services Developer Policies.
+    - Added direct navigation and footer links to Home, Privacy Policy, Terms of Service, and GDPR Erasure portal.
+  - **Authentication Flow & Redirect Loop Resolution:**
+    - Resolved login redirection loop: updated `/login` fallback target from `/` (landing page) to `/overview` (internal dashboard).
+    - Switched client-side auth success redirection from `router.push` to direct document navigation (`window.location.href = '/overview'`), ensuring the issued `HttpOnly` session cookie (`lm_session`) is attached to the first document request without client-cache lag.
+    - Updated `src/middleware.ts` to inspect authenticated sessions on `/login`: operators with an active session cookie visiting `/login` are automatically forwarded to `/overview` (or their redirect query parameter).
+    - Hardened internal dashboard navigation in `src/components/navigation.tsx`: updated brand header links from `/` to `/overview` so dashboard operators are not booted to the public landing page when clicking the logo.
+    - Added dedicated "Sign Out" button across desktop sidebar and mobile bottom sheet drawer calling `/api/auth/logout` and clearing session cookies.
+  - **Vercel Production Deployment & End-to-End Verification:**
+    - Configured production credentials across Vercel environments (`DASHBOARD_EMAIL`, `DASHBOARD_PASSWORD`, `CRON_SECRET`, `APP_URL`).
+    - Successfully deployed to Vercel production (`https://leadminer-app.vercel.app`).
+    - Verified all endpoints live:
+      - `GET /` -> `200 OK` (Public landing page)
+      - `GET /privacy` & `GET /terms` -> `200 OK` (Public compliance pages)
+      - `GET /overview` unauthenticated -> `307 Redirect` to `/login?redirect=%2Foverview`
+      - `POST /api/auth/login` -> `200 OK` with `Set-Cookie: lm_session=...`
+      - `GET /overview` authenticated -> `200 OK` (Protected dashboard)
+      - `GET /login` authenticated -> `307 Redirect` to `/overview`
+      - `POST /api/auth/logout` -> `200 OK` with cleared cookie
+- **Validation:**
+  - `npx vitest run`: **143/143 tests passing** (100% pass rate).
+  - `npx tsc --noEmit`: 0 errors.
+  - Production verification: 100% verified live on Vercel.
+
+
 
