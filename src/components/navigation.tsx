@@ -21,6 +21,7 @@ import {
   Send,
   ChevronLeft,
   ChevronRight,
+  LogOut,
 } from 'lucide-react';
 
 const mainNavItems = [
@@ -75,6 +76,14 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
     });
   };
 
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } finally {
+      window.location.href = '/login';
+    }
+  };
+
   const isActive = (href: string) => {
     const current = pendingPath ?? pathname;
     if (href === '/') return current === '/';
@@ -99,7 +108,7 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
         >
           {isCollapsed ? (
             <div className="w-full flex items-center justify-between">
-              <Link href="/" className="shrink-0" title="LeadMiner">
+              <Link href="/overview" className="shrink-0" title="LeadMiner">
                 <img src="/favicon.svg" alt="LeadMiner Logo" className="w-8 h-8 rounded-lg shadow-sm object-contain" />
               </Link>
               <button
@@ -114,7 +123,7 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
             </div>
           ) : (
             <>
-              <Link href="/" className="flex items-center space-x-2.5 min-w-0 group">
+              <Link href="/overview" className="flex items-center space-x-2.5 min-w-0 group">
                 <img src="/favicon.svg" alt="LeadMiner Logo" className="w-8 h-8 rounded-lg shrink-0 shadow-sm object-contain" />
                 <div className="min-w-0">
                   <span className="font-semibold text-sm tracking-tight text-text-main block truncate group-hover:text-primary transition-colors">
@@ -209,6 +218,33 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
             );
           })}
         </nav>
+
+        {/* Desktop Sign Out Button */}
+        <div className="p-3 border-t border-border mt-auto">
+          {isCollapsed ? (
+            <button
+              type="button"
+              onClick={handleLogout}
+              title="Sign Out"
+              aria-label="Sign Out"
+              className="flex items-center justify-center w-11 h-11 mx-auto rounded-lg text-text-muted hover:text-rose-400 hover:bg-rose-500/10 transition-all active:scale-[0.98] group relative"
+            >
+              <LogOut className="w-5 h-5 shrink-0" strokeWidth={1.75} />
+              <div className="pointer-events-none absolute left-full ml-3 px-2.5 py-1 bg-surface-100 border border-border rounded-md text-xs font-medium text-text-main shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50">
+                Sign Out
+              </div>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-sm font-medium text-text-muted hover:text-rose-400 hover:bg-rose-500/10 transition-all active:scale-[0.98]"
+            >
+              <LogOut className="w-5 h-5 shrink-0" strokeWidth={1.75} />
+              <span className="truncate text-[13.5px]">Sign Out</span>
+            </button>
+          )}
+        </div>
       </aside>
 
       {/* ==================================================== */}
@@ -216,7 +252,7 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
       {/* 2. MOBILE TOP APP BAR (< md)                         */}
       {/* ==================================================== */}
       <header className="md:hidden sticky top-0 z-40 h-[calc(3.5rem+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)] bg-surface-100/90 backdrop-blur-md border-b border-border px-3.5 sm:px-4 flex items-center justify-between">
-        <Link href="/" className="flex items-center space-x-2 min-h-[44px]">
+        <Link href="/overview" className="flex items-center space-x-2 min-h-[44px]">
           <img src="/favicon.svg" alt="LeadMiner Logo" className="w-7 h-7 rounded-lg shrink-0" />
           <span className="font-semibold text-sm text-text-main tracking-tight">LeadMiner</span>
         </Link>
@@ -339,6 +375,21 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
                   </Link>
                 );
               })}
+            </div>
+
+            {/* Mobile Sign Out */}
+            <div className="pt-2 border-t border-border">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMoreOpen(false);
+                  handleLogout();
+                }}
+                className="w-full flex items-center justify-center space-x-2 p-3 rounded-xl border border-rose-500/20 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-xs font-medium transition-all active:scale-95 min-h-[44px]"
+              >
+                <LogOut className="w-4 h-4" strokeWidth={1.75} />
+                <span>Sign Out</span>
+              </button>
             </div>
           </div>
         </div>

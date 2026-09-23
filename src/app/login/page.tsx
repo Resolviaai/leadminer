@@ -7,7 +7,8 @@ import { LogIn, Eye, EyeOff } from 'lucide-react';
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get('redirect') || '/';
+  const redirectParam = searchParams.get('redirect');
+  const targetRedirect = redirectParam && redirectParam !== '/' ? redirectParam : '/overview';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -34,8 +35,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.push(redirect);
-      router.refresh();
+      window.location.href = targetRedirect;
     } catch {
       setError('Network error. Please try again.');
     } finally {

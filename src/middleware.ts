@@ -47,9 +47,6 @@ function isPublic(pathname: string): boolean {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Skip public paths
-  if (isPublic(pathname)) return NextResponse.next();
-
   // In development/test, skip auth entirely (controlled by NODE_ENV)
   if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
     return NextResponse.next();
@@ -58,6 +55,16 @@ export async function middleware(req: NextRequest) {
   // Check session using Edge-compatible Web Crypto
   const sessionSecret = process.env.SESSION_SECRET || '';
   const auth = await verifySessionCookieEdge(req, sessionSecret);
+
+  // If already authenticated and visiting /login, redirect straight to dashboard
+  if (auth.authorized && pathname === '/login') {
+    const target = req.nextUrl.searchParams.get('redirect');
+    const destination = target && target !== '/' ? target : '/overview';
+    return NextResponse.redirect(new URL(destination, req.url));
+  }
+
+  // Skip public paths for unauthenticated visitors
+  if (isPublic(pathname)) return NextResponse.next();
   if (!auth.authorized) {
     // API routes → 401 JSON (so frontend can handle)
     if (pathname.startsWith('/api/')) {

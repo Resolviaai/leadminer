@@ -47,8 +47,7 @@ export default function LandingPage() {
         return;
       }
 
-      router.push('/overview');
-      router.refresh();
+      window.location.href = '/overview';
     } catch {
       setLoginError('Connection error. Please try again.');
     } finally {
