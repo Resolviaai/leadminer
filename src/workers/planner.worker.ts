@@ -15,6 +15,7 @@ import { eq, and, inArray, isNotNull, sql, notInArray, desc } from 'drizzle-orm'
 import { env } from '../config/env';
 import { gmailSendingService } from '../services/outreach/gmail.service';
 import { sequenceService } from '../services/outreach/sequence.service';
+import { warmupService } from '../services/outreach/warmup.service';
 
 export interface PlannerResult {
   scheduled: number;
@@ -175,9 +176,9 @@ export async function runPlanner(): Promise<PlannerResult> {
   let totalScheduledFollowUps = 0;
   let totalSkipped = 0;
 
-  // 4. Per-Account Scheduling Loop (Enforcing Immutable Affinity & 25 Limit)
+  // 4. Per-Account Scheduling Loop (Enforcing Immutable Affinity & Warmup Limit)
   for (const account of activeAccounts) {
-    const effectiveLimit = gmailSendingService.getTodayEffectiveLimit(account.id, account.dailyLimit);
+    const effectiveLimit = await warmupService.getEffectiveDailyLimit(account.id, account.dailyLimit, account.googleAccountId);
     const sentCount = account.sentToday || 0;
     const scheduledCount = alreadyScheduledByAccount.get(account.id) || 0;
     const usedSlots = sentCount + scheduledCount;

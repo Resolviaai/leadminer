@@ -5,6 +5,7 @@ import { gmailAccounts, systemSettings, suppressions, messages, leads } from '..
 import { eq, and, lt, gte, sql } from 'drizzle-orm';
 import { env } from '../../config/env';
 import { encryptionService } from '../security/encryption.service';
+import { warmupService } from './warmup.service';
 
 export interface SendEmailParams {
   leadId: number;
@@ -126,8 +127,8 @@ export class GmailSendingService {
           }
         }
 
-        // 2. Enforce daily limit with volume jitter (18-25, max 25)
-        const todayLimit = this.getTodayEffectiveLimit(account.id, account.dailyLimit);
+        // 2. Enforce daily limit with warmup ramp (5->8->10->15->18->21->25) and volume jitter
+        const todayLimit = await warmupService.getEffectiveDailyLimit(account.id, account.dailyLimit, account.googleAccountId);
 
         // 3. Atomically claim 1 quota slot with PostgreSQL row lock
         const reserved = await db
