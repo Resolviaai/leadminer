@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyDashboardAuth } from './lib/api-auth';
+import { verifySessionCookieEdge } from './lib/edge-auth';
 
 /**
  * Next.js Edge Middleware — runs before every request.
@@ -43,7 +43,7 @@ function isPublic(pathname: string): boolean {
   return false;
 }
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Skip public paths
@@ -54,8 +54,9 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check session
-  const auth = verifyDashboardAuth(req);
+  // Check session using Edge-compatible Web Crypto
+  const sessionSecret = process.env.SESSION_SECRET || '';
+  const auth = await verifySessionCookieEdge(req, sessionSecret);
   if (!auth.authorized) {
     // API routes → 401 JSON (so frontend can handle)
     if (pathname.startsWith('/api/')) {

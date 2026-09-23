@@ -95,8 +95,12 @@ try {
   parsedEnv = envSchema.parse({});
 }
 
-// Production security guard: fail fast in production, safely generate fallbacks in dev/test
-if (parsedEnv.NODE_ENV === 'production') {
+// Production security guard: fail fast in production runtime, allow build phase to collect page data
+const isBuildPhase =
+  process.env.NEXT_PHASE === 'phase-production-build' ||
+  process.env.npm_lifecycle_event === 'build';
+
+if (parsedEnv.NODE_ENV === 'production' && !isBuildPhase) {
   if (!parsedEnv.SESSION_SECRET || parsedEnv.SESSION_SECRET === 'default-session-secret-change-in-production') {
     throw new Error('[FATAL] SESSION_SECRET is required and must not use the default fallback in production.');
   }
