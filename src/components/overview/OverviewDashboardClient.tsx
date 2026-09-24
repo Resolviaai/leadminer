@@ -104,14 +104,14 @@ export function OverviewDashboardClient({ initialData }: OverviewDashboardClient
   };
 
   return (
-    <div className="space-y-4 sm:space-y-5 max-w-[1600px] mx-auto w-full pb-16">
+    <div className="space-y-4 max-w-[1680px] mx-auto w-full pb-16">
       {/* ─── HEADER ─── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-text-main">
+          <h1 className="text-2xl font-bold tracking-tight text-[#F0F6FC]">
             Overview
           </h1>
-          <p className="text-xs text-text-secondary mt-0.5">
+          <p className="text-xs text-[#8B949E] mt-0.5">
             Live view of your lead discovery, verification and outreach pipeline.
           </p>
         </div>
@@ -119,14 +119,17 @@ export function OverviewDashboardClient({ initialData }: OverviewDashboardClient
         {/* Right Time Range Controls matching reference image */}
         <div className="flex items-center gap-2 flex-wrap">
           {/* Dropdown pill */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-100 border border-studio-border text-xs text-text-secondary cursor-pointer hover:text-text-main select-none">
-            <Calendar className="w-3.5 h-3.5 text-text-muted" />
+          <div
+            onClick={() => setShowCustomModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#161B22] border border-[#30363D] text-xs text-[#C9D1D9] cursor-pointer hover:border-[#8B949E] transition-colors select-none"
+          >
+            <Calendar className="w-3.5 h-3.5 text-[#8B949E]" />
             <span>{data.timeRange.label}</span>
-            <ChevronDown className="w-3 h-3 text-text-muted ml-0.5" />
+            <ChevronDown className="w-3 h-3 text-[#8B949E] ml-0.5" />
           </div>
 
           {/* Time Filter Pills: [ Today ] [ 3D ] [ 7D ] [ 14D ] [ 30D ] [ Custom ] */}
-          <div className="flex items-center p-0.5 bg-surface-100 rounded-lg border border-studio-border">
+          <div className="flex items-center p-0.5 bg-[#161B22] rounded-lg border border-[#30363D]">
             {RANGE_OPTIONS.map((opt) => {
               const isActive = selectedRange === opt.key;
               return (
@@ -137,8 +140,8 @@ export function OverviewDashboardClient({ initialData }: OverviewDashboardClient
                   onClick={() => handleSelectRange(opt.key)}
                   className={`px-3 py-1 rounded text-xs font-medium transition-all cursor-pointer select-none ${
                     isActive
-                      ? 'bg-surface-200 text-text-main font-semibold shadow-sm border border-studio-border-strong'
-                      : 'text-text-muted hover:text-text-secondary'
+                      ? 'bg-[#2A1D17] text-[#F06536] font-semibold shadow-sm border border-[#F06536]/80'
+                      : 'text-[#8B949E] hover:text-[#C9D1D9]'
                   }`}
                 >
                   {opt.label}
@@ -159,9 +162,9 @@ export function OverviewDashboardClient({ initialData }: OverviewDashboardClient
               )
             }
             title="Refresh database analytics"
-            className="p-1.5 rounded-lg bg-surface-100 border border-studio-border text-text-secondary hover:text-text-main transition-colors cursor-pointer select-none active:scale-95"
+            className="p-1.5 rounded-lg bg-[#161B22] border border-[#30363D] text-[#8B949E] hover:text-[#F0F6FC] transition-colors cursor-pointer select-none active:scale-95"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-primary' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-[#F06536]' : ''}`} />
           </button>
         </div>
       </div>
@@ -183,47 +186,45 @@ export function OverviewDashboardClient({ initialData }: OverviewDashboardClient
         </div>
       )}
 
-      {/* ─── 1. TOP ROW: 6 KPI CARDS ─── */}
+      {/* ─── 1. TOP ROW: 6 KPI CARDS (Full Width) ─── */}
       <TopKpiCards kpis={data.kpis} />
 
-      {/* ─── 2. MIDDLE SECTION: 2 COLUMNS LEFT + 1 COLUMN RIGHT ─── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5">
-        {/* Left Side: Pipeline Funnel + Daily Activity (8 cols) */}
-        <div className="lg:col-span-8 flex flex-col gap-3.5">
-          <div className="flex-1">
-            <FunnelVisualization
-              stages={data.funnel.stages}
-              overallConversionRate={data.funnel.overallConversionRate}
-            />
-          </div>
-          <div className="flex-1">
-            <DailyTrendChart trends={data.trends} />
+      {/* ─── 2. MAIN 3-COLUMN SECTION MATCHING REFERENCE DESIGNS ─── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-stretch">
+        {/* Column 1 (4 cols): Lead Pipeline (top) + Verification Results (bottom) */}
+        <div className="lg:col-span-12 xl:col-span-4 flex flex-col gap-3.5">
+          <FunnelVisualization
+            stages={data.funnel.stages}
+            overallConversionRate={data.funnel.overallConversionRate}
+          />
+          <VerificationBreakdownCard verification={data.verification} />
+        </div>
+
+        {/* Column 2 (5 cols): Daily Activity (top) + Outreach & Content Sources (bottom side-by-side) */}
+        <div className="lg:col-span-12 xl:col-span-5 flex flex-col gap-3.5">
+          <DailyTrendChart trends={data.trends} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 items-stretch flex-1">
+            <OutreachPerformanceCard outreach={data.outreach} />
+            <ContentSourcesCard sources={data.contentSources} />
           </div>
         </div>
 
-        {/* Right Side: System Status + API Usage + Insights (4 cols) */}
-        <div className="lg:col-span-4 flex flex-col gap-3.5">
+        {/* Column 3 (3 cols): System Status (top) + API Usage (middle) + Insights (bottom) */}
+        <div className="lg:col-span-12 xl:col-span-3 flex flex-col gap-3.5">
           <SystemStatusCard system={data.system} />
           <ApiUsageCard quota={data.quota} />
           <InsightsAnomalies insights={data.insights} />
         </div>
       </div>
 
-      {/* ─── 3. LOWER SECTION: 3 METRIC CARDS ─── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-        <VerificationBreakdownCard verification={data.verification} />
-        <OutreachPerformanceCard outreach={data.outreach} />
-        <ContentSourcesCard sources={data.contentSources} />
-      </div>
-
-      {/* ─── 4. BOTTOM SECTION: 5 EXPANDABLE DIAGNOSTIC DRAWERS ─── */}
+      {/* ─── 3. BOTTOM SECTION: 5 EXPANDABLE DIAGNOSTIC DRAWERS (Full Width) ─── */}
       <ProgressiveDisclosureSections data={data} />
 
       {/* Custom Date Modal */}
       {showCustomModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="rounded-xl border border-studio-border-strong bg-surface-100 p-5 max-w-sm w-full space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between pb-2 border-b border-border">
+          <div className="rounded-xl border border-studio-border-strong bg-[#161B22] p-5 max-w-sm w-full space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between pb-2 border-b border-[#30363D]">
               <span className="text-sm font-semibold text-text-main">Custom Date Filter</span>
               <button
                 type="button"
@@ -242,7 +243,7 @@ export function OverviewDashboardClient({ initialData }: OverviewDashboardClient
                   required
                   value={customStart}
                   onChange={(e) => setCustomStart(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-surface-200 px-3 py-2 text-text-main font-mono focus:outline-none focus:border-primary"
+                  className="w-full rounded-lg border border-[#30363D] bg-[#0E1217] px-3 py-2 text-text-main font-mono focus:outline-none focus:border-primary"
                 />
               </div>
 
@@ -253,7 +254,7 @@ export function OverviewDashboardClient({ initialData }: OverviewDashboardClient
                   required
                   value={customEnd}
                   onChange={(e) => setCustomEnd(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-surface-200 px-3 py-2 text-text-main font-mono focus:outline-none focus:border-primary"
+                  className="w-full rounded-lg border border-[#30363D] bg-[#0E1217] px-3 py-2 text-text-main font-mono focus:outline-none focus:border-primary"
                 />
               </div>
 

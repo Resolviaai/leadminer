@@ -1,17 +1,15 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
 import { ArrowUp, AlertTriangle, ShieldCheck, Lightbulb } from 'lucide-react';
 import { InsightItem } from '@/services/analytics/overview-analytics.service';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 
 interface InsightsAnomaliesProps {
   insights: InsightItem[];
 }
 
 export function InsightsAnomalies({ insights }: InsightsAnomaliesProps) {
-  const getIconWrapper = (idx: number, type: InsightItem['type']) => {
+  const getIconWrapper = (idx: number) => {
     switch (idx) {
       case 0:
         return (
@@ -41,26 +39,26 @@ export function InsightsAnomalies({ insights }: InsightsAnomaliesProps) {
   };
 
   return (
-    <Card className="p-4 sm:p-5 flex flex-col justify-between border border-border bg-surface-100">
+    <div className="rounded-xl border border-[#30363D] bg-[#161B22] p-4 sm:p-5 flex flex-col justify-between h-full">
       <div>
-        <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between space-y-0">
-          <CardTitle className="text-sm font-semibold text-text-main">
+        <div className="pb-3 flex flex-row items-center justify-between border-b border-[#30363D]/60">
+          <h2 className="text-sm font-semibold text-[#F0F6FC]">
             Insights
-          </CardTitle>
-          <span className="text-[11px] text-text-muted hover:text-text-secondary cursor-pointer select-none">
+          </h2>
+          <span className="text-xs text-[#8B949E] hover:text-[#C9D1D9] cursor-pointer select-none">
             See all
           </span>
-        </CardHeader>
+        </div>
 
-        <div className="space-y-3 pt-1">
+        <div className="space-y-3 pt-3">
           {insights.slice(0, 4).map((item, idx) => (
             <div key={item.id} className="flex items-start gap-2.5">
-              {getIconWrapper(idx, item.type)}
+              {getIconWrapper(idx)}
               <div className="min-w-0 flex-1">
-                <div className="text-xs font-semibold text-text-main leading-tight truncate">
+                <div className="text-xs font-semibold text-[#F0F6FC] leading-tight truncate">
                   {item.title}
                 </div>
-                <div className="text-[11px] text-text-muted leading-relaxed truncate">
+                <div className="text-[11px] text-[#8B949E] leading-relaxed truncate mt-0.5">
                   {item.description}
                 </div>
               </div>
@@ -68,6 +66,6 @@ export function InsightsAnomalies({ insights }: InsightsAnomaliesProps) {
           ))}
         </div>
       </div>
-    </Card>
+    </div>
   );
 }

@@ -11,7 +11,6 @@ import {
   Reply,
   ArrowUp,
   ArrowDown,
-  ArrowUpRight,
 } from 'lucide-react';
 import { KpiMetric } from '@/services/analytics/overview-analytics.service';
 
@@ -64,47 +63,53 @@ export function TopKpiCards({ kpis }: TopKpiCardsProps) {
       {kpis.map((kpi) => {
         const config = KPI_CONFIG[kpi.id] || {
           icon: <Search className="w-4 h-4" />,
-          iconBg: 'bg-surface-200',
-          iconColor: 'text-primary',
+          iconBg: 'bg-[#21262D]',
+          iconColor: 'text-[#F06536]',
         };
 
         const isPositive = (kpi.percentageChange ?? 0) >= 0;
         const changeVal = kpi.percentageChange !== null ? Math.abs(kpi.percentageChange) : null;
+        const showPct = changeVal !== null && changeVal <= 500 && kpi.previousValue > 0;
 
         const CardContent = (
-          <div className="flex flex-col justify-between h-full space-y-2.5">
-            <div className="flex items-center gap-2.5">
-              <div
-                className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${config.iconBg} ${config.iconColor} border border-white/[0.04]`}
-              >
-                {config.icon}
-              </div>
-              <span className="text-[11px] font-medium text-text-secondary leading-tight truncate">
-                {kpi.label}
-              </span>
+          <div className="flex items-start gap-3">
+            {/* Left: Square Icon Box matching reference image */}
+            <div
+              className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${config.iconBg} ${config.iconColor} border border-white/[0.04] mt-0.5`}
+            >
+              {config.icon}
             </div>
 
-            <div>
-              <div className="text-2xl font-bold tracking-tight text-text-main font-mono tabular-nums leading-none mb-1.5">
+            {/* Right: Content block */}
+            <div className="flex-1 min-w-0">
+              <span className="text-xs font-medium text-[#8B949E] leading-tight truncate block">
+                {kpi.label}
+              </span>
+
+              <div className="text-2xl font-bold tracking-tight text-[#F0F6FC] font-mono tabular-nums leading-none my-1.5">
                 {kpi.formattedValue}
               </div>
 
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {changeVal !== null && (
+              <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                {showPct ? (
                   <span
-                    className={`inline-flex items-center text-[11px] font-mono font-medium ${
+                    className={`inline-flex items-center font-mono font-semibold ${
                       isPositive ? 'text-[#3FB950]' : 'text-[#F85149]'
                     }`}
                   >
                     {isPositive ? (
-                      <ArrowUp className="w-3 h-3 mr-0.5 inline" />
+                      <ArrowUp className="w-3 h-3 mr-0.5 inline shrink-0" />
                     ) : (
-                      <ArrowDown className="w-3 h-3 mr-0.5 inline" />
+                      <ArrowDown className="w-3 h-3 mr-0.5 inline shrink-0" />
                     )}
-                    {changeVal}%*
+                    {changeVal}%
                   </span>
-                )}
-                <span className="text-[11px] text-text-muted truncate">
+                ) : kpi.previousValue === 0 && kpi.value > 0 ? (
+                  <span className="text-[#3FB950] font-mono text-[11px] font-semibold">
+                    ↑ New
+                  </span>
+                ) : null}
+                <span className="text-[11px] text-[#8B949E] truncate">
                   {kpi.subtext}
                 </span>
               </div>
@@ -117,7 +122,7 @@ export function TopKpiCards({ kpis }: TopKpiCardsProps) {
             <Link
               key={kpi.id}
               href={kpi.drilldownHref}
-              className="group relative rounded-xl border border-border bg-surface-100 p-3.5 hover:border-primary/50 hover:bg-surface-200/40 transition-all active:scale-[0.99] select-none"
+              className="group relative rounded-xl border border-[#30363D] bg-[#161B22] p-3.5 hover:border-[#F06536]/50 hover:bg-[#1C2128] transition-all active:scale-[0.99] select-none"
             >
               {CardContent}
             </Link>
@@ -127,7 +132,7 @@ export function TopKpiCards({ kpis }: TopKpiCardsProps) {
         return (
           <div
             key={kpi.id}
-            className="rounded-xl border border-border bg-surface-100 p-3.5"
+            className="rounded-xl border border-[#30363D] bg-[#161B22] p-3.5"
           >
             {CardContent}
           </div>

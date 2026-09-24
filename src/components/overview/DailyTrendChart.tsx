@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import { DailyTrendPoint } from '@/services/analytics/overview-analytics.service';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { ChevronDown } from 'lucide-react';
 
 interface DailyTrendChartProps {
@@ -30,9 +29,9 @@ export function DailyTrendChart({ trends }: DailyTrendChartProps) {
 
   if (!trends || trends.length === 0) {
     return (
-      <Card className="p-5 text-center text-text-muted text-xs bg-surface-100 border border-border">
+      <div className="rounded-xl border border-[#30363D] bg-[#161B22] p-5 text-center text-[#8B949E] text-xs">
         No daily trend data available for this timeframe.
-      </Card>
+      </div>
     );
   }
 
@@ -74,21 +73,21 @@ export function DailyTrendChart({ trends }: DailyTrendChartProps) {
   const hoveredPoint = hoveredIndex !== null ? trends[hoveredIndex] : null;
 
   return (
-    <Card className="p-4 sm:p-5 flex flex-col justify-between h-full border border-border bg-surface-100">
+    <div className="rounded-xl border border-[#30363D] bg-[#161B22] p-4 sm:p-5 flex flex-col justify-between h-full">
       <div>
-        <CardHeader className="p-0 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 space-y-0">
+        <div className="pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#30363D]/60">
           <div>
-            <CardTitle className="text-sm font-semibold text-text-main">
+            <h2 className="text-sm font-semibold text-[#F0F6FC]">
               Daily Activity
-            </CardTitle>
-            <p className="text-xs text-text-secondary mt-0.5">
+            </h2>
+            <p className="text-xs text-[#8B949E] mt-0.5">
               Key metrics over time
             </p>
           </div>
 
           <div className="flex items-center gap-3">
             {/* Series Legend */}
-            <div className="hidden lg:flex items-center gap-2.5 text-[11px] text-text-secondary">
+            <div className="hidden lg:flex items-center gap-2.5 text-[11px] text-[#8B949E]">
               {SERIES.map((s) => (
                 <div key={s.key} className="flex items-center gap-1.5">
                   <span
@@ -100,15 +99,15 @@ export function DailyTrendChart({ trends }: DailyTrendChartProps) {
               ))}
             </div>
 
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-200 border border-studio-border-subtle text-xs text-text-secondary cursor-pointer hover:text-text-main transition-colors select-none">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#21262D] border border-[#30363D] text-xs text-[#8B949E] hover:text-[#C9D1D9] transition-colors cursor-pointer select-none">
               <span>All metrics</span>
-              <ChevronDown className="w-3 h-3 text-text-muted" />
+              <ChevronDown className="w-3 h-3 text-[#8B949E]" />
             </div>
           </div>
-        </CardHeader>
+        </div>
 
         {/* SVG Multi-Line Chart with Scrubber */}
-        <div className="relative pt-2">
+        <div className="relative pt-3">
           <svg
             viewBox={`0 0 ${width} ${height}`}
             className="w-full h-auto overflow-visible select-none"
@@ -129,7 +128,7 @@ export function DailyTrendChart({ trends }: DailyTrendChartProps) {
                   <text
                     x={paddingLeft - 8}
                     y={y + 3}
-                    fill="#707070"
+                    fill="#8B949E"
                     fontSize="10"
                     textAnchor="end"
                     fontFamily="monospace"
@@ -148,7 +147,7 @@ export function DailyTrendChart({ trends }: DailyTrendChartProps) {
                   key={t.date}
                   x={x}
                   y={height - 10}
-                  fill={hoveredIndex === idx ? '#EDEDED' : '#707070'}
+                  fill={hoveredIndex === idx ? '#F0F6FC' : '#8B949E'}
                   fontSize="10"
                   textAnchor="middle"
                   fontFamily="monospace"
@@ -167,7 +166,6 @@ export function DailyTrendChart({ trends }: DailyTrendChartProps) {
 
               const pathStr = points.reduce((acc, pt, idx) => {
                 if (idx === 0) return `M ${pt.x},${pt.y}`;
-                // Smooth line
                 const prev = points[idx - 1];
                 const cx = (prev.x + pt.x) / 2;
                 return `${acc} C ${cx},${prev.y} ${cx},${pt.y} ${pt.x},${pt.y}`;
@@ -231,13 +229,13 @@ export function DailyTrendChart({ trends }: DailyTrendChartProps) {
           {/* Interactive Floating Tooltip (Matching Image 1 & 2) */}
           {hoveredPoint && (
             <div
-              className="absolute pointer-events-none rounded-xl border border-studio-border-strong bg-[#1F242C]/95 p-3 shadow-2xl backdrop-blur text-xs space-y-2 transition-all z-20"
+              className="absolute pointer-events-none rounded-xl border border-[#30363D] bg-[#1F242C]/95 p-3 shadow-2xl backdrop-blur text-xs space-y-2 transition-all z-20"
               style={{
                 top: '15px',
                 left: `${Math.min(Math.max(15, (getX(hoveredIndex!) / width) * 100 - 15), 65)}%`,
               }}
             >
-              <div className="font-semibold text-text-main text-[11px] pb-1 border-b border-white/10 font-mono">
+              <div className="font-semibold text-[#F0F6FC] text-[11px] pb-1 border-b border-white/10 font-mono">
                 {hoveredPoint.label}, {new Date(hoveredPoint.date).getFullYear()}
               </div>
               <div className="space-y-1.5 font-mono text-[11px]">
@@ -248,9 +246,9 @@ export function DailyTrendChart({ trends }: DailyTrendChartProps) {
                         className="w-2 h-2 rounded-full shrink-0"
                         style={{ backgroundColor: s.color }}
                       />
-                      <span className="text-text-secondary">{s.label}</span>
+                      <span className="text-[#8B949E]">{s.label}</span>
                     </div>
-                    <span className="font-bold text-text-main tabular-nums">
+                    <span className="font-bold text-[#F0F6FC] tabular-nums">
                       {Number(hoveredPoint[s.key] || 0).toLocaleString()}
                     </span>
                   </div>
@@ -260,6 +258,6 @@ export function DailyTrendChart({ trends }: DailyTrendChartProps) {
           )}
         </div>
       </div>
-    </Card>
+    </div>
   );
 }

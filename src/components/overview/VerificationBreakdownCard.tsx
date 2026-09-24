@@ -3,7 +3,6 @@
 import React from 'react';
 import Link from 'next/link';
 import { VerificationBreakdown } from '@/services/analytics/overview-analytics.service';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 
 interface VerificationBreakdownCardProps {
   verification: VerificationBreakdown;
@@ -33,23 +32,23 @@ export function VerificationBreakdownCard({ verification }: VerificationBreakdow
   const unknownOffset = -(validDash + domainDash + invalidDash);
 
   return (
-    <Card className="p-4 sm:p-5 flex flex-col justify-between border border-border bg-surface-100">
+    <div className="rounded-xl border border-[#30363D] bg-[#161B22] p-4 sm:p-5 flex flex-col justify-between h-full">
       <div>
-        <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between space-y-0">
-          <CardTitle className="text-sm font-semibold text-text-main">
+        <div className="pb-3 flex flex-row items-center justify-between border-b border-[#30363D]/60">
+          <h2 className="text-sm font-semibold text-[#F0F6FC]">
             Verification Results
-          </CardTitle>
+          </h2>
 
           <Link
             href="/leads"
-            className="px-2 py-0.5 rounded text-[11px] font-medium bg-surface-200 border border-studio-border-subtle text-text-secondary hover:text-text-main transition-colors select-none"
+            className="px-2.5 py-1 rounded-lg bg-[#21262D] border border-[#30363D] text-xs text-[#8B949E] hover:text-[#C9D1D9] transition-colors select-none"
           >
             View details
           </Link>
-        </CardHeader>
+        </div>
 
         {/* Donut and Legend Grid */}
-        <div className="flex items-center justify-between gap-4 py-2">
+        <div className="flex items-center justify-between gap-4 py-3">
           {/* Donut Chart */}
           <div className="relative shrink-0 flex items-center justify-center">
             <svg width={size} height={size} className="transform -rotate-90">
@@ -121,10 +120,10 @@ export function VerificationBreakdownCard({ verification }: VerificationBreakdow
 
             {/* Center Label */}
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-              <span className="text-base sm:text-lg font-bold font-mono text-text-main tabular-nums leading-none">
+              <span className="text-xl font-bold font-mono text-[#F0F6FC] tabular-nums leading-none">
                 {verification.totalEmailsTested.toLocaleString()}
               </span>
-              <span className="text-[10px] text-text-muted font-mono mt-0.5">
+              <span className="text-[10px] text-[#8B949E] font-mono mt-0.5">
                 Emails found
               </span>
             </div>
@@ -135,13 +134,13 @@ export function VerificationBreakdownCard({ verification }: VerificationBreakdow
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-[#2EA043] shrink-0" />
-                <span className="text-text-secondary">Valid</span>
+                <span className="text-[#8B949E]">Valid</span>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="font-semibold text-text-main tabular-nums">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-[#F0F6FC] tabular-nums">
                   {verification.valid.toLocaleString()}
                 </span>
-                <span className="text-text-muted text-[11px] min-w-[38px] text-right">
+                <span className="text-[#8B949E] text-[11px] min-w-[38px] text-right">
                   {verification.validPercentage}%
                 </span>
               </div>
@@ -150,13 +149,13 @@ export function VerificationBreakdownCard({ verification }: VerificationBreakdow
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-[#388BFD] shrink-0" />
-                <span className="text-text-secondary">Domain Valid</span>
+                <span className="text-[#8B949E]">Domain Valid</span>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="font-semibold text-text-main tabular-nums">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-[#F0F6FC] tabular-nums">
                   {verification.domainValid.toLocaleString()}
                 </span>
-                <span className="text-text-muted text-[11px] min-w-[38px] text-right">
+                <span className="text-[#8B949E] text-[11px] min-w-[38px] text-right">
                   {verification.domainValidPercentage}%
                 </span>
               </div>
@@ -165,13 +164,13 @@ export function VerificationBreakdownCard({ verification }: VerificationBreakdow
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-[#F85149] shrink-0" />
-                <span className="text-text-secondary">Invalid</span>
+                <span className="text-[#8B949E]">Invalid</span>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="font-semibold text-text-main tabular-nums">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-[#F0F6FC] tabular-nums">
                   {verification.invalid.toLocaleString()}
                 </span>
-                <span className="text-text-muted text-[11px] min-w-[38px] text-right">
+                <span className="text-[#8B949E] text-[11px] min-w-[38px] text-right">
                   {verification.invalidPercentage}%
                 </span>
               </div>
@@ -180,13 +179,13 @@ export function VerificationBreakdownCard({ verification }: VerificationBreakdow
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-[#8B949E] shrink-0" />
-                <span className="text-text-secondary">Unknown</span>
+                <span className="text-[#8B949E]">Unknown</span>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="font-semibold text-text-main tabular-nums">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-[#F0F6FC] tabular-nums">
                   {verification.unknownOrFailed.toLocaleString()}
                 </span>
-                <span className="text-text-muted text-[11px] min-w-[38px] text-right">
+                <span className="text-[#8B949E] text-[11px] min-w-[38px] text-right">
                   {verification.unknownPercentage}%
                 </span>
               </div>
@@ -194,6 +193,6 @@ export function VerificationBreakdownCard({ verification }: VerificationBreakdow
           </div>
         </div>
       </div>
-    </Card>
+    </div>
   );
 }
