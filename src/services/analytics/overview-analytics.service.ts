@@ -546,34 +546,19 @@ export class OverviewAnalyticsService {
     const prevUnique = Number(prev.unique_channels || 0);
     const prevDuplicates = Math.max(0, prevRaw - prevUnique);
 
-    // 2. Build 11-Stage Centered Funnel matching the Reference Dashboard:
+    // 2. Build 9-Stage Centered Funnel matching Reference Image 1:
     // 1. Keywords Searched
     // 2. Raw Channels Found
     // 3. Unique Channels
-    // 4. Duplicates Removed
-    // 5. Channels Enriched
-    // 6. Emails Found
-    // 7. Emails Submitted
-    // 8. Verified (Valid + Domain)
-    // 9. Qualified Leads
-    // 10. Emails Sent
-    // 11. Replies
+    // 4. Channels Enriched
+    // 5. Emails Found
+    // 6. Verified Emails
+    // 7. Qualified Leads
+    // 8. Emails Sent
+    // 9. Replies
     const deliverableCount = Number(curr.valid_emails || 0) + Number(curr.domain_valid_emails || 0);
     const prevDeliverable = Number(prev.valid_emails || 0) + Number(prev.domain_valid_emails || 0);
-
-    const funnelColors = [
-      '#F06536', // Orange
-      '#F97316', // Bright Orange
-      '#F59E0B', // Amber
-      '#84CC16', // Lime
-      '#22C55E', // Green
-      '#10B981', // Emerald
-      '#06B6D4', // Cyan
-      '#0EA5E9', // Sky Blue
-      '#3B82F6', // Blue
-      '#6366F1', // Indigo
-      '#8B5CF6', // Purple
-    ];
+    const baseChannels = rawChannels > 0 ? rawChannels : (uniqueChannels > 0 ? uniqueChannels : 1);
 
     const stages: FunnelStage[] = [
       {
@@ -581,13 +566,13 @@ export class OverviewAnalyticsService {
         name: 'Keywords Searched',
         count: Number(curr.kw_searched || 0),
         previousCount: Number(prev.kw_searched || 0),
-        conversionFromPrev: null,
+        conversionFromPrev: 100,
         dropoffCount: 0,
         dropoffRate: 0,
         description: 'Keywords executed for YouTube search',
         linkHref: '/keywords',
         category: 'discovery',
-        barColor: funnelColors[0],
+        barColor: '#E55A2B',
       },
       {
         id: 'raw_channels',
@@ -600,124 +585,98 @@ export class OverviewAnalyticsService {
         description: 'Gross channels returned across queries',
         linkHref: '/leads',
         category: 'discovery',
-        barColor: funnelColors[1],
+        barColor: '#E55A2B',
       },
       {
         id: 'unique_channels',
         name: 'Unique Channels',
         count: uniqueChannels,
         previousCount: prevUnique,
-        conversionFromPrev: rawChannels > 0 ? Number(((uniqueChannels / rawChannels) * 100).toFixed(1)) : null,
+        conversionFromPrev: baseChannels > 0 ? Number(((uniqueChannels / baseChannels) * 100).toFixed(1)) : 0,
         dropoffCount: duplicatesRemoved,
-        dropoffRate: rawChannels > 0 ? Number(((duplicatesRemoved / rawChannels) * 100).toFixed(1)) : 0,
+        dropoffRate: baseChannels > 0 ? Number(((duplicatesRemoved / baseChannels) * 100).toFixed(1)) : 0,
         description: 'Distinct YouTube channels ingested',
         linkHref: '/leads',
         category: 'discovery',
-        barColor: funnelColors[2],
-      },
-      {
-        id: 'duplicates_removed',
-        name: 'Duplicates Removed',
-        count: duplicatesRemoved,
-        previousCount: prevDuplicates,
-        conversionFromPrev: rawChannels > 0 ? Number(((duplicatesRemoved / rawChannels) * 100).toFixed(1)) : null,
-        dropoffCount: 0,
-        dropoffRate: 0,
-        description: 'Duplicate channel sightings deduplicated',
-        linkHref: '/leads',
-        category: 'discovery',
-        barColor: funnelColors[3],
+        barColor: '#E86230',
       },
       {
         id: 'channels_enriched',
         name: 'Channels Enriched',
         count: Number(curr.enriched_channels || 0),
         previousCount: Number(prev.enriched_channels || 0),
-        conversionFromPrev: uniqueChannels > 0 ? Number(((curr.enriched_channels / uniqueChannels) * 100).toFixed(1)) : null,
+        conversionFromPrev: baseChannels > 0 ? Number(((Number(curr.enriched_channels || 0) / baseChannels) * 100).toFixed(1)) : 0,
         dropoffCount: Math.max(0, uniqueChannels - Number(curr.enriched_channels || 0)),
-        dropoffRate: uniqueChannels > 0 ? Number((((uniqueChannels - curr.enriched_channels) / uniqueChannels) * 100).toFixed(1)) : 0,
+        dropoffRate: baseChannels > 0 ? Number((((uniqueChannels - Number(curr.enriched_channels || 0)) / baseChannels) * 100).toFixed(1)) : 0,
         description: 'Channels with description & metadata scraped',
         linkHref: '/leads',
         category: 'enrichment',
-        barColor: funnelColors[4],
+        barColor: '#EB6B36',
       },
       {
         id: 'emails_found',
         name: 'Emails Found',
         count: Number(curr.emails_found || 0),
         previousCount: Number(prev.emails_found || 0),
-        conversionFromPrev: uniqueChannels > 0 ? Number(((curr.emails_found / uniqueChannels) * 100).toFixed(1)) : null,
-        dropoffCount: Math.max(0, uniqueChannels - Number(curr.emails_found || 0)),
-        dropoffRate: uniqueChannels > 0 ? Number((((uniqueChannels - curr.emails_found) / uniqueChannels) * 100).toFixed(1)) : 0,
+        conversionFromPrev: baseChannels > 0 ? Number(((Number(curr.emails_found || 0) / baseChannels) * 100).toFixed(1)) : 0,
+        dropoffCount: Math.max(0, Number(curr.enriched_channels || 0) - Number(curr.emails_found || 0)),
+        dropoffRate: baseChannels > 0 ? Number((((Number(curr.enriched_channels || 0) - Number(curr.emails_found || 0)) / baseChannels) * 100).toFixed(1)) : 0,
         description: 'Email addresses extracted from channels',
         linkHref: '/leads',
         category: 'enrichment',
-        barColor: funnelColors[5],
-      },
-      {
-        id: 'emails_submitted',
-        name: 'Emails Submitted',
-        count: Number(curr.emails_submitted || 0),
-        previousCount: Number(prev.valid_emails + prev.domain_valid_emails || 0),
-        conversionFromPrev: curr.emails_found > 0 ? Number(((curr.emails_submitted / curr.emails_found) * 100).toFixed(1)) : null,
-        dropoffCount: Math.max(0, Number(curr.emails_found || 0) - Number(curr.emails_submitted || 0)),
-        dropoffRate: curr.emails_found > 0 ? Number((((curr.emails_found - curr.emails_submitted) / curr.emails_found) * 100).toFixed(1)) : 0,
-        description: 'Emails routed to DNS/MX verification worker',
-        linkHref: '/leads',
-        category: 'verification',
-        barColor: funnelColors[6],
+        barColor: '#EE743C',
       },
       {
         id: 'verified',
-        name: 'Verified (Valid + Domain)',
+        name: 'Verified Emails',
         count: deliverableCount,
         previousCount: prevDeliverable,
-        conversionFromPrev: curr.emails_submitted > 0 ? Number(((deliverableCount / curr.emails_submitted) * 100).toFixed(1)) : null,
+        conversionFromPrev: baseChannels > 0 ? Number(((deliverableCount / baseChannels) * 100).toFixed(1)) : 0,
         dropoffCount: Number(curr.invalid_emails || 0),
-        dropoffRate: curr.emails_submitted > 0 ? Number(((Number(curr.invalid_emails || 0) / curr.emails_submitted) * 100).toFixed(1)) : 0,
+        dropoffRate: baseChannels > 0 ? Number(((Number(curr.invalid_emails || 0) / baseChannels) * 100).toFixed(1)) : 0,
         description: 'Deliverable addresses verified safe to send',
         linkHref: '/leads',
         category: 'verification',
-        barColor: funnelColors[7],
+        barColor: '#F07D42',
       },
       {
         id: 'qualified',
         name: 'Qualified Leads',
         count: Number(curr.qualified_leads || 0),
         previousCount: Number(prev.qualified_leads || 0),
-        conversionFromPrev: uniqueChannels > 0 ? Number(((curr.qualified_leads / uniqueChannels) * 100).toFixed(1)) : null,
+        conversionFromPrev: baseChannels > 0 ? Number(((Number(curr.qualified_leads || 0) / baseChannels) * 100).toFixed(1)) : 0,
         dropoffCount: Math.max(0, uniqueChannels - Number(curr.qualified_leads || 0)),
-        dropoffRate: uniqueChannels > 0 ? Number((((uniqueChannels - curr.qualified_leads) / uniqueChannels) * 100).toFixed(1)) : 0,
+        dropoffRate: baseChannels > 0 ? Number((((uniqueChannels - Number(curr.qualified_leads || 0)) / baseChannels) * 100).toFixed(1)) : 0,
         description: 'Channels meeting subscriber & email criteria',
         linkHref: '/leads?qualification=QUALIFIED',
         category: 'qualification',
-        barColor: funnelColors[8],
+        barColor: '#F38649',
       },
       {
         id: 'sent',
         name: 'Emails Sent',
         count: Number(curr.sent_messages || 0),
         previousCount: Number(prev.sent_messages || 0),
-        conversionFromPrev: curr.qualified_leads > 0 ? Number(((curr.sent_messages / curr.qualified_leads) * 100).toFixed(1)) : null,
+        conversionFromPrev: baseChannels > 0 ? Number(((Number(curr.sent_messages || 0) / baseChannels) * 100).toFixed(1)) : 0,
         dropoffCount: Math.max(0, Number(curr.qualified_leads || 0) - Number(curr.sent_messages || 0)),
-        dropoffRate: curr.qualified_leads > 0 ? Number((((curr.qualified_leads - curr.sent_messages) / curr.qualified_leads) * 100).toFixed(1)) : 0,
+        dropoffRate: baseChannels > 0 ? Number((((Number(curr.qualified_leads || 0) - Number(curr.sent_messages || 0)) / baseChannels) * 100).toFixed(1)) : 0,
         description: 'Personalized pitches sent via Gmail API',
         linkHref: '/sent',
         category: 'outreach',
-        barColor: funnelColors[9],
+        barColor: '#F59050',
       },
       {
         id: 'replies',
         name: 'Replies',
         count: Number(curr.total_replies || 0),
         previousCount: Number(prev.total_replies || 0),
-        conversionFromPrev: curr.sent_messages > 0 ? Number(((curr.total_replies / curr.sent_messages) * 100).toFixed(1)) : null,
+        conversionFromPrev: baseChannels > 0 ? Number(((Number(curr.total_replies || 0) / baseChannels) * 100).toFixed(1)) : 0,
         dropoffCount: Math.max(0, Number(curr.sent_messages || 0) - Number(curr.total_replies || 0)),
-        dropoffRate: curr.sent_messages > 0 ? Number((((curr.sent_messages - curr.total_replies) / curr.sent_messages) * 100).toFixed(1)) : 0,
+        dropoffRate: baseChannels > 0 ? Number((((Number(curr.sent_messages || 0) - Number(curr.total_replies || 0)) / baseChannels) * 100).toFixed(1)) : 0,
         description: 'Direct replies received from creators',
         linkHref: '/replies',
         category: 'outreach',
-        barColor: funnelColors[10],
+        barColor: '#F79A58',
       },
     ];
 

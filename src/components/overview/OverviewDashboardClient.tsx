@@ -2,9 +2,7 @@
 
 import React, { useState, useTransition } from 'react';
 import {
-  Calendar,
   RefreshCw,
-  ChevronDown,
   X,
   AlertTriangle,
 } from 'lucide-react';
@@ -118,13 +116,6 @@ export function OverviewDashboardClient({ initialData }: OverviewDashboardClient
 
         {/* Right Time Range Controls matching reference image */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Dropdown pill */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-100 border border-studio-border text-xs text-text-secondary cursor-pointer hover:text-text-main select-none">
-            <Calendar className="w-3.5 h-3.5 text-text-muted" />
-            <span>{data.timeRange.label}</span>
-            <ChevronDown className="w-3 h-3 text-text-muted ml-0.5" />
-          </div>
-
           {/* Time Filter Pills: [ Today ] [ 3D ] [ 7D ] [ 14D ] [ 30D ] [ Custom ] */}
           <div className="flex items-center p-0.5 bg-surface-100 rounded-lg border border-studio-border">
             {RANGE_OPTIONS.map((opt) => {

@@ -145,7 +145,7 @@ export function ProgressiveDisclosureSections({ data }: ProgressiveDisclosureSec
             <div className="space-y-3">
               <div className="flex items-center justify-between pb-2 border-b border-border text-xs">
                 <span className="font-semibold text-text-main">
-                  Granular Stage Audit (All 11 Pipeline Gates)
+                  Granular Stage Audit ({funnel.stages.length} Pipeline Stages)
                 </span>
                 <span className="font-mono text-text-muted text-[11px]">
                   Overall Conversion: {funnel.overallConversionRate}%
