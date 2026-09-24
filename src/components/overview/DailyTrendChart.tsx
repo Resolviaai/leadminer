@@ -248,6 +248,19 @@ export function DailyTrendChart({ trends }: DailyTrendChartProps) {
             {/* X-Axis Day Labels */}
             {trends.map((t, idx) => {
               const x = getX(idx);
+              const labelStep =
+                trends.length <= 8
+                  ? 1
+                  : trends.length <= 16
+                  ? 2
+                  : Math.ceil(trends.length / 7);
+              const isVisible =
+                idx % labelStep === 0 ||
+                idx === trends.length - 1 ||
+                hoveredIndex === idx;
+
+              if (!isVisible) return null;
+
               return (
                 <text
                   key={t.date}
@@ -286,17 +299,21 @@ export function DailyTrendChart({ trends }: DailyTrendChartProps) {
                     strokeWidth="2.5"
                     strokeLinecap="round"
                   />
-                  {points.map((pt, idx) => (
-                    <circle
-                      key={idx}
-                      cx={pt.x}
-                      cy={pt.y}
-                      r={hoveredIndex === idx ? '5' : '3.5'}
-                      fill={s.color}
-                      stroke="#1C1C1C"
-                      strokeWidth="2"
-                    />
-                  ))}
+                  {points.map((pt, idx) => {
+                    const showCircle = trends.length <= 14 || hoveredIndex === idx;
+                    if (!showCircle) return null;
+                    return (
+                      <circle
+                        key={idx}
+                        cx={pt.x}
+                        cy={pt.y}
+                        r={hoveredIndex === idx ? '5' : '3.5'}
+                        fill={s.color}
+                        stroke="#1C1C1C"
+                        strokeWidth="2"
+                      />
+                    );
+                  })}
                 </g>
               );
             })}

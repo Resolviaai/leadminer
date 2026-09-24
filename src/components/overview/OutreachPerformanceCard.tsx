@@ -12,6 +12,28 @@ interface OutreachPerformanceCardProps {
 export function OutreachPerformanceCard({ outreach }: OutreachPerformanceCardProps) {
   const bars = outreach.dailyBars || [];
 
+  // Responsive bar sizing and gap depending on number of days
+  const barWidthClass =
+    bars.length <= 8
+      ? 'w-3 sm:w-4 md:w-5'
+      : bars.length <= 16
+      ? 'w-2 sm:w-2.5 md:w-3'
+      : 'w-1 sm:w-1.5 md:w-2';
+
+  const barGapClass =
+    bars.length <= 8
+      ? 'gap-1 sm:gap-1.5'
+      : bars.length <= 16
+      ? 'gap-0.5 sm:gap-1'
+      : 'gap-0.5';
+
+  const labelStep =
+    bars.length <= 8
+      ? 1
+      : bars.length <= 16
+      ? 2
+      : Math.ceil(bars.length / 7);
+
   // Chart dimensions
   const chartHeight = 110;
   const maxVal = Math.max(
@@ -20,7 +42,7 @@ export function OutreachPerformanceCard({ outreach }: OutreachPerformanceCardPro
   );
 
   return (
-    <Card className="p-4 sm:p-5 flex flex-col justify-between border border-border bg-surface-100">
+    <Card className="p-4 sm:p-5 flex flex-col justify-between border border-border bg-surface-100 overflow-hidden">
       <div>
         <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between space-y-0">
           <CardTitle className="text-sm font-semibold text-text-main">
@@ -92,32 +114,41 @@ export function OutreachPerformanceCard({ outreach }: OutreachPerformanceCardPro
             </div>
 
             {/* Bars Grid */}
-            <div className="flex-1 flex items-end justify-between gap-1.5 sm:gap-2 h-full border-b border-border/80 pb-0.5">
-              {bars.map((bar) => {
-                const sentHeightPct = Math.max(4, Math.round((bar.sent / maxVal) * 100));
-                const replyHeightPct = Math.max(4, Math.round((bar.replies / maxVal) * 100));
+            <div className="flex-1 min-w-0 flex items-end justify-between gap-1 sm:gap-1.5 h-full border-b border-border/80 pb-0.5 overflow-hidden">
+              {bars.map((bar, idx) => {
+                const sentHeightPct = bar.sent > 0 ? Math.max(6, Math.round((bar.sent / maxVal) * 100)) : 0;
+                const replyHeightPct = bar.replies > 0 ? Math.max(6, Math.round((bar.replies / maxVal) * 100)) : 0;
+                const showLabel = idx % labelStep === 0 || idx === bars.length - 1;
 
                 return (
                   <div
                     key={bar.day}
-                    className="flex-1 flex flex-col items-center justify-end h-full gap-1 group"
+                    className="flex-1 min-w-0 flex flex-col items-center justify-end h-full gap-1 group"
                   >
-                    <div className="w-full flex items-end justify-center gap-1 sm:gap-1.5 h-[90px]">
+                    <div className={`w-full flex items-end justify-center ${barGapClass} h-[90px]`}>
                       {/* Sent Bar (Light Orange) */}
-                      <div
-                        className="w-3 sm:w-4 md:w-5 bg-[#F39462] rounded-t-sm transition-all duration-300 group-hover:brightness-110 shadow-sm"
-                        style={{ height: `${sentHeightPct}%` }}
-                        title={`Sent: ${bar.sent}`}
-                      />
+                      {sentHeightPct > 0 && (
+                        <div
+                          className={`${barWidthClass} bg-[#F39462] rounded-t-sm transition-all duration-300 group-hover:brightness-110 shadow-sm`}
+                          style={{ height: `${sentHeightPct}%` }}
+                          title={`Sent: ${bar.sent}`}
+                        />
+                      )}
                       {/* Reply Bar (Deep Orange) */}
-                      <div
-                        className="w-3 sm:w-4 md:w-5 bg-[#C8531E] rounded-t-sm transition-all duration-300 group-hover:brightness-110 shadow-sm"
-                        style={{ height: `${replyHeightPct}%` }}
-                        title={`Replies: ${bar.replies}`}
-                      />
+                      {replyHeightPct > 0 && (
+                        <div
+                          className={`${barWidthClass} bg-[#C8531E] rounded-t-sm transition-all duration-300 group-hover:brightness-110 shadow-sm`}
+                          style={{ height: `${replyHeightPct}%` }}
+                          title={`Replies: ${bar.replies}`}
+                        />
+                      )}
                     </div>
 
-                    <span className="text-[9px] font-mono text-text-muted truncate block mt-0.5">
+                    <span
+                      className={`text-[9px] font-mono text-text-muted truncate block mt-0.5 ${
+                        showLabel ? '' : 'invisible select-none'
+                      }`}
+                    >
                       {bar.label.split(' ')[1] || bar.label}
                     </span>
                   </div>
