@@ -15,11 +15,21 @@ export function VerificationBreakdownCard({ verification }: VerificationBreakdow
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
 
-  const total = Math.max(1, verification.totalEmailsTested);
+  const sumCategories =
+    verification.valid +
+    verification.domainValid +
+    verification.invalid +
+    verification.unknownOrFailed;
+  const total = Math.max(1, sumCategories || verification.totalEmailsTested);
   const validFrac = verification.valid / total;
   const domainFrac = verification.domainValid / total;
   const invalidFrac = verification.invalid / total;
   const unknownFrac = verification.unknownOrFailed / total;
+
+  const validPct = total > 0 ? Number(((verification.valid / total) * 100).toFixed(1)) : 0;
+  const domainPct = total > 0 ? Number(((verification.domainValid / total) * 100).toFixed(1)) : 0;
+  const invalidPct = total > 0 ? Number(((verification.invalid / total) * 100).toFixed(1)) : 0;
+  const unknownPct = total > 0 ? Number(((verification.unknownOrFailed / total) * 100).toFixed(1)) : 0;
 
   const validDash = validFrac * circumference;
   const domainDash = domainFrac * circumference;
@@ -114,7 +124,7 @@ export function VerificationBreakdownCard({ verification }: VerificationBreakdow
             {/* Center Label */}
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
               <span className="text-lg sm:text-xl font-bold font-mono text-text-main tabular-nums leading-none">
-                {verification.totalEmailsTested.toLocaleString()}
+                {total.toLocaleString()}
               </span>
               <span className="text-[10px] text-text-muted font-mono mt-1">
                 Emails found
@@ -134,7 +144,7 @@ export function VerificationBreakdownCard({ verification }: VerificationBreakdow
                   {verification.valid.toLocaleString()}
                 </span>
                 <span className="text-text-muted text-[11px] min-w-[38px] text-right">
-                  {verification.validPercentage}%
+                  {validPct}%
                 </span>
               </div>
             </div>
@@ -149,7 +159,7 @@ export function VerificationBreakdownCard({ verification }: VerificationBreakdow
                   {verification.domainValid.toLocaleString()}
                 </span>
                 <span className="text-text-muted text-[11px] min-w-[38px] text-right">
-                  {verification.domainValidPercentage}%
+                  {domainPct}%
                 </span>
               </div>
             </div>
@@ -164,7 +174,7 @@ export function VerificationBreakdownCard({ verification }: VerificationBreakdow
                   {verification.invalid.toLocaleString()}
                 </span>
                 <span className="text-text-muted text-[11px] min-w-[38px] text-right">
-                  {verification.invalidPercentage}%
+                  {invalidPct}%
                 </span>
               </div>
             </div>
@@ -179,7 +189,7 @@ export function VerificationBreakdownCard({ verification }: VerificationBreakdow
                   {verification.unknownOrFailed.toLocaleString()}
                 </span>
                 <span className="text-text-muted text-[11px] min-w-[38px] text-right">
-                  {verification.unknownPercentage}%
+                  {unknownPct}%
                 </span>
               </div>
             </div>

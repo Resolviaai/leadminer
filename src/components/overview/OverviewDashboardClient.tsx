@@ -180,31 +180,23 @@ export function OverviewDashboardClient({ initialData }: OverviewDashboardClient
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5">
         {/* Left Side: Pipeline Funnel + Daily Activity (8 cols) */}
         <div className="lg:col-span-8 flex flex-col gap-3.5">
-          <div className="flex-1">
-            <FunnelVisualization
-              stages={data.funnel.stages}
-              overallConversionRate={data.funnel.overallConversionRate}
-            />
-          </div>
-          <div className="flex-1">
-            <DailyTrendChart trends={data.trends} />
-          </div>
+          <FunnelVisualization
+            stages={data.funnel.stages}
+            overallConversionRate={data.funnel.overallConversionRate}
+          />
+          <DailyTrendChart trends={data.trends} />
         </div>
 
-        {/* Right Side: System Status + API Usage (4 cols) */}
+        {/* Right Side: System Status + API Usage + Verification Results (4 cols) */}
         <div className="lg:col-span-4 flex flex-col gap-3.5">
-          <div className="flex-1">
-            <SystemStatusCard system={data.system} />
-          </div>
-          <div className="flex-1">
-            <ApiUsageCard quota={data.quota} />
-          </div>
+          <SystemStatusCard system={data.system} />
+          <ApiUsageCard quota={data.quota} />
+          <VerificationBreakdownCard verification={data.verification} />
         </div>
       </div>
 
-      {/* ─── 3. LOWER SECTION: 3 METRIC CARDS ─── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-        <VerificationBreakdownCard verification={data.verification} />
+      {/* ─── 3. LOWER SECTION: OUTREACH PERFORMANCE + CONTENT SOURCES (2 CARDS EXPANDED) ─── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
         <OutreachPerformanceCard outreach={data.outreach} />
         <ContentSourcesCard sources={data.contentSources} />
       </div>

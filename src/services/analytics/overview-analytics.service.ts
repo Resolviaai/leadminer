@@ -332,10 +332,10 @@ export class OverviewAnalyticsService {
           (SELECT coalesce(sum(view_count), 0)::bigint FROM leads WHERE discovered_at >= ${startIso}::timestamptz AND discovered_at <= ${endIso}::timestamptz) as total_views,
           (SELECT count(*)::int FROM contacts WHERE contact_type = 'EMAIL' AND created_at >= ${startIso}::timestamptz AND created_at <= ${endIso}::timestamptz) as emails_found,
           (SELECT count(*)::int FROM contacts WHERE contact_type = 'EMAIL' AND created_at >= ${startIso}::timestamptz AND created_at <= ${endIso}::timestamptz AND (email_status != 'UNKNOWN' OR verification_timestamp IS NOT NULL)) as emails_submitted,
-          (SELECT count(*)::int FROM contacts WHERE contact_type = 'EMAIL' AND created_at >= ${startIso}::timestamptz AND created_at <= ${endIso}::timestamptz AND email_status = 'VALID') as valid_emails,
+          (SELECT count(*)::int FROM contacts WHERE contact_type = 'EMAIL' AND created_at >= ${startIso}::timestamptz AND created_at <= ${endIso}::timestamptz AND email_status IN ('VALID', 'MAILBOX_VERIFIED')) as valid_emails,
           (SELECT count(*)::int FROM contacts WHERE contact_type = 'EMAIL' AND created_at >= ${startIso}::timestamptz AND created_at <= ${endIso}::timestamptz AND email_status = 'DOMAIN_VALID') as domain_valid_emails,
           (SELECT count(*)::int FROM contacts WHERE contact_type = 'EMAIL' AND created_at >= ${startIso}::timestamptz AND created_at <= ${endIso}::timestamptz AND email_status = 'INVALID') as invalid_emails,
-          (SELECT count(*)::int FROM contacts WHERE contact_type = 'EMAIL' AND created_at >= ${startIso}::timestamptz AND created_at <= ${endIso}::timestamptz AND email_status IN ('UNKNOWN', 'FAILED', 'RISKY', 'DISPOSABLE')) as unknown_emails,
+          (SELECT count(*)::int FROM contacts WHERE contact_type = 'EMAIL' AND created_at >= ${startIso}::timestamptz AND created_at <= ${endIso}::timestamptz AND email_status NOT IN ('VALID', 'MAILBOX_VERIFIED', 'DOMAIN_VALID', 'INVALID')) as unknown_emails,
           (SELECT count(*)::int FROM leads WHERE qualification_status = 'QUALIFIED' AND discovered_at >= ${startIso}::timestamptz AND discovered_at <= ${endIso}::timestamptz) as qualified_leads,
           (SELECT count(*)::int FROM messages WHERE send_status = 'SENT' AND sent_at >= ${startIso}::timestamptz AND sent_at <= ${endIso}::timestamptz) as sent_messages,
           (SELECT count(*)::int FROM messages WHERE send_status = 'FAILED' AND created_at >= ${startIso}::timestamptz AND created_at <= ${endIso}::timestamptz) as failed_messages,
@@ -829,11 +829,11 @@ export class OverviewAnalyticsService {
     };
 
     // 6. Verification Breakdown
-    const totalTested = Number(curr.emails_submitted || 0);
     const validCount = Number(curr.valid_emails || 0);
     const domainValidCount = Number(curr.domain_valid_emails || 0);
     const invalidCount = Number(curr.invalid_emails || 0);
     const unknownCount = Number(curr.unknown_emails || 0);
+    const totalTested = (validCount + domainValidCount + invalidCount + unknownCount) || Number(curr.emails_found || 0);
 
     const safeTotalTested = Math.max(1, totalTested);
     const verification: VerificationBreakdown = {

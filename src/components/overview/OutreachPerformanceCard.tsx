@@ -102,16 +102,16 @@ export function OutreachPerformanceCard({ outreach }: OutreachPerformanceCardPro
                     key={bar.day}
                     className="flex-1 flex flex-col items-center justify-end h-full gap-1 group"
                   >
-                    <div className="w-full flex items-end justify-center gap-1 h-[90px]">
+                    <div className="w-full flex items-end justify-center gap-1 sm:gap-1.5 h-[90px]">
                       {/* Sent Bar (Light Orange) */}
                       <div
-                        className="w-3 sm:w-3.5 bg-[#F39462] rounded-t-sm transition-all duration-300 group-hover:brightness-110 shadow-sm"
+                        className="w-3 sm:w-4 md:w-5 bg-[#F39462] rounded-t-sm transition-all duration-300 group-hover:brightness-110 shadow-sm"
                         style={{ height: `${sentHeightPct}%` }}
                         title={`Sent: ${bar.sent}`}
                       />
                       {/* Reply Bar (Deep Orange) */}
                       <div
-                        className="w-3 sm:w-3.5 bg-[#C8531E] rounded-t-sm transition-all duration-300 group-hover:brightness-110 shadow-sm"
+                        className="w-3 sm:w-4 md:w-5 bg-[#C8531E] rounded-t-sm transition-all duration-300 group-hover:brightness-110 shadow-sm"
                         style={{ height: `${replyHeightPct}%` }}
                         title={`Replies: ${bar.replies}`}
                       />
