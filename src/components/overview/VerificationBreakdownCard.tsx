@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
 import { VerificationBreakdown } from '@/services/analytics/overview-analytics.service';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 
@@ -10,9 +9,9 @@ interface VerificationBreakdownCardProps {
 }
 
 export function VerificationBreakdownCard({ verification }: VerificationBreakdownCardProps) {
-  // Donut geometry
-  const size = 125;
-  const strokeWidth = 14;
+  // Donut geometry - bold, thick ring matching reference design
+  const size = 145;
+  const strokeWidth = 26;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
 
@@ -39,13 +38,6 @@ export function VerificationBreakdownCard({ verification }: VerificationBreakdow
           <CardTitle className="text-sm font-semibold text-text-main">
             Verification Results
           </CardTitle>
-
-          <Link
-            href="/leads"
-            className="px-2 py-0.5 rounded text-[11px] font-medium bg-surface-200 border border-studio-border-subtle text-text-secondary hover:text-text-main transition-colors select-none"
-          >
-            View details
-          </Link>
         </CardHeader>
 
         {/* Donut and Legend Grid */}
@@ -121,10 +113,10 @@ export function VerificationBreakdownCard({ verification }: VerificationBreakdow
 
             {/* Center Label */}
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-              <span className="text-base sm:text-lg font-bold font-mono text-text-main tabular-nums leading-none">
+              <span className="text-lg sm:text-xl font-bold font-mono text-text-main tabular-nums leading-none">
                 {verification.totalEmailsTested.toLocaleString()}
               </span>
-              <span className="text-[10px] text-text-muted font-mono mt-0.5">
+              <span className="text-[10px] text-text-muted font-mono mt-1">
                 Emails found
               </span>
             </div>

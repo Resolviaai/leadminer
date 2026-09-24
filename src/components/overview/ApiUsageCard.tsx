@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
 import { Clock } from 'lucide-react';
 import { QuotaAnalytics } from '@/services/analytics/overview-analytics.service';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -11,9 +10,9 @@ interface ApiUsageCardProps {
 }
 
 export function ApiUsageCard({ quota }: ApiUsageCardProps) {
-  // Donut geometry
-  const size = 130;
-  const strokeWidth = 14;
+  // Donut geometry - bold, thick ring matching design system & Verification chart
+  const size = 145;
+  const strokeWidth = 26;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
 
@@ -39,13 +38,6 @@ export function ApiUsageCard({ quota }: ApiUsageCardProps) {
           <CardTitle className="text-sm font-semibold text-text-main">
             API Usage
           </CardTitle>
-
-          <Link
-            href="/settings"
-            className="px-2 py-0.5 rounded text-[11px] font-medium bg-surface-200 border border-studio-border-subtle text-text-secondary hover:text-text-main transition-colors select-none"
-          >
-            View details
-          </Link>
         </CardHeader>
 
         {/* Donut and Legend Grid */}

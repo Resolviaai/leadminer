@@ -7,7 +7,6 @@ import {
   Link as LinkIcon,
   Twitter,
   Globe,
-  ChevronDown,
 } from 'lucide-react';
 import { ContentSourceItem } from '@/services/analytics/overview-analytics.service';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -59,21 +58,16 @@ export function ContentSourcesCard({ sources }: ContentSourcesCardProps) {
           <CardTitle className="text-sm font-semibold text-text-main">
             Content Sources
           </CardTitle>
-
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-surface-200 border border-studio-border-subtle text-text-secondary cursor-pointer hover:text-text-main transition-colors select-none">
-            <span>Email sources</span>
-            <ChevronDown className="w-3 h-3 text-text-muted" />
-          </div>
         </CardHeader>
 
         {/* Sources List */}
-        <div className="space-y-3 pt-2">
+        <div className="space-y-3.5 pt-1">
           {sources.map((item) => (
-            <div key={item.id} className="space-y-1">
+            <div key={item.id} className="space-y-1.5">
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2 min-w-0">
                   {getIcon(item.iconType)}
-                  <span className="text-text-secondary truncate">{item.label}</span>
+                  <span className="text-text-secondary truncate font-medium">{item.label}</span>
                 </div>
 
                 <div className="flex items-center gap-3 font-mono shrink-0">
@@ -86,10 +80,10 @@ export function ContentSourcesCard({ sources }: ContentSourcesCardProps) {
                 </div>
               </div>
 
-              {/* Progress Bar */}
-              <div className="w-full h-1.5 bg-surface-200 rounded-full overflow-hidden">
+              {/* Progress Bar (Bold, rounded capsule matching reference design) */}
+              <div className="w-full h-2.5 bg-surface-200/80 rounded-full overflow-hidden border border-studio-border-subtle/50">
                 <div
-                  className="h-full bg-[#F06536] rounded-full transition-all duration-500"
+                  className="h-full bg-gradient-to-r from-[#E55A2B] to-[#F06536] rounded-full transition-all duration-500 shadow-sm"
                   style={{ width: `${Math.max(2, item.percentage)}%` }}
                 />
               </div>

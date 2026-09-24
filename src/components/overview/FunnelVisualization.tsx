@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { ChevronDown, ArrowUpRight } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 import { FunnelStage } from '@/services/analytics/overview-analytics.service';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -55,11 +55,6 @@ export function FunnelVisualization({ stages }: FunnelVisualizationProps) {
             <p className="text-xs text-text-secondary mt-0.5">
               From keywords to replies. See where leads drop off.
             </p>
-          </div>
-
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-200 border border-studio-border-subtle text-xs text-text-secondary cursor-pointer hover:text-text-main transition-colors select-none">
-            <span>Conversion funnel</span>
-            <ChevronDown className="w-3 h-3 text-text-muted" />
           </div>
         </CardHeader>
 
