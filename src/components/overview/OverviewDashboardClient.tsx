@@ -15,7 +15,6 @@ import { FunnelVisualization } from './FunnelVisualization';
 import { DailyTrendChart } from './DailyTrendChart';
 import { SystemStatusCard } from './SystemStatusCard';
 import { ApiUsageCard } from './ApiUsageCard';
-import { InsightsAnomalies } from './InsightsAnomalies';
 import { VerificationBreakdownCard } from './VerificationBreakdownCard';
 import { OutreachPerformanceCard } from './OutreachPerformanceCard';
 import { ContentSourcesCard } from './ContentSourcesCard';
@@ -192,11 +191,14 @@ export function OverviewDashboardClient({ initialData }: OverviewDashboardClient
           </div>
         </div>
 
-        {/* Right Side: System Status + API Usage + Insights (4 cols) */}
+        {/* Right Side: System Status + API Usage (4 cols) */}
         <div className="lg:col-span-4 flex flex-col gap-3.5">
-          <SystemStatusCard system={data.system} />
-          <ApiUsageCard quota={data.quota} />
-          <InsightsAnomalies insights={data.insights} />
+          <div className="flex-1">
+            <SystemStatusCard system={data.system} />
+          </div>
+          <div className="flex-1">
+            <ApiUsageCard quota={data.quota} />
+          </div>
         </div>
       </div>
 
