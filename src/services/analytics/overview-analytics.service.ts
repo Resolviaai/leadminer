@@ -254,7 +254,7 @@ export class OverviewAnalyticsService {
 
   private calcPctChange(curr: number, prev: number): number | null {
     if (prev === 0) {
-      return null;
+      return curr > 0 ? 100 : 0;
     }
     return Number((((curr - prev) / prev) * 100).toFixed(1));
   }
@@ -562,17 +562,17 @@ export class OverviewAnalyticsService {
     const prevDeliverable = Number(prev.valid_emails || 0) + Number(prev.domain_valid_emails || 0);
 
     const funnelColors = [
-      '#F06536', // 1. Keywords: Deep brand orange
-      '#FA7035', // 2. Raw Channels: Warm orange
-      '#FFB74D', // 3. Unique Channels: Amber orange
-      '#81C784', // 4. Duplicates Removed: Sage green
-      '#80CBC4', // 5. Channels Enriched: Mint teal
-      '#4DB6AC', // 6. Emails Found: Teal
-      '#26A69A', // 7. Emails Submitted: Cyan teal
-      '#4FC3F7', // 8. Verified (Valid+Domain): Sky blue
-      '#42A5F5', // 9. Qualified Leads: Blue
-      '#5C6BC0', // 10. Emails Sent: Indigo blue
-      '#AB47BC', // 11. Replies: Purple
+      '#F06536', // Orange
+      '#F97316', // Bright Orange
+      '#F59E0B', // Amber
+      '#84CC16', // Lime
+      '#22C55E', // Green
+      '#10B981', // Emerald
+      '#06B6D4', // Cyan
+      '#0EA5E9', // Sky Blue
+      '#3B82F6', // Blue
+      '#6366F1', // Indigo
+      '#8B5CF6', // Purple
     ];
 
     const stages: FunnelStage[] = [

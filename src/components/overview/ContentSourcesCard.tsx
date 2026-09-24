@@ -10,6 +10,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { ContentSourceItem } from '@/services/analytics/overview-analytics.service';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 
 interface ContentSourcesCardProps {
   sources: ContentSourceItem[];
@@ -26,13 +27,13 @@ export function ContentSourcesCard({ sources }: ContentSourcesCardProps) {
         );
       case 'video':
         return (
-          <div className="w-5 h-5 rounded bg-[#21262D] text-[#8B949E] flex items-center justify-center shrink-0">
+          <div className="w-5 h-5 rounded bg-surface-200 text-text-muted flex items-center justify-center shrink-0">
             <PlaySquare className="w-3.5 h-3.5" />
           </div>
         );
       case 'website':
         return (
-          <div className="w-5 h-5 rounded bg-[#21262D] text-[#8B949E] flex items-center justify-center shrink-0">
+          <div className="w-5 h-5 rounded bg-surface-200 text-text-muted flex items-center justify-center shrink-0">
             <LinkIcon className="w-3.5 h-3.5" />
           </div>
         );
@@ -44,7 +45,7 @@ export function ContentSourcesCard({ sources }: ContentSourcesCardProps) {
         );
       default:
         return (
-          <div className="w-5 h-5 rounded bg-[#21262D] text-[#8B949E] flex items-center justify-center shrink-0">
+          <div className="w-5 h-5 rounded bg-surface-200 text-text-muted flex items-center justify-center shrink-0">
             <Globe className="w-3.5 h-3.5" />
           </div>
         );
@@ -52,41 +53,41 @@ export function ContentSourcesCard({ sources }: ContentSourcesCardProps) {
   };
 
   return (
-    <div className="rounded-xl border border-[#30363D] bg-[#161B22] p-4 sm:p-5 flex flex-col justify-between h-full">
+    <Card className="p-4 sm:p-5 flex flex-col justify-between border border-border bg-surface-100">
       <div>
-        <div className="pb-3 flex flex-row items-center justify-between border-b border-[#30363D]/60">
-          <h2 className="text-sm font-semibold text-[#F0F6FC]">
+        <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between space-y-0">
+          <CardTitle className="text-sm font-semibold text-text-main">
             Content Sources
-          </h2>
+          </CardTitle>
 
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#21262D] border border-[#30363D] text-xs text-[#8B949E] hover:text-[#C9D1D9] transition-colors cursor-pointer select-none">
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-surface-200 border border-studio-border-subtle text-text-secondary cursor-pointer hover:text-text-main transition-colors select-none">
             <span>Email sources</span>
-            <ChevronDown className="w-3 h-3 text-[#8B949E]" />
+            <ChevronDown className="w-3 h-3 text-text-muted" />
           </div>
-        </div>
+        </CardHeader>
 
-        {/* Sources List matching Image 1 & 2 */}
-        <div className="space-y-2.5 pt-3">
+        {/* Sources List */}
+        <div className="space-y-3 pt-2">
           {sources.map((item) => (
             <div key={item.id} className="space-y-1">
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2 min-w-0">
                   {getIcon(item.iconType)}
-                  <span className="text-[#C9D1D9] text-xs truncate">{item.label}</span>
+                  <span className="text-text-secondary truncate">{item.label}</span>
                 </div>
 
-                <div className="flex items-center gap-2.5 font-mono shrink-0">
-                  <span className="font-semibold text-[#F0F6FC] tabular-nums">
+                <div className="flex items-center gap-3 font-mono shrink-0">
+                  <span className="font-semibold text-text-main tabular-nums">
                     {item.count.toLocaleString()}
                   </span>
-                  <span className="text-[#8B949E] text-[11px] min-w-[38px] text-right">
+                  <span className="text-text-muted text-[11px] min-w-[38px] text-right">
                     {item.percentage}%
                   </span>
                 </div>
               </div>
 
               {/* Progress Bar */}
-              <div className="w-full h-1.5 bg-[#21262D] rounded-full overflow-hidden">
+              <div className="w-full h-1.5 bg-surface-200 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-[#F06536] rounded-full transition-all duration-500"
                   style={{ width: `${Math.max(2, item.percentage)}%` }}
@@ -96,6 +97,6 @@ export function ContentSourcesCard({ sources }: ContentSourcesCardProps) {
           ))}
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

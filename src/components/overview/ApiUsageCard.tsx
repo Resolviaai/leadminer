@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { Clock } from 'lucide-react';
 import { QuotaAnalytics } from '@/services/analytics/overview-analytics.service';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 
 interface ApiUsageCardProps {
   quota: QuotaAnalytics;
@@ -11,7 +12,7 @@ interface ApiUsageCardProps {
 
 export function ApiUsageCard({ quota }: ApiUsageCardProps) {
   // Donut geometry
-  const size = 120;
+  const size = 130;
   const strokeWidth = 14;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -32,23 +33,23 @@ export function ApiUsageCard({ quota }: ApiUsageCardProps) {
   const otherOffset = -(searchDash + channelsDash);
 
   return (
-    <div className="rounded-xl border border-[#30363D] bg-[#161B22] p-4 sm:p-5 flex flex-col justify-between h-full">
+    <Card className="p-4 sm:p-5 flex flex-col justify-between border border-border bg-surface-100">
       <div>
-        <div className="pb-3 flex flex-row items-center justify-between border-b border-[#30363D]/60">
-          <h2 className="text-sm font-semibold text-[#F0F6FC]">
+        <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between space-y-0">
+          <CardTitle className="text-sm font-semibold text-text-main">
             API Usage
-          </h2>
+          </CardTitle>
 
           <Link
             href="/settings"
-            className="px-2.5 py-1 rounded-lg bg-[#21262D] border border-[#30363D] text-xs text-[#8B949E] hover:text-[#C9D1D9] transition-colors select-none"
+            className="px-2 py-0.5 rounded text-[11px] font-medium bg-surface-200 border border-studio-border-subtle text-text-secondary hover:text-text-main transition-colors select-none"
           >
             View details
           </Link>
-        </div>
+        </CardHeader>
 
-        {/* Donut and Legend Grid matching Image 1 & 2 */}
-        <div className="flex items-center justify-between gap-4 py-3">
+        {/* Donut and Legend Grid */}
+        <div className="flex items-center justify-between gap-4 py-2">
           {/* Donut Chart */}
           <div className="relative shrink-0 flex items-center justify-center">
             <svg width={size} height={size} className="transform -rotate-90">
@@ -73,6 +74,7 @@ export function ApiUsageCard({ quota }: ApiUsageCardProps) {
                   strokeWidth={strokeWidth}
                   strokeDasharray={`${searchDash} ${circumference}`}
                   strokeDashoffset={searchOffset}
+                  strokeLinecap="round"
                 />
               )}
 
@@ -90,7 +92,7 @@ export function ApiUsageCard({ quota }: ApiUsageCardProps) {
                 />
               )}
 
-              {/* Other segment (Coral) */}
+              {/* Other segment (Red) */}
               {otherDash > 0 && (
                 <circle
                   cx={size / 2}
@@ -107,13 +109,13 @@ export function ApiUsageCard({ quota }: ApiUsageCardProps) {
 
             {/* Center Label */}
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-              <span className="text-xl font-bold font-mono text-[#F0F6FC] tabular-nums leading-none">
+              <span className="text-base sm:text-lg font-bold font-mono text-text-main tabular-nums leading-none">
                 {quota.totalUnitsUsed.toLocaleString()}
               </span>
-              <span className="text-[10px] text-[#8B949E] font-mono mt-0.5">
+              <span className="text-[10px] text-text-muted font-mono mt-0.5">
                 / {quota.totalUnitsLimit.toLocaleString()} units
               </span>
-              <span className="text-[9px] font-mono text-[#8B949E] mt-0.5">
+              <span className="text-[9px] font-mono text-text-secondary mt-0.5">
                 {quota.totalUnitsPercentage}% used
               </span>
             </div>
@@ -123,30 +125,30 @@ export function ApiUsageCard({ quota }: ApiUsageCardProps) {
           <div className="space-y-2 text-xs font-mono flex-1">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-[#F06536] shrink-0" />
-                <span className="text-[#8B949E]">Search API</span>
+                <span className="w-2 h-2 rounded-sm bg-[#F06536] shrink-0" />
+                <span className="text-text-secondary">Search API</span>
               </div>
-              <span className="font-semibold text-[#F0F6FC] tabular-nums">
+              <span className="font-semibold text-text-main tabular-nums">
                 {quota.searchApiUnits.toLocaleString()}
               </span>
             </div>
 
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-[#388BFD] shrink-0" />
-                <span className="text-[#8B949E]">Channels API</span>
+                <span className="w-2 h-2 rounded-sm bg-[#388BFD] shrink-0" />
+                <span className="text-text-secondary">Channels API</span>
               </div>
-              <span className="font-semibold text-[#F0F6FC] tabular-nums">
+              <span className="font-semibold text-text-main tabular-nums">
                 {quota.channelsApiUnits.toLocaleString()}
               </span>
             </div>
 
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-[#F85149] shrink-0" />
-                <span className="text-[#8B949E]">Other</span>
+                <span className="w-2 h-2 rounded-sm bg-[#F85149] shrink-0" />
+                <span className="text-text-secondary">Other</span>
               </div>
-              <span className="font-semibold text-[#F0F6FC] tabular-nums">
+              <span className="font-semibold text-text-main tabular-nums">
                 {quota.otherApiUnits.toLocaleString()}
               </span>
             </div>
@@ -155,12 +157,12 @@ export function ApiUsageCard({ quota }: ApiUsageCardProps) {
       </div>
 
       {/* Bottom Reset Banner */}
-      <div className="pt-2.5 mt-2 border-t border-[#30363D]/60 flex items-center gap-1.5 text-[11px] text-[#8B949E]">
-        <Clock className="w-3.5 h-3.5 text-[#8B949E] shrink-0" />
+      <div className="pt-2.5 mt-2 border-t border-border flex items-center gap-1.5 text-[11px] text-text-muted">
+        <Clock className="w-3.5 h-3.5 text-text-secondary shrink-0" />
         <span className="truncate">
-          <strong className="text-[#F0F6FC] font-mono">{quota.unitsRemaining.toLocaleString()}</strong> units remaining · Resets in {quota.resetsInHours}h (Midnight PT)
+          <strong className="text-text-main font-mono">{quota.unitsRemaining.toLocaleString()}</strong> units remaining · Resets in {quota.resetsInHours}h (Midnight PT)
         </span>
       </div>
-    </div>
+    </Card>
   );
 }
