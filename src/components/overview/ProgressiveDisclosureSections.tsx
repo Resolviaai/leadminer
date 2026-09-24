@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   BarChart3,
   Settings2,
@@ -26,10 +26,40 @@ type DrawerKey = 'pipeline' | 'system' | 'quota' | 'outreach' | 'quality' | null
 
 export function ProgressiveDisclosureSections({ data }: ProgressiveDisclosureSectionsProps) {
   const [openDrawer, setOpenDrawer] = useState<DrawerKey>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const toggleDrawer = (key: DrawerKey) => {
     setOpenDrawer((prev) => (prev === key ? null : key));
   };
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent | TouchEvent) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
+        setOpenDrawer(null);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setOpenDrawer(null);
+      }
+    }
+
+    if (openDrawer !== null) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [openDrawer]);
 
   const { funnel, system, quota, outreach, dataQuality, verification } = data;
 
@@ -67,7 +97,7 @@ export function ProgressiveDisclosureSections({ data }: ProgressiveDisclosureSec
   ];
 
   return (
-    <div className="space-y-3">
+    <div ref={containerRef} className="space-y-3">
       {/* 5 Drawers Row */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {DRAWERS.map((d) => {
