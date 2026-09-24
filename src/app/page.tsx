@@ -28,13 +28,56 @@ import {
 
 export default function LandingPage() {
   const [emailInput, setEmailInput] = useState('');
-
-  // Active showcase step
   const [activeShowcase, setActiveShowcase] = useState(0);
 
   // Animated KPI numbers
   const [leadsFound, setLeadsFound] = useState(1200);
   const [verifiedEmails, setVerifiedEmails] = useState(860);
+
+  // Client auth & device detection
+  const [isClientRedirecting, setIsClientRedirecting] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isExplicitLanding, setIsExplicitLanding] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const explicit = params.get('view') === 'landing' || params.get('landing') === 'true';
+      setIsExplicitLanding(explicit);
+
+      const hasAuth =
+        document.cookie.includes('lm_auth=1') ||
+        localStorage.getItem('leadminer_logged_in') === 'true';
+      setIsLoggedIn(hasAuth);
+
+      // If user specifically requested to view landing page, never redirect
+      if (explicit) return;
+
+      const isStandalone =
+        window.matchMedia('(display-mode: standalone)').matches ||
+        (window.navigator as any).standalone === true ||
+        document.referrer.includes('android-app://');
+
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(
+        navigator.userAgent
+      );
+
+      // Save PWA standalone cookie for server-side middleware
+      if (isStandalone) {
+        document.cookie = 'lm_pwa=1; path=/; max-age=31536000; SameSite=Lax';
+      }
+
+      // If user is already authenticated on mobile or in installed PWA, bypass landing page
+      if ((isStandalone || isMobile) && hasAuth) {
+        setIsClientRedirecting(true);
+        window.location.replace('/overview');
+      }
+    } catch {
+      // safe fallback
+    }
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -44,8 +87,40 @@ export default function LandingPage() {
     return () => clearInterval(timer);
   }, []);
 
+  if (isClientRedirecting) {
+    return (
+      <div className="min-h-screen bg-[#161616] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[#C46A3A]/20 border border-[#C46A3A]/30 flex items-center justify-center animate-pulse">
+            <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 stroke-[#C46A3A] stroke-[2.2]">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+          <span className="text-xs font-mono text-neutral-400">Opening LeadMiner…</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#FAFAF9] text-neutral-900 font-sans selection:bg-[#C46A3A]/20 selection:text-[#C46A3A] relative overflow-x-hidden">
+      {/* ─── EXPLICIT LANDING PREVIEW BANNER (When navigated from within app) ─── */}
+      {isExplicitLanding && (
+        <div className="bg-[#1C1C1C] text-neutral-200 border-b border-neutral-800 px-4 py-2 text-xs flex items-center justify-between sticky top-0 z-50 shadow-md">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#C46A3A]" />
+            <span>Public Landing Page Preview</span>
+          </div>
+          <Link
+            href="/overview"
+            className="font-semibold text-[#C46A3A] hover:underline flex items-center gap-1 text-xs"
+          >
+            <span>Return to Dashboard</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      )}
+
       {/* ─── GLOBAL BACKGROUND GRID PATTERN ─── */}
       <div
         className="absolute inset-0 pointer-events-none z-0"
@@ -92,16 +167,16 @@ export default function LandingPage() {
         {/* Right CTA */}
         <div className="flex items-center gap-4">
           <Link
-            href="/overview"
+            href={isLoggedIn ? '/overview' : '/login'}
             className="text-sm font-medium text-neutral-600 hover:text-neutral-900 transition-colors px-2 py-1"
           >
-            Sign in
+            {isLoggedIn ? 'Dashboard' : 'Sign in'}
           </Link>
           <Link
             href="/overview"
             className="inline-flex items-center gap-1.5 bg-[#C46A3A] hover:bg-[#D17A45] text-white text-sm font-medium rounded-full px-5 py-2.5 shadow-sm hover:shadow transition-all hover:scale-[1.02] active:scale-[0.98]"
           >
-            <span>Open LeadMiner</span>
+            <span>{isLoggedIn ? 'Open Dashboard' : 'Open LeadMiner'}</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>

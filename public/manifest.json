@@ -3,10 +3,27 @@
   "short_name": "LeadMiner",
   "description": "YouTube lead-generation & cold outreach engine",
   "id": "leadminer-pwa",
-  "start_url": "/overview",
+  "start_url": "/overview?source=pwa",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "url": "/overview?source=pwa",
+      "description": "Open LeadMiner Dashboard"
+    },
+    {
+      "name": "Leads",
+      "url": "/leads?source=pwa",
+      "description": "View Discovered Leads"
+    },
+    {
+      "name": "Campaigns",
+      "url": "/campaigns?source=pwa",
+      "description": "Manage Campaigns"
+    }
+  ],
   "background_color": "#0E1117",
   "theme_color": "#C46A3A",
   "categories": ["business", "productivity"],

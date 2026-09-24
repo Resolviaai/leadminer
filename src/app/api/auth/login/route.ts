@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { validateLoginCredentialsAsync, createSessionCookie } from '../../../../lib/api-auth';
+import { validateLoginCredentialsAsync, createSessionCookie, createClientAuthCookie } from '../../../../lib/api-auth';
 import { checkRateLimit, getClientIp } from '../../../../lib/rate-limiter';
 
 export const dynamic = 'force-dynamic';
@@ -40,7 +40,8 @@ export async function POST(req: NextRequest) {
     }
 
     const res = NextResponse.json({ success: true });
-    res.headers.set('Set-Cookie', createSessionCookie(email));
+    res.headers.append('Set-Cookie', createSessionCookie(email));
+    res.headers.append('Set-Cookie', createClientAuthCookie());
     return res;
   } catch (err: any) {
     console.error('[Login] Error:', err.message);

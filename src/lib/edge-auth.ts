@@ -88,12 +88,14 @@ export async function createSessionCookieEdge(
     .replace(/=+$/, '');
   const token = `${data}.${sig}`;
 
+  const expiresDate = new Date(now + SESSION_DURATION_MS).toUTCString();
   const parts = [
     `${COOKIE_NAME}=${token}`,
     'Path=/',
     'HttpOnly',
     'SameSite=Lax',
     `Max-Age=${Math.floor(SESSION_DURATION_MS / 1000)}`,
+    `Expires=${expiresDate}`,
   ];
   if (isProduction) parts.push('Secure');
   return parts.join('; ');

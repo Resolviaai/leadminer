@@ -46,6 +46,33 @@ import { AppShell } from '../components/AppShell';
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
+      <head>
+        {/* Instant PWA & Mobile Standalone Authentication Redirect */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true || document.referrer.indexOf('android-app://') !== -1;
+                  var isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(navigator.userAgent);
+                  if (isStandalone) {
+                    document.cookie = 'lm_pwa=1; path=/; max-age=31536000; SameSite=Lax';
+                  }
+                  if (window.location.pathname === '/' && (isStandalone || isMobile)) {
+                    var params = new URLSearchParams(window.location.search);
+                    if (params.get('view') !== 'landing' && params.get('landing') !== 'true') {
+                      var hasAuth = document.cookie.indexOf('lm_auth=1') !== -1 || localStorage.getItem('leadminer_logged_in') === 'true';
+                      if (hasAuth) {
+                        window.location.replace('/overview');
+                      }
+                    }
+                  }
+                } catch(e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
       <body className="bg-studio text-text-main min-h-screen antialiased selection:bg-primary/20 selection:text-primary">
         {/* Top Navigation Progress Indicator */}
         <TopProgressBar />

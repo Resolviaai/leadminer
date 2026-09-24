@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from 'next/link';
 import { db } from '../../db/client';
 import { systemSettings } from '../../db/schema';
 import { eq } from 'drizzle-orm';
@@ -14,6 +15,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   XCircle,
+  Globe,
+  ExternalLink,
 } from 'lucide-react';
 import { runHealthCheck } from '../../scripts/healthcheck';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -174,6 +177,29 @@ export default async function SettingsPage() {
                 : 'Real email dispatch enabled. Outbound emails are sent live to creators.'}
             </p>
           </div>
+        </div>
+      </Card>
+
+      {/* PWA & Public Site Card */}
+      <Card className="p-4 sm:p-5 border-border">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-text-main flex items-center gap-2">
+              <Globe className="w-4 h-4 text-primary" />
+              <span>Public Landing Page & PWA</span>
+            </h2>
+            <p className="text-xs text-text-secondary mt-0.5">
+              The public marketing landing page is available anytime without disturbing your mobile PWA session.
+            </p>
+          </div>
+          <Link
+            href="/?view=landing"
+            target="_blank"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-surface-200 hover:bg-surface-300 text-xs font-medium text-text-main transition-all shrink-0"
+          >
+            <span>View Landing Page</span>
+            <ExternalLink className="w-3.5 h-3.5 text-text-muted" />
+          </Link>
         </div>
       </Card>
     </div>

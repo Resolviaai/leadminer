@@ -113,6 +113,7 @@ export function createSessionCookie(email: string): string {
   const now = Date.now();
   const payload: SessionPayload = { email, iat: now, exp: now + SESSION_DURATION_MS };
   const token = signPayload(payload);
+  const expiresDate = new Date(now + SESSION_DURATION_MS).toUTCString();
 
   const isProduction = env.NODE_ENV === 'production';
   const parts = [
@@ -121,6 +122,7 @@ export function createSessionCookie(email: string): string {
     'HttpOnly',
     'SameSite=Lax',
     `Max-Age=${Math.floor(SESSION_DURATION_MS / 1000)}`,
+    `Expires=${expiresDate}`,
   ];
   if (isProduction) parts.push('Secure');
 
@@ -128,10 +130,36 @@ export function createSessionCookie(email: string): string {
 }
 
 /**
+ * Lightweight client-readable companion cookie so client components & inline scripts
+ * know the user is authenticated without having to make an async API fetch.
+ */
+export function createClientAuthCookie(): string {
+  const now = Date.now();
+  const expiresDate = new Date(now + SESSION_DURATION_MS).toUTCString();
+  const isProduction = env.NODE_ENV === 'production';
+  const parts = [
+    'lm_auth=1',
+    'Path=/',
+    'SameSite=Lax',
+    `Max-Age=${Math.floor(SESSION_DURATION_MS / 1000)}`,
+    `Expires=${expiresDate}`,
+  ];
+  if (isProduction) parts.push('Secure');
+  return parts.join('; ');
+}
+
+/**
  * Cookie value to clear the session.
  */
 export function clearSessionCookie(): string {
-  return `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
+  return `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+}
+
+/**
+ * Cookie value to clear client-readable auth state.
+ */
+export function clearClientAuthCookie(): string {
+  return `lm_auth=; Path=/; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT`;
 }
 
 /**

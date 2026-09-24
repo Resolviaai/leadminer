@@ -71,6 +71,27 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL(destination, req.url));
   }
 
+  // Intelligent PWA & Mobile Handling for root '/'
+  if (pathname === '/') {
+    const viewParam = req.nextUrl.searchParams.get('view');
+    const isExplicitLanding = viewParam === 'landing' || req.nextUrl.searchParams.has('landing');
+
+    // If user explicitly asks to view landing page (?view=landing), permit on all devices
+    if (!isExplicitLanding) {
+      const userAgent = req.headers.get('user-agent') || '';
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(userAgent);
+      const isPwa =
+        req.cookies.get('lm_pwa')?.value === '1' ||
+        req.nextUrl.searchParams.get('source') === 'pwa' ||
+        req.nextUrl.searchParams.get('mode') === 'pwa';
+
+      // If authenticated and on mobile device or installed PWA, open dashboard directly
+      if (auth.authorized && (isPwa || isMobile)) {
+        return NextResponse.redirect(new URL('/overview', req.url));
+      }
+    }
+  }
+
   // Skip public paths for unauthenticated visitors
   if (isPublic(pathname)) return NextResponse.next();
 

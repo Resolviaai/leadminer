@@ -78,6 +78,11 @@ export function Navigation({ dryRun = true }: { dryRun?: boolean }) {
 
   const handleLogout = async () => {
     try {
+      try {
+        localStorage.removeItem('leadminer_logged_in');
+        localStorage.removeItem('leadminer_user_email');
+        document.cookie = 'lm_auth=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
+      } catch {}
       await fetch('/api/auth/logout', { method: 'POST' });
     } finally {
       window.location.href = '/login';

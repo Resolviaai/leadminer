@@ -35,6 +35,13 @@ export default function LoginPage() {
         return;
       }
 
+      try {
+        localStorage.setItem('leadminer_logged_in', 'true');
+        localStorage.setItem('leadminer_user_email', email.trim().toLowerCase());
+      } catch {
+        // Storage access may be restricted in private browsing
+      }
+
       window.location.href = targetRedirect;
     } catch {
       setError('Network error. Please try again.');
