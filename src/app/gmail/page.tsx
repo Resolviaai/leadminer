@@ -4,6 +4,7 @@ import { gmailAccounts } from '../../db/schema';
 import { desc } from 'drizzle-orm';
 import { env } from '../../config/env';
 import { GmailAccountsClient, GmailAccountItem } from '@/components/gmail/GmailAccountsClient';
+import { warmupService } from '../../services/outreach/warmup.service';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,11 +20,35 @@ async function getGmailAccounts(): Promise<GmailAccountItem[]> {
           sentToday: gmailAccounts.sentToday,
           lastSendAt: gmailAccounts.lastSendAt,
           tokenGrantedAt: gmailAccounts.tokenGrantedAt,
+          googleAccountId: gmailAccounts.googleAccountId,
           createdAt: gmailAccounts.createdAt,
         })
         .from(gmailAccounts)
         .orderBy(desc(gmailAccounts.id));
-      return records as GmailAccountItem[];
+
+      const enriched: GmailAccountItem[] = await Promise.all(
+        records.map(async (acc) => {
+          let warmup;
+          try {
+            warmup = await warmupService.getAccountWarmupStatus(acc.id, acc.googleAccountId, acc.dailyLimit);
+          } catch {
+            warmup = undefined;
+          }
+          return {
+            id: acc.id,
+            email: acc.email,
+            status: acc.status,
+            dailyLimit: acc.dailyLimit,
+            sentToday: acc.sentToday,
+            lastSendAt: acc.lastSendAt,
+            tokenGrantedAt: acc.tokenGrantedAt,
+            createdAt: acc.createdAt,
+            warmup,
+          };
+        })
+      );
+
+      return enriched;
     } catch (e) {
       console.error(`[getGmailAccounts attempt ${attempt} error]:`, e);
       if (attempt === 1) {

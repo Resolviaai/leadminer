@@ -10,12 +10,15 @@ import {
   sequences,
   sequenceSteps,
   leadSequenceProgress,
+  keywords,
 } from '../../src/db/schema';
 import { eq, and, inArray, isNotNull, sql, notInArray, desc } from 'drizzle-orm';
 import { env } from '../config/env';
 import { gmailSendingService } from '../services/outreach/gmail.service';
 import { sequenceService } from '../services/outreach/sequence.service';
 import { warmupService } from '../services/outreach/warmup.service';
+import { outreachEligibilityEngine } from '../services/qualification/eligibility.service';
+import { opportunityPriorityEngine, TIER_ORDER, OpportunityTier } from '../services/outreach/priority.engine';
 
 export interface PlannerResult {
   scheduled: number;
@@ -325,40 +328,142 @@ export async function runPlanner(): Promise<PlannerResult> {
         .where(eq(messages.campaignId, campaign.id));
       const contactedIds = new Set(contactedContacts.map((c) => c.contactId).filter(Boolean));
 
-      // Query qualified Step 1 candidate leads sorted by subscriber count (Decision 8)
+      // Query Step 1 candidate leads and contacts
       const candidates = await db
         .select({
           leadId: leads.id,
           contactId: contacts.id,
           email: contacts.email,
+          emailStatus: contacts.emailStatus,
+          verificationReason: contacts.verificationReason,
+          confidenceScore: contacts.confidenceScore,
+          priorityScore: contacts.priorityScore,
+          isPrimary: contacts.isPrimary,
+          emailCategory: contacts.emailCategory,
+          source: contacts.source,
           channelTitle: leads.channelTitle,
           subscriberCount: leads.subscriberCount,
-          isPrimary: contacts.isPrimary,
+          discoveredAt: leads.discoveredAt,
+          country: leads.country,
+          category: keywords.category,
+          suppressionStatus: leads.suppressionStatus,
+          outreachStatus: leads.outreachStatus,
         })
         .from(leads)
         .innerJoin(contacts, eq(leads.id, contacts.leadId))
+        .leftJoin(keywords, eq(leads.sourceKeywordId, keywords.id))
         .where(
           and(
             eq(leads.qualificationStatus, 'QUALIFIED'),
             eq(leads.suppressionStatus, false),
             notInArray(leads.outreachStatus, ['CONTACTED', 'REPLIED', 'UNSUBSCRIBED', 'BOUNCED']),
-            inArray(contacts.emailStatus, allowedEmailStatuses),
             isNotNull(contacts.email)
           )
         )
-        .orderBy(desc(leads.subscriberCount), desc(leads.discoveredAt))
-        .limit(slotsForNew * 5);
+        .orderBy(desc(contacts.priorityScore), desc(leads.subscriberCount), desc(leads.discoveredAt))
+        .limit(slotsForNew * 10);
 
-      // Group contacts by leadId for multi-contact 24h staggering (Decision 6, P1-13)
-      const leadContactsMap = new Map<number, typeof candidates>();
+      // STRICT DELIVERABILITY & OPPORTUNITY PRIORITY OVERHAUL:
+      // Layer 1: Hard negatives are completely dropped
+      // Layer 2: Uncertain candidates evaluated against campaign policy
+      // Layer 3: Eligible candidates ranked by explainable priority score
+      // Priority NEVER overrides deliverability!
+      const eligibleCandidates: (typeof candidates[0] & { calculatedTier: OpportunityTier; calculatedPriority: number })[] = [];
+
       for (const cand of candidates) {
+        if (!cand.email) continue;
+        if (contactedIds.has(cand.contactId)) continue;
+        if (alreadyScheduledContactSteps.has(`${cand.contactId}_step_1`)) continue;
+
+        const eligResult = outreachEligibilityEngine.evaluate(
+          {
+            contactId: cand.contactId,
+            leadId: cand.leadId,
+            email: cand.email,
+            emailStatus: cand.emailStatus,
+            verificationReason: cand.verificationReason,
+            confidenceScore: cand.confidenceScore ? Number(cand.confidenceScore) : null,
+            isPrimary: cand.isPrimary,
+            emailCategory: cand.emailCategory,
+            channelTitle: cand.channelTitle,
+            subscriberCount: cand.subscriberCount || 0,
+            category: cand.category,
+            country: cand.country,
+            isSuppressed: cand.suppressionStatus,
+            alreadyContactedLead: false,
+            alreadyContactedContact: false,
+            outreachStatus: cand.outreachStatus,
+          },
+          {
+            allowDomainValid: allowedEmailStatuses.includes('DOMAIN_VALID'),
+            targetCountry: campaign.targetCountry || undefined,
+            minSubscribers: campaign.minSubscribers ? Number(campaign.minSubscribers) : undefined,
+            maxSubscribers: campaign.maxSubscribers ? Number(campaign.maxSubscribers) : undefined,
+          }
+        );
+
+        if (!eligResult.eligible) {
+          continue; // Hard negatives & policy exclusions dropped - never forced into quota
+        }
+
+        // Evaluate complete opportunity tier and priority score
+        const evalScore = opportunityPriorityEngine.scoreCandidate({
+          contactId: cand.contactId,
+          leadId: cand.leadId,
+          email: cand.email,
+          isPrimary: cand.isPrimary,
+          emailCategory: cand.emailCategory,
+          source: cand.source,
+          confidenceScore: eligResult.confidenceScore,
+          subscriberCount: cand.subscriberCount || 0,
+          discoveredAt: cand.discoveredAt,
+          category: cand.category,
+          country: cand.country,
+        });
+
+        // GRADIENT PROGRESSION POLICY:
+        // A6: Strong hard negative -> strictly NEVER SEND.
+        if (evalScore.opportunityTier === 'A6') {
+          continue;
+        }
+
+        // A5: Reserve / highly uncertain -> preserved for re-verification, do not consume bulk outreach capacity.
+        if (evalScore.opportunityTier === 'A5') {
+          continue;
+        }
+
+        // A1, A2, A3, A4 are legitimate opportunities with progressively lower expected value!
+        eligibleCandidates.push({
+          ...cand,
+          calculatedTier: evalScore.opportunityTier,
+          calculatedPriority: evalScore.priorityScore,
+        });
+      }
+
+      // Group eligible contacts by leadId for multi-contact 24h staggering
+      const leadContactsMap = new Map<number, typeof eligibleCandidates>();
+      for (const cand of eligibleCandidates) {
         const list = leadContactsMap.get(cand.leadId) || [];
         list.push(cand);
         leadContactsMap.set(cand.leadId, list);
       }
 
+      // Rank leads by the best available opportunity tier (A1 -> A2 -> A3 -> A4)
+      // and priority score descending
+      const rankedLeads = Array.from(leadContactsMap.entries()).sort((a, b) => {
+        const bestTierA = Math.min(...a[1].map((c) => TIER_ORDER[c.calculatedTier]));
+        const bestTierB = Math.min(...b[1].map((c) => TIER_ORDER[c.calculatedTier]));
+        if (bestTierA !== bestTierB) return bestTierA - bestTierB;
+
+        const bestScoreA = Math.max(...a[1].map((c) => c.calculatedPriority));
+        const bestScoreB = Math.max(...b[1].map((c) => c.calculatedPriority));
+        if (bestScoreB !== bestScoreA) return bestScoreB - bestScoreA;
+
+        return (b[1][0]?.subscriberCount || 0) - (a[1][0]?.subscriberCount || 0);
+      });
+
       let accountNewScheduled = 0;
-      for (const [leadId, leadContacts] of leadContactsMap.entries()) {
+      for (const [leadId, leadContacts] of rankedLeads) {
         if (accountNewScheduled >= slotsForNew) break;
 
         // Primary contact first

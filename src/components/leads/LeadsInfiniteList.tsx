@@ -39,7 +39,7 @@ import {
   TableRow,
   TableCell,
 } from "@/components/ui/table";
-import { LeadInspectorDrawer } from "./LeadInspectorDrawer";
+import { LeadInspectorDrawer, LeadEmailItem } from "./LeadInspectorDrawer";
 import { getCountryDisplayName, TIER_1_COUNTRY_FLAGS } from "@/config/countries";
 
 export type Lead = {
@@ -64,9 +64,11 @@ export type Lead = {
   discoveredAt: Date | string | null;
   email: string | null;
   emailStatus: string | null;
+  emailRole?: string | null;
   sourceKeyword: string | null;
   category: string | null;
   additionalEmails?: string[];
+  allEmails?: LeadEmailItem[];
   socialLinks?: { type: string; value: string }[];
 };
 
@@ -90,6 +92,55 @@ function getEmailBadge(status: string | null) {
       return <Badge variant="warning">RISKY</Badge>;
     default:
       return <Badge variant="secondary">{status || "NONE"}</Badge>;
+  }
+}
+
+function getEmailRoleBadge(role?: string | null) {
+  if (!role) return null;
+  const r = role.toUpperCase();
+  switch (r) {
+    case "BUSINESS":
+      return (
+        <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+          BUS
+        </span>
+      );
+    case "MANAGEMENT":
+      return (
+        <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
+          MGMT
+        </span>
+      );
+    case "DIRECT":
+      return (
+        <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+          DIR
+        </span>
+      );
+    case "SALES":
+      return (
+        <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+          SALES
+        </span>
+      );
+    case "PRESS":
+      return (
+        <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold rounded bg-pink-500/10 text-pink-400 border border-pink-500/20">
+          PRESS
+        </span>
+      );
+    case "SUPPORT":
+      return (
+        <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold rounded bg-slate-500/10 text-slate-400 border border-slate-500/20">
+          SUPP
+        </span>
+      );
+    default:
+      return (
+        <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold rounded bg-white/5 text-slate-300 border border-white/10">
+          {r}
+        </span>
+      );
   }
 }
 
@@ -145,6 +196,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
   // Pareto 80/20 Filtering State
   const [filterMinSubs, setFilterMinSubs] = useState<number>(0);
   const [filterCountry, setFilterCountry] = useState<"ALL" | "TIER_1" | "US">("ALL");
+  const [filterEmailRole, setFilterEmailRole] = useState<"ALL" | "COMMERCIAL" | "DIRECT" | "GENERIC">("ALL");
   const [filterDeliverableOnly, setFilterDeliverableOnly] = useState(false);
   const [filterUncontactedOnly, setFilterUncontactedOnly] = useState(false);
   const [filterWebsite, setFilterWebsite] = useState(false);
@@ -154,6 +206,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
   const activeFilterCount =
     (filterMinSubs > 0 ? 1 : 0) +
     (filterCountry !== "ALL" ? 1 : 0) +
+    (filterEmailRole !== "ALL" ? 1 : 0) +
     (filterDeliverableOnly ? 1 : 0) +
     (filterUncontactedOnly ? 1 : 0) +
     (filterWebsite ? 1 : 0) +
@@ -190,6 +243,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
   const resetAllFilters = () => {
     setFilterMinSubs(0);
     setFilterCountry("ALL");
+    setFilterEmailRole("ALL");
     setFilterDeliverableOnly(false);
     setFilterUncontactedOnly(false);
     setFilterWebsite(false);
@@ -253,6 +307,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
       if (sortDir !== "desc") params.set("sortDir", sortDir);
       if (filterMinSubs > 0) params.set("minSubs", filterMinSubs.toString());
       if (filterCountry !== "ALL") params.set("country", filterCountry);
+      if (filterEmailRole !== "ALL") params.set("role", filterEmailRole);
       if (filterDeliverableOnly) params.set("deliverableOnly", "true");
       if (filterUncontactedOnly) params.set("uncontactedOnly", "true");
       if (filterWebsite) params.set("hasWebsite", "true");
@@ -295,6 +350,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
       sortDir,
       filterMinSubs,
       filterCountry,
+      filterEmailRole,
       filterDeliverableOnly,
       filterUncontactedOnly,
       filterWebsite,
@@ -320,6 +376,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
     sortDir,
     filterMinSubs,
     filterCountry,
+    filterEmailRole,
     filterDeliverableOnly,
     filterUncontactedOnly,
     filterWebsite,
@@ -410,6 +467,66 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
       }
     } finally {
       setActionLoadingId(null);
+    }
+  };
+
+  // Set Primary Email for Lead
+  const handleSetPrimary = async (leadId: number, email: string, contactId?: number) => {
+    // 1. Optimistic local state update in selectedLeadForDetail
+    setSelectedLeadForDetail((prev) => {
+      if (!prev || prev.id !== leadId) return prev;
+      const updatedEmails = prev.allEmails?.map((item) => ({
+        ...item,
+        isPrimary: item.email.toLowerCase() === email.toLowerCase(),
+      }));
+      return {
+        ...prev,
+        email,
+        allEmails: updatedEmails,
+      };
+    });
+
+    // 2. Optimistic local state update in items list
+    setItems((prev) =>
+      prev.map((l) => {
+        if (l.id !== leadId) return l;
+        const updatedEmails = l.allEmails?.map((item) => ({
+          ...item,
+          isPrimary: item.email.toLowerCase() === email.toLowerCase(),
+        }));
+        return {
+          ...l,
+          email,
+          allEmails: updatedEmails,
+        };
+      })
+    );
+
+    // 3. Server atomic update
+    try {
+      const res = await fetch(`/api/leads/${leadId}/set-primary`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, contactId }),
+      });
+      if (!res.ok) {
+        throw new Error("Failed to set primary email");
+      }
+      const result = await res.json();
+      if (result.qualificationStatus) {
+        setSelectedLeadForDetail((prev) =>
+          prev && prev.id === leadId
+            ? { ...prev, qualificationStatus: result.qualificationStatus }
+            : prev
+        );
+        setItems((prev) =>
+          prev.map((l) =>
+            l.id === leadId ? { ...l, qualificationStatus: result.qualificationStatus } : l
+          )
+        );
+      }
+    } catch (err) {
+      console.error("Set primary email error:", err);
     }
   };
 
@@ -752,7 +869,46 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                     </div>
                   </div>
 
-                  {/* 3. Outreach & Quality */}
+                  {/* 3. Inbox Role Filter */}
+                  <div className="space-y-1.5 pt-1.5 border-t border-border/60">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-text-muted block">
+                        Inbox Role
+                      </span>
+                      {filterEmailRole !== "ALL" && (
+                        <button
+                          type="button"
+                          onClick={() => setFilterEmailRole("ALL")}
+                          className="text-[10px] text-primary hover:underline cursor-pointer font-medium"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-1">
+                      {[
+                        { label: "Any", val: "ALL" as const },
+                        { label: "Business / Mgmt", val: "COMMERCIAL" as const },
+                        { label: "Direct / Sales", val: "DIRECT" as const },
+                        { label: "Generic / Support", val: "GENERIC" as const },
+                      ].map((r) => (
+                        <button
+                          key={r.val}
+                          type="button"
+                          onClick={() => setFilterEmailRole(r.val)}
+                          className={`py-1 px-1.5 rounded-md text-[11px] font-medium border text-center transition-all cursor-pointer truncate ${
+                            filterEmailRole === r.val
+                              ? "bg-primary text-primary-foreground border-primary shadow-xs font-semibold"
+                              : "bg-surface-200/80 border-border/60 text-text-secondary hover:text-text-main hover:bg-surface-300"
+                          }`}
+                        >
+                          {r.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 4. Outreach & Quality */}
                   <div className="space-y-1 pt-1.5 border-t border-border/60">
                     <span className="text-[9px] font-bold uppercase tracking-wider text-text-muted block">
                       Targeting & Outreach
@@ -889,6 +1045,23 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                 onClick={() => setFilterCountry("ALL")}
                 className="hover:text-primary/70 cursor-pointer ml-0.5"
                 title="Remove country filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+          {filterEmailRole !== "ALL" && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-medium">
+              {filterEmailRole === "COMMERCIAL"
+                ? "Role: Business/Mgmt"
+                : filterEmailRole === "DIRECT"
+                ? "Role: Direct/Sales"
+                : "Role: Generic/Support"}
+              <button
+                type="button"
+                onClick={() => setFilterEmailRole("ALL")}
+                className="hover:text-primary/70 cursor-pointer ml-0.5"
+                title="Remove role filter"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -1112,11 +1285,17 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
               <div className="p-3 rounded-lg bg-surface-200/70 border border-border/40 space-y-2 text-xs">
                 {lead.email ? (
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center space-x-2 truncate">
+                    <div className="flex items-center space-x-1.5 truncate">
                       <Mail className="w-3.5 h-3.5 text-text-muted shrink-0" />
                       <span className="font-mono text-text-main text-[11px] font-medium truncate">
                         {lead.email}
                       </span>
+                      {getEmailRoleBadge(lead.emailRole)}
+                      {((lead.allEmails && lead.allEmails.length > 1) || (lead.additionalEmails && lead.additionalEmails.length > 0)) && (
+                        <span className="text-[9px] font-mono font-bold text-primary bg-primary/10 px-1 py-0.5 rounded border border-primary/20 shrink-0">
+                          +{((lead.allEmails?.length || 0) > 1 ? (lead.allEmails!.length - 1) : (lead.additionalEmails?.length || 0))}
+                        </span>
+                      )}
                     </div>
                     <div className="shrink-0">
                       {getEmailBadge(lead.emailStatus)}
@@ -1412,9 +1591,20 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                     <TableCell>
                       <div className="flex items-center gap-2 max-w-[280px]">
                         {lead.email ? (
-                          <span className="font-mono text-text-main text-[11px] truncate font-medium" title={lead.email}>
-                            {lead.email}
-                          </span>
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span className="font-mono text-text-main text-[11px] truncate font-medium" title={lead.email}>
+                              {lead.email}
+                            </span>
+                            {getEmailRoleBadge(lead.emailRole)}
+                            {((lead.allEmails && lead.allEmails.length > 1) || (lead.additionalEmails && lead.additionalEmails.length > 0)) && (
+                              <span
+                                className="text-[9px] font-mono font-bold text-primary bg-primary/10 px-1 py-0.5 rounded border border-primary/20 shrink-0"
+                                title={`${((lead.allEmails?.length || 0) > 1 ? lead.allEmails!.length : (lead.additionalEmails?.length || 0) + 1)} total email inboxes discovered`}
+                              >
+                                +{((lead.allEmails?.length || 0) > 1 ? (lead.allEmails!.length - 1) : (lead.additionalEmails?.length || 0))}
+                              </span>
+                            )}
+                          </div>
                         ) : (
                           <button
                             type="button"
@@ -1638,6 +1828,7 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
           setEditWebsite(l.website || "");
         }}
         onSuppress={handleSuppress}
+        onSetPrimary={handleSetPrimary}
         actionLoadingId={actionLoadingId}
       />
 

@@ -260,6 +260,10 @@ export const contacts = pgTable(
     otherSocial: jsonb('other_social'),
     linkScrapeStatus: varchar('link_scrape_status', { length: 20 }),
     emailCategory: varchar('email_category', { length: 30 }),
+    confidenceScore: numeric('confidence_score', { precision: 3, scale: 2 }),
+    opportunityTier: varchar('opportunity_tier', { length: 10 }), // 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'A6'
+    priorityScore: integer('priority_score'),
+    priorityFactors: jsonb('priority_factors'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -269,6 +273,9 @@ export const contacts = pgTable(
     index('idx_contacts_email_status').on(table.emailStatus),
     index('idx_contacts_email').on(table.email),
     index('idx_contacts_link_scrape_status').on(table.linkScrapeStatus),
+    index('idx_contacts_opportunity_tier').on(table.opportunityTier),
+    index('idx_contacts_priority_score').on(table.priorityScore),
+    index('idx_contacts_confidence_score').on(table.confidenceScore),
   ]
 );
 
@@ -553,6 +560,52 @@ export const systemSettings = pgTable('system_settings', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// 13. daily_api_usage (Serverless-safe atomic quota tracking)
+export const dailyApiUsage = pgTable(
+  'daily_api_usage',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    service: varchar('service', { length: 50 }).notNull(),
+    usageDate: varchar('usage_date', { length: 10 }).notNull(),
+    callCount: integer('call_count').notNull().default(0),
+    cacheHits: integer('cache_hits').notNull().default(0),
+    inputTokens: bigint('input_tokens', { mode: 'number' }).notNull().default(0),
+    outputTokens: bigint('output_tokens', { mode: 'number' }).notNull().default(0),
+    successfulCalls: integer('successful_calls').notNull().default(0),
+    failedCalls: integer('failed_calls').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('uq_daily_api_usage_service_date').on(table.service, table.usageDate),
+    index('idx_daily_api_usage_service_date').on(table.service, table.usageDate),
+  ]
+);
+
+// 14. jev_evaluations_cache (Persistent versioned evaluation cache)
+export const jevEvaluationsCache = pgTable(
+  'jev_evaluations_cache',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    cacheKey: varchar('cache_key', { length: 64 }).notNull(),
+    questionSetVersion: varchar('question_set_version', { length: 50 }).notNull(),
+    model: varchar('model', { length: 100 }).notNull(),
+    sourceType: varchar('source_type', { length: 100 }).default('youtube_description'),
+    stateSnippet: text('state_snippet'),
+    evaluation: jsonb('evaluation').notNull(),
+    inputTokens: integer('input_tokens').notNull().default(0),
+    outputTokens: integer('output_tokens').notNull().default(0),
+    latencyMs: integer('latency_ms').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('uq_jev_eval_cache_key').on(table.cacheKey),
+    index('idx_jev_eval_cache_key').on(table.cacheKey),
+    index('idx_jev_eval_created_at').on(table.createdAt),
+    index('idx_jev_eval_model_version').on(table.model, table.questionSetVersion),
+  ]
+);
+
 // Relations
 export const keywordsRelations = relations(keywords, ({ many }) => ({
   leads: many(leads),
@@ -635,3 +688,34 @@ export const scheduledEmailsRelations = relations(scheduledEmails, ({ one }) => 
     references: [gmailAccounts.id],
   }),
 }));
+
+// 21. domain_cache (Domain intelligence, MX provider classification, health tracking)
+export const domainCache = pgTable(
+  'domain_cache',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    domain: varchar('domain', { length: 255 }).notNull(),
+    mxHost: varchar('mx_host', { length: 255 }),
+    mxProvider: varchar('mx_provider', { length: 50 }),
+    hasMx: boolean('has_mx').notNull().default(false),
+    isCatchAll: boolean('is_catch_all').default(false),
+    isDisposable: boolean('is_disposable').notNull().default(false),
+    bounceCount: integer('bounce_count').notNull().default(0),
+    sentCount: integer('sent_count').notNull().default(0),
+    replyCount: integer('reply_count').notNull().default(0),
+    lastCheckedAt: timestamp('last_checked_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('uq_domain_cache_domain').on(table.domain),
+    index('idx_domain_cache_domain').on(table.domain),
+    index('idx_domain_cache_expires_at').on(table.expiresAt),
+    index('idx_domain_cache_mx_provider').on(table.mxProvider),
+  ]
+);
+
+export type DomainCacheRecord = typeof domainCache.$inferSelect;
+export type NewDomainCacheRecord = typeof domainCache.$inferInsert;
+

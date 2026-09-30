@@ -1,96 +1,114 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { websiteScraper } from '../../src/services/extraction/website.scraper';
 
-describe('Website Scraper', () => {
-  const originalFetch = global.fetch;
-
-  afterEach(() => {
-    global.fetch = originalFetch;
+describe('Website Scraper & Targeted Contact Crawler Suite', () => {
+  beforeEach(() => {
     vi.restoreAllMocks();
+    (websiteScraper as any).domainCache.clear();
   });
 
-  it('should extract mailto, tel, and socials from homepage HTML', async () => {
-    const mockHtml = `
-      <!DOCTYPE html>
-      <html>
-        <head><title>Creator Site</title></head>
-        <body>
-          <h1>Welcome</h1>
-          <a href="mailto:hello@creatorhq.com">Email Us</a>
-          <a href="tel:+15551234567">Call Us</a>
-          <a href="https://instagram.com/creatorhq">Instagram</a>
-          <a href="https://x.com/creatorhq_x">Twitter</a>
-          <a href="https://wa.me/15559876543">WhatsApp</a>
-        </body>
-      </html>
-    `;
-
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      headers: new Headers({ 'content-type': 'text/html; charset=utf-8' }),
-      text: async () => mockHtml,
-    } as any);
-
-    const result = await websiteScraper.scrapeUrl('https://creatorhq.com');
-
-    expect(result.emails).toContain('hello@creatorhq.com');
-    expect(result.phones).toContain('+15551234567');
-    expect(result.whatsapp).toBe('+15559876543');
-    expect(result.socials.instagram).toBe('creatorhq');
-    expect(result.socials.twitter).toBe('creatorhq_x');
-    expect(result.rawItems.length).toBeGreaterThanOrEqual(4);
-  });
-
-  it('should follow /contact subpage if homepage contains no emails', async () => {
-    const homepageHtml = `
-      <!DOCTYPE html>
+  it('should score and prioritize commercial contact subpages over generic pages', () => {
+    const html = `
       <html>
         <body>
-          <h1>Home Page</h1>
-          <p>Read our portfolio.</p>
+          <a href="/privacy-policy">Privacy</a>
+          <a href="/cart">Cart</a>
+          <a href="/about-us">About Our Team</a>
+          <a href="/press-media">Press Kit</a>
+          <a href="/business-inquiries">Sponsor & Business Inquiries</a>
           <a href="/contact">Get in Touch</a>
         </body>
       </html>
     `;
 
-    const contactHtml = `
-      <!DOCTYPE html>
+    const subpages = (websiteScraper as any).findContactSubpageUrls(html, 'https://creatorstudio.io');
+
+    expect(subpages).toHaveLength(2);
+    // Highest scored pages must be picked
+    expect(subpages).toContain('https://creatorstudio.io/business-inquiries');
+    expect(subpages).toContain('https://creatorstudio.io/contact');
+    // Negative pages must never be included
+    expect(subpages).not.toContain('https://creatorstudio.io/privacy-policy');
+    expect(subpages).not.toContain('https://creatorstudio.io/cart');
+  });
+
+  it('should detect contact form presence and extract microdata itemprop attributes', async () => {
+    const sampleHtml = `
       <html>
         <body>
-          <h1>Contact Us</h1>
-          <p>For business: business@creatorhq.com</p>
-          <p>Direct line: 555-321-7654</p>
+          <div itemscope itemtype="http://schema.org/Organization">
+            <span itemprop="name">Creator Studio Agency</span>
+            <span itemprop="email">mailto:agency@creatorstudio.io</span>
+            <span itemprop="telephone">+1-800-555-0199</span>
+          </div>
+          <form action="/api/contact" method="POST">
+            <input type="text" name="name" placeholder="Your Name" />
+            <input type="email" name="email" placeholder="Your Email" />
+            <textarea name="message" placeholder="Business Inquiry Details"></textarea>
+            <button type="submit">Send Message</button>
+          </form>
         </body>
       </html>
     `;
 
-    global.fetch = vi.fn().mockImplementation((url: string) => {
-      if (url.includes('/contact')) {
-        return Promise.resolve({
-          ok: true,
-          headers: new Headers({ 'content-type': 'text/html' }),
-          text: async () => contactHtml,
-        });
-      }
-      return Promise.resolve({
-        ok: true,
-        headers: new Headers({ 'content-type': 'text/html' }),
-        text: async () => homepageHtml,
-      });
-    });
+    vi.spyOn(websiteScraper as any, 'fetchHtml').mockResolvedValue(sampleHtml);
 
-    const result = await websiteScraper.scrapeUrl('https://creatorhq.com');
+    const result = await websiteScraper.scrapeUrl('https://creatorstudio.io');
 
-    expect(result.emails).toContain('business@creatorhq.com');
-    expect(result.contactPageUrl).toBe('https://creatorhq.com/contact');
+    expect(result.contactFormAvailable).toBe(true);
+    expect(result.emails).toContain('agency@creatorstudio.io');
+    expect(result.phones).toContain('+1-800-555-0199');
   });
 
-  it('should handle fetch errors and timeouts gracefully without throwing', async () => {
-    global.fetch = vi.fn().mockRejectedValue(new Error('Network timeout'));
+  it('should extract Schema.org ContactPoint object from JSON-LD', async () => {
+    const sampleHtml = `
+      <html>
+        <head>
+          <script type="application/ld+json">
+          {
+            "@context": "https://schema.org",
+            "@type": "Organization",
+            "name": "SuperMedia Corp",
+            "contactPoint": [
+              {
+                "@type": "ContactPoint",
+                "telephone": "+1-415-555-1234",
+                "contactType": "sales",
+                "email": "partnerships@supermedia.com"
+              }
+            ]
+          }
+          </script>
+        </head>
+        <body>
+          <h1>Welcome</h1>
+        </body>
+      </html>
+    `;
 
-    const result = await websiteScraper.scrapeUrl('https://offline-domain-xyz.com');
-    expect(result.emails).toEqual([]);
-    expect(result.phones).toEqual([]);
-    expect(result.rawItems).toEqual([]);
+    vi.spyOn(websiteScraper as any, 'fetchHtml').mockResolvedValue(sampleHtml);
+
+    const result = await websiteScraper.scrapeUrl('https://supermedia.com');
+
+    expect(result.emails).toContain('partnerships@supermedia.com');
+    expect(result.phones).toContain('+1-415-555-1234');
+  });
+
+  it('should deduplicate repeated scrapes using in-memory domain crawl cache', async () => {
+    const fetchSpy = vi.spyOn(websiteScraper as any, 'fetchHtml').mockResolvedValue(`
+      <html>
+        <body>
+          <a href="mailto:hello@cachedsite.com">Email Us</a>
+        </body>
+      </html>
+    `);
+
+    const firstResult = await websiteScraper.scrapeUrl('https://cachedsite.com');
+    const secondResult = await websiteScraper.scrapeUrl('https://cachedsite.com');
+
+    expect(firstResult.emails).toContain('hello@cachedsite.com');
+    expect(secondResult.emails).toContain('hello@cachedsite.com');
+    // Only 1 network request fired because the 2nd was served from DomainCrawlCache
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 });

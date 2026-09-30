@@ -14,6 +14,8 @@ import {
   Loader2,
   X,
   AlertTriangle,
+  TrendingUp,
+  RotateCcw,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +31,15 @@ export interface GmailAccountItem {
   lastSendAt: string | Date | null;
   tokenGrantedAt?: string | Date | null;
   createdAt: string | Date;
+  warmup?: {
+    activeSendDays: number;
+    currentDay: number;
+    stageTarget: number;
+    effectiveDailyLimit: number;
+    isWarmedUp: boolean;
+    daysSinceLastSend: number | null;
+    isColdReset: boolean;
+  };
 }
 
 interface Props {
@@ -233,7 +244,8 @@ export function GmailAccountsClient({
         ) : (
           accounts.map((acc) => {
             const isDisconnected = acc.status === "DISCONNECTED";
-            const todayTarget = acc.dailyLimit || 25;
+            const warmup = acc.warmup;
+            const todayTarget = warmup ? warmup.effectiveDailyLimit : (acc.dailyLimit || 25);
             const remaining = Math.max(0, todayTarget - (acc.sentToday || 0));
             const letter = (acc.email[0] || "G").toUpperCase();
 
@@ -324,11 +336,89 @@ export function GmailAccountsClient({
                   );
                 })()}
 
+                {/* Warmup Ramp & Deliverability Engine */}
+                {warmup && !isDisconnected && (
+                  <div className="p-3 rounded-xl bg-surface-200/70 border border-border/70 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {warmup.isWarmedUp ? (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        ) : warmup.isColdReset ? (
+                          <RotateCcw className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        ) : (
+                          <TrendingUp className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        )}
+                        <span className="text-[11px] font-medium text-text-main truncate">
+                          {warmup.isWarmedUp
+                            ? "Reputation Fully Warmed"
+                            : warmup.isColdReset
+                            ? `Cold Reset (14d+ gap) · Day 0`
+                            : `Warmup Ramp: Day ${warmup.currentDay + 1} of 7`}
+                        </span>
+                      </div>
+
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] font-mono shrink-0 px-2 py-0.5 ${
+                          warmup.isWarmedUp
+                            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                            : warmup.isColdReset
+                            ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+                            : "border-sky-500/30 bg-sky-500/10 text-sky-300"
+                        }`}
+                      >
+                        {warmup.isWarmedUp ? "25 / day" : `${warmup.stageTarget} / day target`}
+                      </Badge>
+                    </div>
+
+                    {/* 7-Step Segmented Ramp Visualizer */}
+                    <div className="space-y-1">
+                      <div className="grid grid-cols-7 gap-1">
+                        {[0, 1, 2, 3, 4, 5, 6].map((stepIdx) => {
+                          const isCompleted = warmup.activeSendDays > stepIdx;
+                          const isCurrent = warmup.currentDay === stepIdx && !warmup.isWarmedUp;
+                          return (
+                            <div
+                              key={stepIdx}
+                              className={`h-1.5 rounded-full transition-colors ${
+                                isCompleted
+                                  ? "bg-emerald-500"
+                                  : isCurrent
+                                  ? "bg-amber-400 animate-pulse"
+                                  : "bg-surface-300/40"
+                              }`}
+                              title={`Day ${stepIdx + 1}: ${
+                                stepIdx === 0
+                                  ? "5"
+                                  : stepIdx === 1
+                                  ? "8"
+                                  : stepIdx === 2
+                                  ? "10"
+                                  : stepIdx === 3
+                                  ? "15"
+                                  : stepIdx === 4
+                                  ? "18"
+                                  : stepIdx === 5
+                                  ? "21"
+                                  : "25"
+                              } emails`}
+                            />
+                          );
+                        })}
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-text-muted font-mono">
+                        <span>Day 1 (5/d)</span>
+                        <span className="text-right">Day 7 (25/d max)</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Quota Progress Bar */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-[11px] text-text-secondary">
-                    <span>Today&apos;s Quota Progress</span>
-                    <span className="font-mono tabular-nums font-medium text-text-main">
+                    <span>Today&apos;s Dispatch Progress</span>
+                    <span className="font-mono tabular-nums font-medium text-text-main text-right">
                       {acc.sentToday} / {todayTarget} emails
                     </span>
                   </div>
@@ -336,23 +426,25 @@ export function GmailAccountsClient({
                 </div>
 
                 {/* 3 Metric Chips */}
-                <div className="grid grid-cols-3 gap-1.5 sm:gap-2 text-center">
+                <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                   <div className="p-1.5 sm:p-2 rounded-lg bg-surface-200 border border-border/60">
                     <span className="text-[9px] sm:text-[10px] text-text-muted block">Sent Today</span>
-                    <span className="text-xs font-mono font-bold text-primary tabular-nums">
+                    <span className="text-xs font-mono font-bold text-primary tabular-nums block text-right">
                       {acc.sentToday}
                     </span>
                   </div>
                   <div className="p-1.5 sm:p-2 rounded-lg bg-surface-200 border border-border/60">
                     <span className="text-[9px] sm:text-[10px] text-text-muted block">Remaining</span>
-                    <span className="text-xs font-mono font-bold text-text-main tabular-nums">
+                    <span className="text-xs font-mono font-bold text-text-main tabular-nums block text-right">
                       {remaining}
                     </span>
                   </div>
                   <div className="p-1.5 sm:p-2 rounded-lg bg-surface-200 border border-border/60">
-                    <span className="text-[9px] sm:text-[10px] text-text-muted block">Daily Limit</span>
-                    <span className="text-xs font-mono font-bold text-text-muted tabular-nums">
-                      {acc.dailyLimit}
+                    <span className="text-[9px] sm:text-[10px] text-text-muted block truncate">
+                      {warmup?.isWarmedUp ? "Daily Limit" : "Ramp Target"}
+                    </span>
+                    <span className="text-xs font-mono font-bold text-text-muted tabular-nums block text-right">
+                      {todayTarget}
                     </span>
                   </div>
                 </div>

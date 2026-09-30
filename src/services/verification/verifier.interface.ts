@@ -11,9 +11,15 @@ export type VerificationStatus =
 export interface VerificationResult {
   email: string;
   status: VerificationStatus;
+  confidenceScore: number; // 0.00 to 1.00 deterministic calibrated score
   reason?: string;
   reasonCode?: string;
   isRoleBased?: boolean;
+  isCommercialRole?: boolean;
+  isCatchAll?: boolean;
+  mxProvider?: string;
+  domain?: string;
+  evidenceDetails?: Record<string, any>;
   provider: string;
   timestamp: Date;
 }

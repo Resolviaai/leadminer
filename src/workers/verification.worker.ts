@@ -3,6 +3,7 @@ import { contacts, leads, keywords, suppressions, campaigns } from '../db/schema
 import { eq, and, isNotNull, inArray, sql } from 'drizzle-orm';
 import { emailVerificationService } from '../services/verification/verifier.service';
 import { aggregateQualificationStatus, leadQualificationService } from '../services/qualification/qualification.service';
+import { opportunityPriorityEngine } from '../services/outreach/priority.engine';
 import { jobRunner } from '../services/jobs/job.runner';
 
 export async function runVerificationBatch(limit = 25): Promise<{ verified: number; qualified: number }> {
@@ -51,9 +52,13 @@ export async function runVerificationBatch(limit = 25): Promise<{ verified: numb
         contactId: contacts.id,
         email: contacts.email,
         verificationReason: contacts.verificationReason,
+        isPrimary: contacts.isPrimary,
+        emailCategory: contacts.emailCategory,
+        source: contacts.source,
         leadId: leads.id,
         channelTitle: leads.channelTitle,
         subscriberCount: leads.subscriberCount,
+        discoveredAt: leads.discoveredAt,
         category: keywords.category,
         suppressionStatus: leads.suppressionStatus,
         country: leads.country,
@@ -134,11 +139,33 @@ export async function runVerificationBatch(limit = 25): Promise<{ verified: numb
       }
       const verificationReason = reasonParts.length > 0 ? reasonParts.join(' ') : (vResult.reasonCode || 'verified');
 
+      // Calculate explainable opportunity priority score for this verified contact
+      const priorityEval = opportunityPriorityEngine.scoreCandidate({
+        contactId: item.contactId,
+        leadId: item.leadId,
+        email: item.email,
+        isPrimary: item.isPrimary ?? true,
+        emailCategory: item.emailCategory,
+        source: item.source,
+        confidenceScore: vResult.confidenceScore !== undefined ? vResult.confidenceScore : 0.70,
+        mxProvider: vResult.mxProvider,
+        isCommercialRole: vResult.isCommercialRole,
+        isRoleBased: vResult.isRoleBased,
+        subscriberCount: item.subscriberCount || 0,
+        discoveredAt: item.discoveredAt,
+        category: item.category,
+        country: item.country,
+      });
+
       // Checkpoint: update contact record immediately in DB
       await db
         .update(contacts)
         .set({
           emailStatus: vResult.status,
+          confidenceScore: vResult.confidenceScore !== undefined ? String(vResult.confidenceScore) : null,
+          opportunityTier: priorityEval.opportunityTier,
+          priorityScore: priorityEval.priorityScore,
+          priorityFactors: priorityEval.factors,
           verificationProvider: vResult.provider,
           verificationReason,
           verificationTimestamp: vResult.timestamp || new Date(),

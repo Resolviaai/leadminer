@@ -100,9 +100,8 @@ export class YouTubeDiscoveryService {
     } catch (error: any) {
       const isQuota = error?.status === 403 && (error?.message?.includes('quota') || error?.errors?.[0]?.reason === 'quotaExceeded');
       if (isQuota) {
-        console.warn(`[YouTube API] 403 quotaExceeded received. Marking daily quota full.`);
-        const quota = await quotaManager.syncQuotaState();
-        quota.searchCallsUsedToday = quota.searchCallsDailyLimit;
+        console.warn(`[YouTube API] 403 quotaExceeded received. Marking active key exhausted.`);
+        quotaManager.markActiveKeyExhausted();
         await quotaManager.persistQuotaState();
         return { channelIds: [], quotaReached: true };
       }

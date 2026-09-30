@@ -2,8 +2,20 @@ import dns from 'dns';
 import { IEmailVerifier, VerificationResult } from './verifier.interface';
 
 // Configure reliable DNS servers to avoid slow local router DNS lookups
+// Allows override via process.env.DNS_SERVERS (or 'system' to preserve OS resolver)
 try {
-  dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
+  const envDns = process.env.DNS_SERVERS;
+  if (envDns) {
+    const customServers = envDns
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (customServers.length > 0 && customServers[0].toLowerCase() !== 'system') {
+      dns.setServers(customServers);
+    }
+  } else {
+    dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
+  }
 } catch {
   // Graceful fallback to OS DNS
 }
@@ -62,6 +74,22 @@ const ROLE_BASED_PREFIXES = new Set([
   'enquiries',
 ]);
 
+const COMMERCIAL_ROLE_PREFIXES = new Set([
+  'business',
+  'partnerships',
+  'sponsorships',
+  'sponsor',
+  'inquiries',
+  'contact',
+  'management',
+  'collab',
+  'collaborations',
+  'pr',
+  'booking',
+  'media',
+  'creator',
+]);
+
 export class LocalVerifier implements IEmailVerifier {
   public readonly providerName = 'local_dns_mx';
 
@@ -74,9 +102,11 @@ export class LocalVerifier implements IEmailVerifier {
       return {
         email: cleanEmail,
         status: 'INVALID',
+        confidenceScore: 0.0,
         reason: 'Malformed email syntax: invalid length',
         reasonCode: 'SYNTAX_INVALID',
         isRoleBased: false,
+        isCommercialRole: false,
         provider: this.providerName,
         timestamp,
       };
@@ -88,9 +118,11 @@ export class LocalVerifier implements IEmailVerifier {
       return {
         email: cleanEmail,
         status: 'INVALID',
+        confidenceScore: 0.0,
         reason: 'Malformed email syntax: invalid @ placement',
         reasonCode: 'SYNTAX_INVALID',
         isRoleBased: false,
+        isCommercialRole: false,
         provider: this.providerName,
         timestamp,
       };
@@ -102,9 +134,11 @@ export class LocalVerifier implements IEmailVerifier {
       return {
         email: cleanEmail,
         status: 'INVALID',
+        confidenceScore: 0.0,
         reason: 'Malformed email syntax: length exceeds RFC limits',
         reasonCode: 'SYNTAX_INVALID',
         isRoleBased: false,
+        isCommercialRole: false,
         provider: this.providerName,
         timestamp,
       };
@@ -121,25 +155,30 @@ export class LocalVerifier implements IEmailVerifier {
       return {
         email: cleanEmail,
         status: 'INVALID',
+        confidenceScore: 0.0,
         reason: 'Malformed email syntax',
         reasonCode: 'SYNTAX_INVALID',
         isRoleBased: false,
+        isCommercialRole: false,
         provider: this.providerName,
         timestamp,
       };
     }
 
     // Role-based address detection (flagged, NOT rejected)
-    const isRoleBased = ROLE_BASED_PREFIXES.has(localPart);
+    const isCommercialRole = COMMERCIAL_ROLE_PREFIXES.has(localPart);
+    const isRoleBased = isCommercialRole || ROLE_BASED_PREFIXES.has(localPart);
 
     // 2. Disposable domain check
     if (DISPOSABLE_DOMAINS.has(domain)) {
       return {
         email: cleanEmail,
         status: 'DISPOSABLE',
+        confidenceScore: 0.0,
         reason: 'Known disposable/temporary email service',
         reasonCode: 'DISPOSABLE_DOMAIN',
         isRoleBased,
+        isCommercialRole,
         provider: this.providerName,
         timestamp,
       };
@@ -147,14 +186,22 @@ export class LocalVerifier implements IEmailVerifier {
 
     // 3. Fast-path: Trusted major provider (classified as DOMAIN_VALID, NEVER MAILBOX_VERIFIED)
     if (MAJOR_PROVIDERS.has(domain)) {
+      let confidence = 0.70;
+      if (isCommercialRole) confidence = 0.75;
+      else if (isRoleBased) confidence = 0.50;
+
       return {
         email: cleanEmail,
         status: 'DOMAIN_VALID',
+        confidenceScore: confidence,
+        domain,
+        mxProvider: domain === 'gmail.com' || domain === 'googlemail.com' ? 'CONSUMER_GMAIL' : 'CONSUMER_OUTLOOK',
         reason: isRoleBased
           ? 'Trusted major mail provider domain (role-based address flagged)'
           : 'Trusted major mail provider domain',
         reasonCode: 'MAJOR_PROVIDER_DOMAIN_VALID',
         isRoleBased,
+        isCommercialRole,
         provider: this.providerName,
         timestamp,
       };
@@ -167,22 +214,47 @@ export class LocalVerifier implements IEmailVerifier {
         return {
           email: cleanEmail,
           status: 'INVALID',
+          confidenceScore: 0.0,
           reason: 'No DNS MX records found for domain',
           reasonCode: 'NO_MX_RECORDS',
           isRoleBased,
+          isCommercialRole,
           provider: this.providerName,
           timestamp,
         };
       }
 
+      const primaryMx = mxRecords[0].exchange.toLowerCase();
+      let mxProvider = 'CUSTOM';
+      let baseConfidence = 0.70;
+
+      if (primaryMx.includes('google.com') || primaryMx.includes('aspmx.l.google.com')) {
+        mxProvider = 'GOOGLE_WORKSPACE';
+        baseConfidence = 0.80;
+      } else if (primaryMx.includes('outlook.com') || primaryMx.includes('protection.outlook.com')) {
+        mxProvider = 'MICROSOFT_365';
+        baseConfidence = 0.80;
+      }
+
+      let confidence = baseConfidence;
+      if (isCommercialRole) {
+        confidence = Math.min(1.0, baseConfidence + 0.05);
+      } else if (isRoleBased) {
+        confidence = Math.max(0.40, baseConfidence - 0.20);
+      }
+
       return {
         email: cleanEmail,
         status: 'DOMAIN_VALID',
+        confidenceScore: parseFloat(confidence.toFixed(2)),
+        domain,
+        mxProvider,
         reason: isRoleBased
           ? `Valid MX host: ${mxRecords[0].exchange} (priority ${mxRecords[0].priority}) (role-based address flagged)`
           : `Valid MX host: ${mxRecords[0].exchange} (priority ${mxRecords[0].priority})`,
         reasonCode: isRoleBased ? 'ROLE_BASED_FLAGGED' : 'CUSTOM_DOMAIN_MX_VALID',
         isRoleBased,
+        isCommercialRole,
         provider: this.providerName,
         timestamp,
       };
@@ -191,9 +263,11 @@ export class LocalVerifier implements IEmailVerifier {
         return {
           email: cleanEmail,
           status: 'FAILED',
+          confidenceScore: 0.0,
           reason: 'DNS MX lookup timed out',
           reasonCode: 'DNS_TIMEOUT',
           isRoleBased,
+          isCommercialRole,
           provider: this.providerName,
           timestamp,
         };
@@ -203,9 +277,11 @@ export class LocalVerifier implements IEmailVerifier {
         return {
           email: cleanEmail,
           status: 'INVALID',
+          confidenceScore: 0.0,
           reason: `Domain does not exist or has no mail records (${error.code})`,
           reasonCode: 'DOMAIN_NOT_FOUND',
           isRoleBased,
+          isCommercialRole,
           provider: this.providerName,
           timestamp,
         };
@@ -215,9 +291,11 @@ export class LocalVerifier implements IEmailVerifier {
       return {
         email: cleanEmail,
         status: 'FAILED',
+        confidenceScore: 0.0,
         reason: `DNS MX check error: ${error.message || error.code}`,
         reasonCode: 'DNS_ERROR',
         isRoleBased,
+        isCommercialRole,
         provider: this.providerName,
         timestamp,
       };

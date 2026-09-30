@@ -2,6 +2,7 @@ import React from "react";
 import { db } from "../../db/client";
 import { leads, contacts, keywords } from "../../db/schema";
 import { eq, desc, sql, inArray } from "drizzle-orm";
+import { classifyEmailRole } from "../../services/extraction/email.extractor";
 import { Users, Play } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -73,6 +74,8 @@ async function getData() {
         contactType: contacts.contactType,
         value: contacts.value,
         normalizedValue: contacts.normalizedValue,
+        source: contacts.source,
+        isPrimary: contacts.isPrimary,
         email: contacts.email,
         emailStatus: contacts.emailStatus,
         instagram: contacts.instagram,
@@ -82,7 +85,8 @@ async function getData() {
         linkedin: contacts.linkedin,
       })
       .from(contacts)
-      .where(inArray(contacts.leadId, leadIds));
+      .where(inArray(contacts.leadId, leadIds))
+      .orderBy(desc(contacts.isPrimary), desc(contacts.id));
 
     const contactsByLead = new Map<number, typeof allContacts>();
     for (const c of allContacts) {
@@ -95,10 +99,32 @@ async function getData() {
       const leadContacts = contactsByLead.get(l.id) || [];
       const allEmailContacts = leadContacts.filter((c) => c.email || c.contactType === "EMAIL");
       const primaryEmailContact =
-        allEmailContacts.find((c) => c.contactType === "EMAIL" && c.email) || allEmailContacts[0];
+        allEmailContacts.find((c) => c.isPrimary && c.email) ||
+        allEmailContacts.find((c) => c.contactType === "EMAIL" && c.email) ||
+        allEmailContacts[0];
+
       const additionalEmails = allEmailContacts
         .filter((c) => c.email && c.email !== primaryEmailContact?.email)
         .map((c) => c.email as string);
+
+      const allEmails = allEmailContacts
+        .filter((c) => Boolean(c.email))
+        .map((c) => {
+          const { role, priorityScore } = classifyEmailRole(c.email!);
+          return {
+            id: c.id,
+            email: c.email!,
+            isPrimary: Boolean(c.isPrimary),
+            emailStatus: c.emailStatus || "UNKNOWN",
+            role,
+            priorityScore,
+            source: c.source || "description",
+          };
+        });
+
+      const primaryRole = primaryEmailContact?.email
+        ? classifyEmailRole(primaryEmailContact.email).role
+        : null;
 
       const socialLinks = leadContacts
         .filter((c) => c.contactType !== "EMAIL" && c.contactType !== "PHONE" && c.contactType !== "WHATSAPP")
@@ -114,8 +140,10 @@ async function getData() {
         ...l,
         email: primaryEmailContact?.email || null,
         emailStatus: primaryEmailContact?.emailStatus || null,
+        emailRole: primaryRole,
         phone: l.phone || phoneContact?.value || null,
         additionalEmails,
+        allEmails,
         socialLinks,
       };
     });

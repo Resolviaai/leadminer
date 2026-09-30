@@ -23,6 +23,7 @@ export class EmailVerificationService {
       return {
         email: '',
         status: 'INVALID',
+        confidenceScore: 0.0,
         reason: 'Empty email provided',
         reasonCode: 'SYNTAX_INVALID',
         isRoleBased: false,
@@ -44,6 +45,7 @@ export class EmailVerificationService {
       return {
         email,
         status: 'FAILED',
+        confidenceScore: 0.0,
         reason: error.message || 'Unknown verification error',
         reasonCode: 'VERIFICATION_ERROR',
         isRoleBased: false,

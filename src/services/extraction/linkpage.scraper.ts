@@ -1,25 +1,42 @@
 import * as cheerio from 'cheerio';
-import { emailExtractor, categorizeEmail, EmailCategory } from './email.extractor';
-import { socialExtractor } from './social.extractor';
-import { isSafePublicUrl } from '../../lib/ssrf-guard';
+import { emailExtractor, classifyEmailRole, categorizeEmail, EmailCategory } from './email.extractor';
+import { socialExtractor, ExtractedContactItem } from './social.extractor';
+import { safeFetchHtmlStream, DomainCrawlCache } from './http-stream';
 
 export interface ScrapedLinkPageResult {
   url: string;
-  emails: { email: string; category: EmailCategory }[];
+  emails: {
+    email: string;
+    category: EmailCategory;
+    role?: string;
+    priorityScore?: number;
+    confidence?: number;
+    source?: string;
+  }[];
   socials: Record<string, string>;
+  items?: ExtractedContactItem[];
+  phone?: string;
+  whatsapp?: string;
   status: 'SUCCESS' | 'NO_EMAIL' | 'FAILED' | 'TIMEOUT';
   error?: string;
+}
+
+function safeDecodeUriComponent(str: string): string {
+  try {
+    return decodeURIComponent(str);
+  } catch {
+    return str;
+  }
 }
 
 export class LinkPageScraper {
   private userAgent =
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-  private isIgnoredUrl(url: string): boolean {
-    const lower = url.toLowerCase();
-    if (/\.(png|jpg|jpeg|gif|svg|webp|ico|js|css|woff|woff2|ttf|eot)(\?.*)?$/i.test(lower)) {
-      return true;
-    }
+  private domainCache = new DomainCrawlCache<ScrapedLinkPageResult>(15 * 60 * 1000);
+
+  private isIgnoredHost(hostname: string): boolean {
+    const host = hostname.toLowerCase().trim();
     const ignoredHosts = [
       'schema.org',
       'spotifycdn.com',
@@ -41,59 +58,45 @@ export class LinkPageScraper {
       'youtu.be',
       'lpcontent.net',
     ];
-    return ignoredHosts.some((h) => lower.includes(h));
+    return ignoredHosts.some((h) => host === h || host.endsWith('.' + h));
+  }
+
+  private isIgnoredAsset(pathname: string): boolean {
+    return /\.(png|jpg|jpeg|gif|svg|webp|ico|js|css|woff|woff2|ttf|eot)(\?.*)?$/i.test(pathname);
   }
 
   private normalizeUrl(rawUrl: string): string | null {
     let url = rawUrl.trim();
-    if (!url || this.isIgnoredUrl(url)) return null;
+    if (!url) return null;
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
       url = `https://${url}`;
     }
     try {
       const parsed = new URL(url);
-      if (this.isIgnoredUrl(parsed.hostname)) return null;
+      if (this.isIgnoredHost(parsed.hostname)) return null;
+      if (this.isIgnoredAsset(parsed.pathname)) return null;
       return parsed.toString();
     } catch {
       return null;
     }
   }
 
-  private async fetchHtml(url: string, maxBytes = 524288): Promise<{ html: string | null; error?: string }> {
+  private getCacheKey(url: string): string {
     try {
-      // N-P2-1: Reject loopback, private IP, and cloud metadata targets
-      if (!(await isSafePublicUrl(url))) {
-        console.warn(`[SSRF Guard] Blocked unsafe linkpage target URL: ${url}`);
-        return { html: null, error: 'SSRF_BLOCKED' };
-      }
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-      const response = await fetch(url, {
-        signal: controller.signal,
-        headers: {
-          'User-Agent': this.userAgent,
-          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9',
-        },
-        redirect: 'follow',
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        return { html: null, error: `HTTP_${response.status}` };
-      }
-
-      const text = await response.text();
-      return { html: text.slice(0, maxBytes) };
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
-        return { html: null, error: 'TIMEOUT' };
-      }
-      return { html: null, error: err.message || 'FETCH_ERROR' };
+      return new URL(url).hostname.toLowerCase();
+    } catch {
+      return url.toLowerCase();
     }
+  }
+
+  private async fetchHtml(url: string, maxBytes = 262144): Promise<{ html: string | null; error?: string }> {
+    const res = await safeFetchHtmlStream(url, {
+      userAgent: this.userAgent,
+      timeoutMs: 4000,
+      maxBytes,
+      maxHops: 3,
+    });
+    return { html: res.html, error: res.error };
   }
 
   /**
@@ -105,23 +108,39 @@ export class LinkPageScraper {
       return { url: targetUrl, emails: [], socials: {}, status: 'FAILED', error: 'INVALID_URL' };
     }
 
+    // Domain / Hostname cache check
+    const cacheKey = this.getCacheKey(normalized);
+    const cached = this.domainCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const { html, error } = await this.fetchHtml(normalized);
     if (!html) {
-      return {
+      const failResult: ScrapedLinkPageResult = {
         url: normalized,
         emails: [],
         socials: {},
         status: error === 'TIMEOUT' ? 'TIMEOUT' : 'FAILED',
         error: error || 'UNREACHABLE',
       };
+      this.domainCache.set(cacheKey, failResult, true);
+      return failResult;
     }
 
     const emailSet = new Set<string>();
-    let emails: { email: string; category: EmailCategory }[] = [];
+    let emails: {
+      email: string;
+      category: EmailCategory;
+      role?: string;
+      priorityScore?: number;
+      confidence?: number;
+      source?: string;
+    }[] = [];
     const socials: Record<string, string> = {};
 
     const addEmail = (rawEmail: string) => {
-      let clean = decodeURIComponent(rawEmail).toLowerCase().trim();
+      let clean = safeDecodeUriComponent(rawEmail).toLowerCase().trim();
       clean = clean.replace(/^(\\u003e|u003e|>|&gt;)+/i, '').trim();
       while (clean.endsWith('.') || clean.endsWith(',')) clean = clean.slice(0, -1);
       if (clean && !emailSet.has(clean) && clean.includes('@') && clean.includes('.')) {
@@ -154,7 +173,19 @@ export class LinkPageScraper {
       }
     }
 
-    // 4. Scan embedded script tags for mailto / email structures (e.g. Beacons, Carrd)
+    // 4. Scan JSON-LD and embedded script tags for mailto / email structures (e.g. Beacons, Carrd, Schema.org)
+    $('script[type="application/ld+json"]').each((_, el) => {
+      try {
+        const rawJson = $(el).html();
+        if (rawJson) {
+          const parsed = JSON.parse(rawJson);
+          this.extractEmailsFromJson(parsed, addEmail);
+        }
+      } catch {
+        // Non-fatal if JSON-LD is malformed
+      }
+    });
+
     $('script').each((_, el) => {
       const scriptContent = $(el).html() || '';
       if (scriptContent.includes('mailto:') || scriptContent.includes('@')) {
@@ -172,35 +203,47 @@ export class LinkPageScraper {
       addEmail(item.email);
     }
 
-    // 6. Extract socials from links on the landing page
+    // 6. Extract socials and contact items from links on the landing page
     const extractedSocials = socialExtractor.extractSocials(html);
     if (extractedSocials.instagram) socials.instagram = extractedSocials.instagram;
     if (extractedSocials.twitter) socials.twitter = extractedSocials.twitter;
     if (extractedSocials.discord) socials.discord = extractedSocials.discord;
     if (extractedSocials.tiktok) socials.tiktok = extractedSocials.tiktok;
     if (extractedSocials.linkedin) socials.linkedin = extractedSocials.linkedin;
+    if (extractedSocials.linktree) socials.linktree = extractedSocials.linktree;
+    if (extractedSocials.beacons) socials.beacons = extractedSocials.beacons;
+    if (extractedSocials.website) socials.website = extractedSocials.website;
+    if (extractedSocials.phone) socials.phone = extractedSocials.phone;
+    if (extractedSocials.whatsapp) socials.whatsapp = extractedSocials.whatsapp;
 
-    // Categorize discovered emails
-    emails = Array.from(emailSet).map((email) => ({
-      email,
-      category: categorizeEmail(email),
-    }));
+    // Categorize and score discovered emails with rich metadata
+    emails = Array.from(emailSet).map((email) => {
+      const { role, priorityScore } = emailExtractor.classifyEmailRole(email, bodyText);
+      const category = categorizeEmail(email);
+      return {
+        email,
+        category,
+        role,
+        priorityScore,
+        confidence: 0.92,
+        source: 'link_page',
+      };
+    });
 
-    // Sort by priority: CREATOR_DIRECT > BUSINESS_INQUIRIES > MANAGEMENT > GENERIC_SUPPORT
-    const priorityOrder: Record<EmailCategory, number> = {
-      CREATOR_DIRECT: 0,
-      BUSINESS_INQUIRIES: 1,
-      MANAGEMENT: 2,
-      GENERIC_SUPPORT: 3,
-    };
-    emails.sort((a, b) => priorityOrder[a.category] - priorityOrder[b.category]);
+    // Sort by priorityScore descending
+    emails.sort((a, b) => (b.priorityScore ?? 0) - (a.priorityScore ?? 0));
 
-    return {
+    const successResult: ScrapedLinkPageResult = {
       url: normalized,
       emails,
       socials,
+      items: extractedSocials.items,
+      phone: extractedSocials.phone,
+      whatsapp: extractedSocials.whatsapp,
       status: emails.length > 0 ? 'SUCCESS' : 'NO_EMAIL',
     };
+    this.domainCache.set(cacheKey, successResult);
+    return successResult;
   }
 
   private extractEmailsFromJson(obj: any, addEmail: (e: string) => void, depth = 0): void {
@@ -224,9 +267,20 @@ export class LinkPageScraper {
     }
 
     if (typeof obj === 'object') {
+      const targetKeys = new Set([
+        'email',
+        'contactemail',
+        'businessemail',
+        'mail',
+        'inquiryemail',
+        'supportemail',
+        'collabemail',
+        'emailaddress',
+      ]);
+
       for (const key of Object.keys(obj)) {
-        // Special check for Linktree/Beacons object keys
-        if (key === 'email' && typeof obj[key] === 'string') {
+        const lowerKey = key.toLowerCase();
+        if (targetKeys.has(lowerKey) && typeof obj[key] === 'string') {
           addEmail(obj[key]);
         } else if (key === 'url' && typeof obj[key] === 'string' && obj[key].startsWith('mailto:')) {
           addEmail(obj[key].replace('mailto:', '').split('?')[0]);

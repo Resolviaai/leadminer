@@ -104,6 +104,29 @@ describe('Gemini Personalizer Service', () => {
     expect(res.customLine.length).toBeGreaterThan(15);
     expect(['CUSTOMIZED', 'FALLBACK']).toContain(res.status);
   }, 10000);
+
+  it('should manage daily quota reservations independently for extraction and outreach', async () => {
+    geminiService.resetMemoryQuotaForTesting();
+    // Both extraction and outreach should have independent quota buckets
+    const allowedExt1 = await geminiService.reserveDailyQuota('gemini_extraction', 3);
+    const allowedExt2 = await geminiService.reserveDailyQuota('gemini_extraction', 3);
+    const allowedExt3 = await geminiService.reserveDailyQuota('gemini_extraction', 3);
+    const blockedExt4 = await geminiService.reserveDailyQuota('gemini_extraction', 3);
+
+    expect(allowedExt1).toBe(true);
+    expect(allowedExt2).toBe(true);
+    expect(allowedExt3).toBe(true);
+    expect(blockedExt4).toBe(false);
+
+    // Outreach bucket should still be available even if extraction bucket reached its limit
+    const allowedOut1 = await geminiService.reserveDailyQuota('gemini_outreach', 2);
+    const allowedOut2 = await geminiService.reserveDailyQuota('gemini_outreach', 2);
+    const blockedOut3 = await geminiService.reserveDailyQuota('gemini_outreach', 2);
+
+    expect(allowedOut1).toBe(true);
+    expect(allowedOut2).toBe(true);
+    expect(blockedOut3).toBe(false);
+  });
 });
 
 describe('Outreach Hardening & Volume Jitter', () => {

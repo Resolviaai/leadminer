@@ -3,11 +3,16 @@ import { keywords, leads, contacts, leadKeywordSources } from '../db/schema';
 import { eq, inArray, sql } from 'drizzle-orm';
 import { env } from '../config/env';
 import { youtubeDiscoveryService } from '../services/youtube/discovery.service';
-import { emailExtractor } from '../services/extraction/email.extractor';
+import { emailExtractor, classifyEmailRole, categorizeEmail } from '../services/extraction/email.extractor';
 import { socialExtractor } from '../services/extraction/social.extractor';
+import { contactResolutionEngine } from '../services/extraction/contact-resolution.engine';
+import { linkPageScraper } from '../services/extraction/linkpage.scraper';
+import { websiteScraper } from '../services/extraction/website.scraper';
 import { jobRunner } from '../services/jobs/job.runner';
 import { getAvailableYouTubeKeys, quotaManager } from '../services/youtube/quota';
 import { telegramService } from '../services/notifications/telegram.service';
+import { jevService } from '../services/ai/jev.service';
+import { geminiService } from '../services/ai/gemini.service';
 
 export function calculatePriorityScore(newLeadsCount: number): number {
   if (newLeadsCount >= 11) return 90; // High yield
@@ -225,29 +230,160 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
             continue;
           }
 
-          // 10. Extract Contacts from description first
-          const extractedEmails = emailExtractor.extractEmails(ch.description || '');
-          const extractedSocials = socialExtractor.extractSocials(ch.description || '');
+          // 10. Stage 1: Deterministic Extraction (Channel Description)
+          let extractedEmails = emailExtractor.extractEmails(ch.description || '');
+          let extractedSocials = socialExtractor.extractSocials(ch.description || '');
 
-          // Video Description Mining: If no email found in channel description, check latest 5 video descriptions
-          if (extractedEmails.length === 0 && ch.uploadsPlaylistId) {
+          // Video Description Mining Gate: Inspect recent videos when there is no sufficiently confident deterministic email
+          let sufficiency = contactResolutionEngine.evaluateSufficiency(extractedEmails);
+
+          if (!sufficiency.isSufficient && ch.uploadsPlaylistId) {
             try {
               const videoDescriptions = await youtubeDiscoveryService.getRecentVideoDescriptions(ch.uploadsPlaylistId, 5);
               for (const vDesc of videoDescriptions) {
                 const vEmails = emailExtractor.extractEmails(vDesc, 'video_description');
-                for (const ve of vEmails) {
-                  if (!extractedEmails.some((e) => e.email.toLowerCase() === ve.email.toLowerCase())) {
-                    extractedEmails.push(ve);
-                  }
-                }
+                extractedEmails.push(...vEmails);
                 const vSocials = socialExtractor.extractSocials(vDesc);
-                if (!extractedSocials.linktree && vSocials.linktree) extractedSocials.linktree = vSocials.linktree;
-                if (!extractedSocials.beacons && vSocials.beacons) extractedSocials.beacons = vSocials.beacons;
-                if (!extractedSocials.website && vSocials.website) extractedSocials.website = vSocials.website;
-                if (!extractedSocials.instagram && vSocials.instagram) extractedSocials.instagram = vSocials.instagram;
+                extractedSocials = contactResolutionEngine.consolidateSocials([extractedSocials, vSocials]);
+
+                // Adaptive early-stop: If video description yields a high-confidence clean email, stop parsing remaining videos
+                sufficiency = contactResolutionEngine.evaluateSufficiency(extractedEmails);
+                if (sufficiency.isSufficient) {
+                  break;
+                }
               }
             } catch (videoErr: any) {
               console.warn(`[Discovery Worker] Error checking video descriptions for ${ch.channelId}:`, videoErr?.message);
+            }
+          }
+
+          // Stage 1.5: Budgeted Fast External Enrichment (1 hop, 2.5s timeout, 128KB max)
+          // If no clean email yet, but creator lists a Linktree, Beacons, or Website:
+          // Check it deterministically BEFORE spending Jev or Gemini AI quota!
+          if (!sufficiency.isSufficient) {
+            const externalTarget = extractedSocials.linktree || extractedSocials.beacons || extractedSocials.website || ch.website;
+            if (externalTarget) {
+              try {
+                const isLinkPage = Boolean(
+                  extractedSocials.linktree ||
+                  extractedSocials.beacons ||
+                  /linktr\.ee|beacons\.ai|stan\.store/i.test(externalTarget)
+                );
+                if (isLinkPage) {
+                  const linkResult = await linkPageScraper.scrapeLinkPage(externalTarget);
+                  if (linkResult.status === 'SUCCESS' && linkResult.emails.length > 0) {
+                    for (const item of linkResult.emails) {
+                      extractedEmails.push({
+                        email: item.email.toLowerCase(),
+                        source: 'link_page',
+                        role: (item.role as any) || 'BUSINESS',
+                        priorityScore: item.priorityScore || 85,
+                        category: item.category,
+                        confidence: item.confidence || 0.90,
+                        contextSnippet: `Link page: ${externalTarget}`,
+                      });
+                    }
+                  }
+                  extractedSocials = contactResolutionEngine.consolidateSocials([
+                    extractedSocials,
+                    {
+                      ...linkResult.socials,
+                      items: linkResult.items || [],
+                      phone: linkResult.phone,
+                      whatsapp: linkResult.whatsapp,
+                    },
+                  ]);
+                } else {
+                  const webResult = await websiteScraper.scrapeUrl(externalTarget);
+                  if (webResult.emails.length > 0) {
+                    for (const em of webResult.emails) {
+                      const { role, priorityScore } = classifyEmailRole(em, externalTarget);
+                      extractedEmails.push({
+                        email: em.toLowerCase(),
+                        source: 'contact_page',
+                        role,
+                        priorityScore,
+                        category: categorizeEmail(em),
+                        confidence: 0.92,
+                        contextSnippet: `Website: ${externalTarget}`,
+                      });
+                    }
+                  }
+                  extractedSocials = contactResolutionEngine.consolidateSocials([
+                    extractedSocials,
+                    {
+                      ...webResult.socials,
+                      items: webResult.rawItems || [],
+                      phone: webResult.phones?.[0],
+                      whatsapp: webResult.whatsapp,
+                    },
+                  ]);
+                }
+
+                // Re-evaluate sufficiency after external enrichment
+                sufficiency = contactResolutionEngine.evaluateSufficiency(extractedEmails);
+              } catch (enrichErr: any) {
+                // Gracefully fall through to AI cascade if external fetch fails/times out
+              }
+            }
+          }
+
+          // Stage 2 & 3: Targeted AI Cascade
+          // Extractor -> ambiguous/obfuscated -> Jev System One
+          // Jev -> genuinely needs deeper extraction -> Gemini 3.1 Flash-Lite
+          if (!sufficiency.isSufficient && jevService.isAvailable() && ch.description && ch.description.trim().length > 0) {
+            try {
+              const jevEval = await jevService.evaluateContactPresence(ch.description, ch.title);
+              if (jevEval && (jevEval.hasEmail || jevEval.isObfuscated)) {
+                // Jev confirmed contact presence or obfuscation that deterministic regex missed:
+                if (geminiService.isAvailable()) {
+                  const llmContacts = await geminiService.extractContacts(ch.description, ch.title);
+                  if (llmContacts) {
+                    if (llmContacts.email) {
+                      const normalizedEmail = llmContacts.email.toLowerCase();
+                      const { role, priorityScore } = classifyEmailRole(normalizedEmail, ch.description);
+                      extractedEmails.push({
+                        email: normalizedEmail,
+                        source: 'description',
+                        role,
+                        priorityScore,
+                        category: categorizeEmail(normalizedEmail),
+                        confidence: 0.90,
+                        contextSnippet: ch.description?.slice(0, 150),
+                      });
+                    }
+                    if (llmContacts.discord && !extractedSocials.discord) {
+                      extractedSocials.discord = llmContacts.discord;
+                      extractedSocials.items.push({
+                        type: 'DISCORD',
+                        value: llmContacts.discord,
+                        normalizedValue: llmContacts.discord.toLowerCase(),
+                        source: 'jev_gemini_cascade',
+                      });
+                    }
+                    if (llmContacts.instagram && !extractedSocials.instagram) {
+                      extractedSocials.instagram = llmContacts.instagram;
+                      extractedSocials.items.push({
+                        type: 'INSTAGRAM',
+                        value: llmContacts.instagram,
+                        normalizedValue: llmContacts.instagram.toLowerCase(),
+                        source: 'jev_gemini_cascade',
+                      });
+                    }
+                    if (llmContacts.phone && !extractedSocials.phone) {
+                      extractedSocials.phone = llmContacts.phone;
+                      extractedSocials.items.push({
+                        type: 'PHONE',
+                        value: llmContacts.phone,
+                        normalizedValue: llmContacts.phone,
+                        source: 'jev_gemini_cascade',
+                      });
+                    }
+                  }
+                }
+              }
+            } catch (jevErr: any) {
+              console.warn(`[Discovery Worker] Jev evaluation non-fatal error for ${ch.channelId}:`, jevErr?.message);
             }
           }
 
@@ -305,9 +441,10 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
               .onConflictDoNothing();
 
             // 13. Contact Extraction: Preserve ALL Discovered Emails and Links
-            // Insert ALL discovered unique emails
-            for (let i = 0; i < extractedEmails.length; i++) {
-              const emailObj = extractedEmails[i];
+            // Resolve, deduplicate, and prioritize candidate emails (best commercial email first)
+            const { allEmails } = contactResolutionEngine.resolveEmails(extractedEmails);
+            for (let i = 0; i < allEmails.length; i++) {
+              const emailObj = allEmails[i];
               const cleanEmail = emailObj.email.toLowerCase().trim();
 
               await tx
@@ -321,6 +458,7 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
                   isPrimary: i === 0,
                   email: cleanEmail,
                   emailStatus: 'UNKNOWN',
+                  emailCategory: emailObj.category || emailObj.role,
                 })
                 .onConflictDoNothing();
 

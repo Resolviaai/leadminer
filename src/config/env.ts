@@ -32,15 +32,31 @@ const envSchema = z.object({
   YOUTUBE_API_KEY_3: z.string().optional().default(''),
   YOUTUBE_API_KEY_4: z.string().optional().default(''),
   YOUTUBE_DAILY_SEARCH_LIMIT: z.coerce.number().default(80),
-  YOUTUBE_DAILY_GENERAL_LIMIT: z.coerce.number().default(9020),
+  YOUTUBE_DAILY_GENERAL_LIMIT: z.coerce.number().default(1800),
   YOUTUBE_BATCH_SIZE: z.coerce.number().default(10),
   YOUTUBE_MAX_RESULTS_PER_SEARCH: z.coerce.number().default(50),
   YOUTUBE_TARGET_REGION: z.string().default('TIER_1'),
   YOUTUBE_TARGET_LANGUAGE: z.string().default('en'),
 
-  // Gemini API
+  // Gemini API (Two-Tier Free Architecture: 15 RPM, 250K TPM, 500 RPD)
   GEMINI_API_KEY: z.string().optional().default(''),
   GEMINI_MODEL: z.string().default('gemini-3.5-flash-lite'),
+  GEMINI_EXTRACTION_MODEL: z.string().default('gemini-3.1-flash-lite'),
+  GEMINI_OUTREACH_MODEL: z.string().default('gemini-3.5-flash-lite'),
+  GEMINI_RPM: z.coerce.number().default(15),
+  GEMINI_TPM: z.coerce.number().default(250000),
+  GEMINI_DAILY_LIMIT: z.coerce.number().default(500),
+
+  // TypeSafe AI (Jev System One: 1,200 RPM, $0.042/1M tokens; JEV_DAILY_CALL_LIMIT is an application safety governor)
+  TYPESAFE_API_KEY: z.string().optional().default(''),
+  JEV_MODEL: z.string().default('jev-latest'),
+  JEV_DAILY_CALL_LIMIT: z.coerce.number().default(5000), // Application safety ceiling / budget governor
+  JEV_ENABLED: z
+    .preprocess(
+      (val) => (typeof val === 'string' ? val.toLowerCase() === 'true' || val === '1' : Boolean(val)),
+      z.boolean()
+    )
+    .default(true),
 
   // Telegram
   TELEGRAM_BOT_TOKEN: z.string().optional().default(''),

@@ -34,4 +34,67 @@ describe('WarmupService', () => {
     expect(limitDay6).toBeGreaterThanOrEqual(18);
     expect(limitDay6).toBeLessThanOrEqual(25);
   });
+
+  describe('14-Day Inactivity Cold Reset & Streak Details', () => {
+    it('should return 0 active days and isColdReset false for brand new account with 0 sends', async () => {
+      vi.spyOn(warmupService, 'getStreakDetails').mockResolvedValue({
+        activeSendDays: 0,
+        daysSinceLastSend: null,
+        isColdReset: false,
+      });
+
+      const status = await warmupService.getAccountWarmupStatus(10);
+      expect(status.activeSendDays).toBe(0);
+      expect(status.currentDay).toBe(0);
+      expect(status.stageTarget).toBe(5);
+      expect(status.isWarmedUp).toBe(false);
+      expect(status.isColdReset).toBe(false);
+    });
+
+    it('should reset active days to 0 and set isColdReset true when inactive for > 14 days', async () => {
+      vi.spyOn(warmupService, 'getStreakDetails').mockResolvedValue({
+        activeSendDays: 0,
+        daysSinceLastSend: 18,
+        isColdReset: true,
+      });
+
+      const status = await warmupService.getAccountWarmupStatus(10);
+      expect(status.activeSendDays).toBe(0);
+      expect(status.currentDay).toBe(0);
+      expect(status.stageTarget).toBe(5); // Reset back to Day 0 ramp (target 5)
+      expect(status.isWarmedUp).toBe(false);
+      expect(status.isColdReset).toBe(true);
+      expect(status.daysSinceLastSend).toBe(18);
+    });
+
+    it('should maintain active streak when weekend or short gap <= 14 days occurs', async () => {
+      vi.spyOn(warmupService, 'getStreakDetails').mockResolvedValue({
+        activeSendDays: 5,
+        daysSinceLastSend: 2, // 2 days ago (e.g. weekend pause)
+        isColdReset: false,
+      });
+
+      const status = await warmupService.getAccountWarmupStatus(10);
+      expect(status.activeSendDays).toBe(5);
+      expect(status.currentDay).toBe(5);
+      expect(status.stageTarget).toBe(21);
+      expect(status.isWarmedUp).toBe(false);
+      expect(status.isColdReset).toBe(false);
+    });
+
+    it('should mark account as fully warmed when activeSendDays >= 6', async () => {
+      vi.spyOn(warmupService, 'getStreakDetails').mockResolvedValue({
+        activeSendDays: 7,
+        daysSinceLastSend: 0,
+        isColdReset: false,
+      });
+
+      const status = await warmupService.getAccountWarmupStatus(10);
+      expect(status.activeSendDays).toBe(7);
+      expect(status.currentDay).toBe(6);
+      expect(status.stageTarget).toBe(25);
+      expect(status.isWarmedUp).toBe(true);
+      expect(status.isColdReset).toBe(false);
+    });
+  });
 });

@@ -34,35 +34,81 @@ export async function reconcileQualifications(): Promise<{ reconciled: number; n
       )
     );
 
+  // Group candidate contacts by leadId to correctly handle 1:N contact relationships
+  const leadsMap = new Map<
+    number,
+    {
+      leadId: number;
+      title: string;
+      subs: number;
+      country: string | null;
+      suppressionStatus: boolean;
+      qualificationStatus: string;
+      contacts: { email: string; emailStatus: any }[];
+    }
+  >();
+
+  for (const row of candidates) {
+    if (!leadsMap.has(row.leadId)) {
+      leadsMap.set(row.leadId, {
+        leadId: row.leadId,
+        title: row.title,
+        subs: row.subs || 0,
+        country: row.country,
+        suppressionStatus: row.suppressionStatus,
+        qualificationStatus: row.qualificationStatus,
+        contacts: [],
+      });
+    }
+    if (row.email) {
+      leadsMap.get(row.leadId)!.contacts.push({
+        email: row.email,
+        emailStatus: row.emailStatus,
+      });
+    }
+  }
+
   let reconciled = 0;
   let newlyQualified = 0;
 
-  for (const item of candidates) {
+  for (const item of leadsMap.values()) {
     reconciled++;
-    const res = leadQualificationService.qualify(
-      {
-        subscriberCount: item.subs || 0,
-        email: item.email,
-        emailStatus: item.emailStatus,
-        country: item.country || undefined,
-        isSuppressed: item.suppressionStatus,
-        alreadyContacted: false,
-      },
-      {
-        minSubscribers: minSubs,
-        maxSubscribers: maxSubs,
-        requireEmail: true,
-        requireValidEmail: true,
-        targetCountry: campaign.targetCountry || undefined,
-      }
-    );
+    // A lead is QUALIFIED if ANY of its eligible contacts satisfy campaign criteria
+    let isLeadQualified = false;
+    let qualifyingEmail: string | undefined;
 
-    const targetStatus = res.qualified ? 'QUALIFIED' : 'DISQUALIFIED';
+    for (const c of item.contacts) {
+      const res = leadQualificationService.qualify(
+        {
+          subscriberCount: item.subs,
+          email: c.email,
+          emailStatus: c.emailStatus,
+          country: item.country || undefined,
+          isSuppressed: item.suppressionStatus,
+          alreadyContacted: false,
+        },
+        {
+          minSubscribers: minSubs,
+          maxSubscribers: maxSubs,
+          requireEmail: true,
+          requireValidEmail: true,
+          targetCountry: campaign.targetCountry || undefined,
+        }
+      );
+
+      if (res.qualified) {
+        isLeadQualified = true;
+        qualifyingEmail = c.email;
+        break;
+      }
+    }
+
+    const targetStatus = isLeadQualified ? 'QUALIFIED' : 'DISQUALIFIED';
     if (item.qualificationStatus !== targetStatus) {
       await db.update(leads).set({ qualificationStatus: targetStatus, updatedAt: new Date() }).where(eq(leads.id, item.leadId));
-      if (res.qualified) {
+      if (isLeadQualified) {
         newlyQualified++;
-        console.log(`[Reconcile] Lead ${item.leadId} ("${item.title}") marked QUALIFIED for outreach (${item.email})`);
+        console.log(`[Reconcile] Lead ${item.leadId} ("${item.title}") marked QUALIFIED for outreach (${qualifyingEmail})`);
       }
     }
   }
