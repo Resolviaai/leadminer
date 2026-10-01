@@ -66,7 +66,6 @@ export function ApiUsageCard({ quota }: ApiUsageCardProps) {
                   strokeWidth={strokeWidth}
                   strokeDasharray={`${searchDash} ${circumference}`}
                   strokeDashoffset={searchOffset}
-                  strokeLinecap="round"
                 />
               )}
 

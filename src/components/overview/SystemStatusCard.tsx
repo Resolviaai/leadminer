@@ -56,7 +56,8 @@ export function SystemStatusCard({ system }: SystemStatusCardProps) {
             return (
               <div
                 key={worker.id}
-                className="flex items-center justify-between text-xs py-1 px-1.5 rounded-lg hover:bg-surface-200/40 transition-colors"
+                title={worker.tooltip}
+                className="flex items-center justify-between text-xs py-1 px-1.5 rounded-lg hover:bg-surface-200/40 transition-colors cursor-default"
               >
                 <div className="flex items-center gap-2.5">
                   <span className={`w-2 h-2 rounded-full ${dotColor} shrink-0`} />

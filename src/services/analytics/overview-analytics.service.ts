@@ -110,9 +110,10 @@ export interface OutreachAnalytics {
 export interface SystemStatusItem {
   id: string;
   name: string;
-  status: 'Healthy' | 'Warning' | 'Exhausted' | 'Running' | 'Idle';
+  status: 'Healthy' | 'Warning' | 'Exhausted' | 'Running' | 'Idle' | 'Quota Paused';
   statusColor: 'emerald' | 'amber' | 'rose' | 'slate';
   detail: string;
+  tooltip?: string;
 }
 
 export interface SystemHealthAnalytics {
@@ -888,19 +889,26 @@ export class OverviewAnalyticsService {
 
       let statusName: SystemStatusItem['status'] = 'Healthy';
       let statusColor: SystemStatusItem['statusColor'] = 'emerald';
+      let tooltip: string | undefined = undefined;
+
+      const timeAgo = entry?.lastRun ? this.formatTimeAgo(new Date(entry.lastRun)) : 'Active';
+      let detail = timeAgo;
 
       if (isRunning) {
         statusName = 'Running';
         statusColor = 'emerald';
+        tooltip = 'Worker is actively running in the background';
       } else if (isQuota) {
-        statusName = 'Warning';
+        statusName = 'Quota Paused';
         statusColor = 'amber';
+        detail = `Resets in ${quota.resetsInHours}h`;
+        tooltip = `Daily YouTube quota reached (${quota.totalUnitsUsed.toLocaleString()} / ${quota.totalUnitsLimit.toLocaleString()} units). Scraping safely paused to protect account. Auto-resumes after reset at Midnight PT (12:30 PM IST).`;
       } else if (isFailed) {
         statusName = 'Warning';
-        statusColor = 'amber';
+        statusColor = 'rose';
+        tooltip = 'Worker encountered an error during its last run';
       }
 
-      const timeAgo = entry?.lastRun ? this.formatTimeAgo(new Date(entry.lastRun)) : 'Active';
       return {
         id: jobType,
         name:
@@ -913,7 +921,8 @@ export class OverviewAnalyticsService {
             : jobType,
         status: statusName,
         statusColor,
-        detail: timeAgo,
+        detail,
+        tooltip,
       };
     };
 
@@ -927,6 +936,7 @@ export class OverviewAnalyticsService {
         status: 'Healthy',
         statusColor: 'emerald',
         detail: 'PostgreSQL Active',
+        tooltip: 'Database connection pool is responsive and active',
       },
       {
         id: 'api_quota',
@@ -934,6 +944,7 @@ export class OverviewAnalyticsService {
         status: quota.status === 'EXHAUSTED' ? 'Exhausted' : quota.status === 'WARNING' ? 'Warning' : 'Healthy',
         statusColor: quota.status === 'EXHAUSTED' ? 'rose' : quota.status === 'WARNING' ? 'amber' : 'emerald',
         detail: `${100 - quota.totalUnitsPercentage}% left`,
+        tooltip: `${quota.totalUnitsUsed.toLocaleString()} / ${quota.totalUnitsLimit.toLocaleString()} units used. Resets in ${quota.resetsInHours}h (Midnight PT / 12:30 PM IST).`,
       },
     ];
 
