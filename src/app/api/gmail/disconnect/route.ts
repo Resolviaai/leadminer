@@ -149,21 +149,22 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Execution: Permanent Delete vs Soft Disconnect
-    if (permanent && sentMessagesCount === 0) {
+    if (permanent) {
       await db.delete(gmailAccounts).where(eq(gmailAccounts.id, accountId));
 
       await db.insert(logs).values({
         eventType: 'GMAIL_ACCOUNT_DELETED',
         level: 'WARN',
-        message: `Permanently removed connected inbox: ${account.email} (tokenRevoked=${tokenRevoked})`,
-        metadata: { accountId, email: account.email, tokenRevoked },
+        message: `Permanently removed connected inbox: ${account.email} (tokenRevoked=${tokenRevoked}, historicalMessages=${sentMessagesCount})`,
+        metadata: { accountId, email: account.email, tokenRevoked, sentMessagesCount },
       });
 
       return NextResponse.json({
         success: true,
         action: 'DELETED',
-        message: `Inbox ${account.email} permanently removed.`,
+        message: `Inbox ${account.email} permanently removed. Historical records preserved.`,
         tokenRevoked,
+        sentMessagesCount,
       });
     }
 

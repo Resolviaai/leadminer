@@ -310,3 +310,55 @@ All development activities, audits, architectural decisions, and milestones are 
   - `npx vitest run`: **143/143 tests passing** (100% pass rate).
   - `npx tsc --noEmit`: 0 errors.
   - `npm run build`: 0 errors across all 33 static and dynamic routes.
+
+---
+
+## 2026-10-02 — Session 12 (Permanent Inbox Deletion Fix & Gmail Avatar/Brand Logo Implementation)
+- **Agent:** Antigravity
+- **Context & Directives:**
+  1. **Fix Inbox Deletion Failure:** User attempted to permanently remove `resolviaai@gmail.com` via the "Permanently Remove Inbox" modal on `/gmail`. After clicking "Delete Permanently" and refreshing the page, the email remained visible with a `DISCONNECTED` status.
+  2. **Fetch Logo / Profile Picture (`media_1790964044053.png`):** User pointed yellow arrows at the default plain letter boxes `[ A ]` and `[ R ]` on the inbox cards and requested: *"Either I was thinking what if you can uh fetch the logo or the profile picture here can you do that? Without adding any extra. Uh, headache."*
+  3. **Handoff Requirement:** User requested a complete, meticulous progress update before powering off their workstation so the next agent can resume seamlessly with zero context loss and zero regressions.
+
+- **Actions Completed in this Session:**
+  - **Root Cause Analysis of Inbox Deletion Bug:**
+    - Located bug in `src/app/api/gmail/disconnect/route.ts` line 152: `if (permanent && sentMessagesCount === 0)`.
+    - Because `resolviaai@gmail.com` had 33 historical messages sent (`sentMessagesCount === 33`), the condition evaluated to `false`.
+    - The route silently ignored `permanent: true`, executed the fallback "Soft Disconnect", set `status = 'DISCONNECTED'`, and returned `{ action: 'DISCONNECTED' }`.
+    - On refresh, `src/app/gmail/page.tsx` re-fetched all accounts from `gmail_accounts` including `DISCONNECTED` ones, causing the deleted account to persist forever.
+  - **Backend Fix in `src/app/api/gmail/disconnect/route.ts`:**
+    - Changed `if (permanent && sentMessagesCount === 0)` to `if (permanent)`.
+    - When `permanent: true`, executes `await db.delete(gmailAccounts).where(eq(gmailAccounts.id, accountId))`.
+    - Confirmed database foreign keys: `messages.gmailAccountId` has `ON DELETE SET NULL`, preserving all 33 historical message records with `gmail_account_id = NULL`.
+    - `scheduledEmails` has `ON DELETE CASCADE` and pending sends are re-pinned or cancelled.
+    - `leadSequenceProgress.pinnedGmailAccountId` has `ON DELETE SET NULL`.
+    - Returns `{ success: true, action: 'DELETED', message: 'Inbox permanently removed. Historical records preserved.', tokenRevoked, sentMessagesCount }`.
+  - **Database Cleanup:**
+    - Executed deletion of account ID 1 (`resolviaai@gmail.com`) directly in PostgreSQL.
+    - Verified remaining inboxes: ID 2 (`rohitbagwork@gmail.com`) and ID 3 (`aadarshcwork@gmail.com`).
+    - Verified all 33 historical messages are intact in the `messages` table with `gmail_account_id = NULL`.
+  - **Test Suite Updates:**
+    - Added test case `should permanently delete account if requested even when messages were previously sent` in `tests/unit/gmail-disconnect.test.ts`.
+    - Ran Vitest: **5/5 tests passing** in `gmail-disconnect.test.ts`.
+
+- **Current Stop Point:**
+  - Modified files in working tree:
+    - `src/app/api/gmail/disconnect/route.ts` (deletion fix applied).
+    - `tests/unit/gmail-disconnect.test.ts` (unit tests passing).
+  - Ready to implement the UI update in `src/components/gmail/GmailAccountsClient.tsx` for the brand logo / profile picture and disconnect modal polish.
+
+- **Exact Next Steps to Resume & Complete:**
+  1. **Update `src/components/gmail/GmailAccountsClient.tsx`:**
+     - Replace the letter avatar (`<div className="w-10 h-10 rounded-xl ...">{letter}</div>`) with an `InboxAvatar` component:
+       - Attempt to load `https://unavatar.io/${encodeURIComponent(acc.email)}?fallback=false`.
+       - If image loads: display profile image with a mini Google Gmail badge in the bottom-right corner.
+       - If image fails or 404s (zero extra headache / no OAuth changes): render the crisp official Google Gmail multi-colored SVG icon (or muted grayscale Gmail icon if `isDisconnected`).
+     - Refine disconnect/remove modal:
+       - When clicking Trash icon on disconnected account (`isDisconnected`), default directly to permanent deletion without requiring `sentToday === 0` checkbox.
+  2. **Verify Changes:**
+     - Run `npm test -- tests/unit/gmail-disconnect.test.ts`.
+     - Run `npx tsc --noEmit` to verify type safety.
+  3. **Deploy to Production:**
+     - Run `npx vercel deploy --prod -y`.
+     - Verify on live URL `https://leadminer-app.vercel.app/gmail`.
+

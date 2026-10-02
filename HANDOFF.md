@@ -131,10 +131,27 @@ Followed by **Phase 3 (Priority Queue & Warmup)**, **Phase 4 (P2 bugs)**, and **
 
 ---
 
-## 5. Exact Next Step
+## 5. Current Active Session & Immediate Next Steps (Updated 2026-10-02)
 
-Begin **TASK-08 (P1-10: YouTube API Key Guard)**:
-1. Open `src/workers/discovery.worker.ts`.
-2. Inspect `hasConfiguredYouTubeKey()` and verify behavior when all keys are blank/placeholder.
-3. Throw terminal error, notify Telegram with critical alert, and ensure zero fake/mock channels are ever inserted.
-4. Run `npx vitest run` and `npx tsc --noEmit`.
+### Completed in this Session:
+1. **Inbox Deletion Fix (`src/app/api/gmail/disconnect/route.ts`):**
+   - Fixed bug where `sentMessagesCount === 0` prevented permanent deletion of accounts with historical outreach.
+   - Deleting an account now removes it cleanly from `gmail_accounts`, while all historical sent records in `messages` are preserved with `gmail_account_id = NULL` via PostgreSQL `ON DELETE SET NULL`.
+   - Updated `tests/unit/gmail-disconnect.test.ts` to test deletion with historical sent messages (5/5 tests passing).
+   - Removed `resolviaai@gmail.com` (ID 1) from the database as requested by the user. Remaining inboxes: `rohitbagwork@gmail.com` (ID 2), `aadarshcwork@gmail.com` (ID 3).
+
+### Immediate Next Steps for Next Session:
+1. **Gmail Logo / Profile Avatar in `src/components/gmail/GmailAccountsClient.tsx`:**
+   - In reference to user image `media_1790964044053.png`:
+   - Replace the generic letter avatars (`[ A ]`, `[ R ]`) with an `InboxAvatar` component:
+     - Render the official Google Gmail multi-colored SVG logo in crisp resolution (desaturated/muted if `isDisconnected`).
+     - Support avatar image loading via `https://unavatar.io/${encodeURIComponent(acc.email)}?fallback=false` with automatic fallback to the Gmail SVG logo on error/404.
+     - When profile photo loads, overlay a subtle mini Gmail badge on the bottom right.
+     - Zero extra headache: No database migrations, no OAuth scope changes.
+2. **Modal Polish in `src/components/gmail/GmailAccountsClient.tsx`:**
+   - When clicking Trash icon on a disconnected account (`isDisconnected`), default directly to permanent deletion without requiring a conditional checkbox.
+3. **Validation & Deployment:**
+   - Run `npx vitest run tests/unit/gmail-disconnect.test.ts` and `npx tsc --noEmit`.
+   - Deploy to Vercel production: `npx vercel deploy --prod -y`.
+   - Verify on live URL `https://leadminer-app.vercel.app/gmail`.
+

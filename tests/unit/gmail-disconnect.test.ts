@@ -190,4 +190,53 @@ describe('Gmail Disconnect & Removal Endpoint', () => {
     expect(data.action).toBe('DELETED');
     expect(mockDbDelete).toHaveBeenCalled();
   });
+
+  it('should permanently delete account if requested even when messages were previously sent', async () => {
+    let selectCall = 0;
+    mockDbSelect.mockImplementation(() => ({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockImplementation(() => {
+          selectCall++;
+          if (selectCall === 1) {
+            return {
+              limit: vi.fn().mockResolvedValue([
+                {
+                  id: 1,
+                  email: 'resolviaai@gmail.com',
+                  status: 'DISCONNECTED',
+                  refreshToken: null,
+                },
+              ]),
+            };
+          }
+          if (selectCall === 2) {
+            return Promise.resolve([{ count: 33 }]); // 33 messages sent historically
+          }
+          return Promise.resolve([]);
+        }),
+      }),
+    }));
+
+    mockDbDelete.mockReturnValue({
+      where: vi.fn().mockResolvedValue([]),
+    });
+
+    mockDbInsert.mockReturnValue({
+      values: vi.fn().mockResolvedValue([]),
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/gmail/disconnect', {
+      method: 'POST',
+      body: JSON.stringify({ accountId: 1, permanent: true }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+
+    expect(data.success).toBe(true);
+    expect(data.action).toBe('DELETED');
+    expect(data.sentMessagesCount).toBe(33);
+    expect(mockDbDelete).toHaveBeenCalled();
+  });
 });
