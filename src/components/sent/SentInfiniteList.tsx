@@ -19,6 +19,7 @@ import {
   ChevronRight,
   ChevronDown,
   AlertTriangle,
+  History,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -50,10 +51,16 @@ export type InboxOption = {
   dailyLimit: number;
 };
 
+export type HistoricalInboxOption = {
+  email: string;
+  sentCount: number;
+};
+
 interface Props {
   initialData: SentMessage[];
   total: number;
   inboxes: InboxOption[];
+  historicalInboxes?: HistoricalInboxOption[];
 }
 
 function formatDate(dateVal: Date | string | null): string {
@@ -87,7 +94,7 @@ function getStatusBadge(status: string) {
 
 const PAGE_SIZE = 50;
 
-export function SentInfiniteList({ initialData, total, inboxes }: Props) {
+export function SentInfiniteList({ initialData, total, inboxes, historicalInboxes = [] }: Props) {
   const [items, setItems] = useState<SentMessage[]>(initialData);
   const [totalCount, setTotalCount] = useState<number>(total);
   const [page, setPage] = useState<number>(1);
@@ -196,8 +203,25 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
   const endItem = totalCount > 0 ? Math.min(page * PAGE_SIZE, totalCount) : 0;
   const rangeLabel = totalCount > 0 ? `${startItem}–${endItem} of ${totalCount.toLocaleString()}` : "0 of 0";
 
-  // Selected account object
+  // Selected account calculation
   const currentAccount = inboxes.find((i) => i.id.toString() === selectedAccountId);
+  const isHistoricalSelected = selectedAccountId.startsWith("HISTORICAL:");
+  const historicalEmailSelected = isHistoricalSelected
+    ? selectedAccountId.replace("HISTORICAL:", "").trim()
+    : null;
+
+  const selectedAccountLabel = useMemo(() => {
+    if (selectedAccountId === "ALL") {
+      return `All Accounts (${inboxes.length})`;
+    }
+    if (isHistoricalSelected && historicalEmailSelected) {
+      return `${historicalEmailSelected} (Archived)`;
+    }
+    if (currentAccount) {
+      return currentAccount.email;
+    }
+    return "Selected Account";
+  }, [selectedAccountId, isHistoricalSelected, historicalEmailSelected, currentAccount, inboxes.length]);
 
   // ══════════════════════════════════════════════════════════════════════════════
   // VIEW 2: GMAIL-STYLE EMAIL DETAIL VIEW
@@ -286,6 +310,12 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
                   <span className="font-mono text-xs text-text-muted">
                     &lt;{activeEmail.senderEmail || "resolviaai@gmail.com"}&gt;
                   </span>
+                  {!activeEmail.gmailAccountId && (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/20 font-medium">
+                      <History className="w-3 h-3 text-amber-400" />
+                      Archived / Removed Inbox
+                    </span>
+                  )}
                 </div>
 
                 <div className="text-xs text-text-secondary flex items-center gap-1.5 flex-wrap">
@@ -425,11 +455,13 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
                 aria-expanded={accountDropdownOpen}
               >
                 <div className="flex items-center gap-1.5 sm:gap-2 truncate min-w-0">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                  <span
+                    className={`w-2 h-2 rounded-full shrink-0 ${
+                      isHistoricalSelected ? "bg-amber-400" : "bg-emerald-400"
+                    }`}
+                  />
                   <span className="truncate text-[11px] sm:text-xs">
-                    {selectedAccountId === "ALL"
-                      ? `All Accounts (${inboxes.length})`
-                      : currentAccount?.email || "Selected Account"}
+                    {selectedAccountLabel}
                   </span>
                 </div>
                 <ChevronDown
@@ -440,7 +472,7 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
               </button>
 
               {accountDropdownOpen && (
-                <div className="absolute left-0 top-full mt-1.5 z-50 min-w-[240px] sm:min-w-[260px] max-w-[320px] sm:max-w-[340px] bg-surface-100 border border-border rounded-xl shadow-2xl p-1 animate-in fade-in zoom-in-95 duration-100">
+                <div className="absolute left-0 top-full mt-1.5 z-50 min-w-[260px] sm:min-w-[290px] max-w-[360px] bg-surface-100 border border-border rounded-xl shadow-2xl p-1 animate-in fade-in zoom-in-95 duration-100">
                   <button
                     type="button"
                     onClick={() => handleAccountChange("ALL")}
@@ -452,7 +484,7 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
                   >
                     <div className="flex items-center gap-2 truncate">
                       <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                      <span className="truncate">All Connected Accounts</span>
+                      <span className="truncate">All Connected Inboxes</span>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <span className="text-[11px] font-mono text-text-muted">({inboxes.length})</span>
@@ -462,6 +494,9 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
 
                   {inboxes.length > 0 && <div className="my-1 border-t border-border/60" />}
 
+                  <div className="px-3 py-1 text-[10px] font-semibold text-text-muted uppercase tracking-wider">
+                    Connected Inboxes ({inboxes.length})
+                  </div>
                   {inboxes.map((acc) => {
                     const isSelected = selectedAccountId === acc.id.toString();
                     return (
@@ -488,6 +523,46 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
                       </button>
                     );
                   })}
+
+                  {historicalInboxes && historicalInboxes.length > 0 && (
+                    <>
+                      <div className="my-1 border-t border-border/60" />
+                      <div className="px-3 py-1 text-[10px] font-semibold text-text-muted uppercase tracking-wider flex items-center gap-1">
+                        <History className="w-3 h-3 text-amber-400" />
+                        <span>Historical / Removed Accounts</span>
+                      </div>
+                      {historicalInboxes.map((hist) => {
+                        const histKey = `HISTORICAL:${hist.email}`;
+                        const isSelected = selectedAccountId === histKey;
+                        return (
+                          <button
+                            key={hist.email}
+                            type="button"
+                            onClick={() => handleAccountChange(histKey)}
+                            className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs transition-colors text-left ${
+                              isSelected
+                                ? "bg-amber-400/15 text-amber-400 font-semibold"
+                                : "text-text-main hover:bg-surface-200"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 truncate min-w-0">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400/80 shrink-0" />
+                              <span className="truncate font-mono text-[11px]">{hist.email}</span>
+                              <span className="text-[9px] font-sans text-amber-400 bg-amber-400/10 px-1 py-0.2 rounded border border-amber-400/20 shrink-0">
+                                Archived
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-200 text-text-muted">
+                                {hist.sentCount} sent
+                              </span>
+                              {isSelected && <Check className="w-3.5 h-3.5 text-amber-400" />}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -615,9 +690,19 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
                           <Square className="w-4 h-4 text-text-muted/60 hover:text-text-main transition-colors" />
                         )}
                       </button>
-                      <span className="font-semibold text-xs text-text-main truncate">
-                        {m.channelTitle || m.recipientEmail}
-                      </span>
+                      <div className="min-w-0 flex flex-col">
+                        <span className="font-semibold text-xs text-text-main truncate">
+                          {m.channelTitle || m.recipientEmail}
+                        </span>
+                        <span className="text-[10px] font-mono text-text-muted flex items-center gap-1 truncate">
+                          From: {m.senderEmail || "resolviaai@gmail.com"}
+                          {!m.gmailAccountId && (
+                            <span className="text-[9px] font-sans text-amber-400 bg-amber-400/10 px-1 rounded border border-amber-400/20">
+                              Archived
+                            </span>
+                          )}
+                        </span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       {getStatusBadge(m.sendStatus)}
@@ -661,10 +746,22 @@ export function SentInfiniteList({ initialData, total, inboxes }: Props) {
                   </div>
 
                   {/* Recipient */}
-                  <div className="w-36 sm:w-44 md:w-52 shrink-0 truncate">
+                  <div className="w-32 sm:w-36 md:w-44 shrink-0 truncate">
                     <span className="font-medium text-text-main truncate block">
                       To: {m.channelTitle || m.recipientEmail.split("@")[0]}
                     </span>
+                  </div>
+
+                  {/* Sender Tag */}
+                  <div className="w-40 sm:w-48 md:w-56 shrink-0 truncate flex items-center gap-1.5">
+                    <span className="font-mono text-[11px] text-text-muted truncate">
+                      From: {m.senderEmail || "resolviaai@gmail.com"}
+                    </span>
+                    {!m.gmailAccountId && (
+                      <span className="text-[9px] font-sans text-amber-400 bg-amber-400/10 px-1 py-0.2 rounded border border-amber-400/20 shrink-0 font-medium">
+                        Archived
+                      </span>
+                    )}
                   </div>
 
                   {/* Subject & Preview snippet */}

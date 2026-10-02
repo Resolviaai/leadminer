@@ -1,10 +1,10 @@
 import React from "react";
 import { db } from "../../db/client";
 import { messages, leads, campaigns, gmailAccounts } from "../../db/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, isNull } from "drizzle-orm";
 import { Send, CheckCircle2, Clock, Mail, AlertTriangle } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { SentInfiniteList, SentMessage, InboxOption } from "@/components/sent/SentInfiniteList";
+import { SentInfiniteList, SentMessage, InboxOption, HistoricalInboxOption } from "@/components/sent/SentInfiniteList";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +13,7 @@ async function getData() {
     const todayUtc = new Date();
     todayUtc.setUTCHours(0, 0, 0, 0);
 
-    const [listResult, countResult, inboxes] = await Promise.all([
+    const [listResult, countResult, inboxes, historicalInboxes] = await Promise.all([
       db
         .select({
           id: messages.id,
@@ -26,7 +26,7 @@ async function getData() {
           threadId: messages.threadId,
           error: messages.error,
           personalizationStatus: messages.personalizationStatus,
-          senderEmail: gmailAccounts.email,
+          senderEmail: sql<string>`coalesce(${messages.senderEmail}, ${gmailAccounts.email})`,
           gmailAccountId: messages.gmailAccountId,
           channelTitle: leads.channelTitle,
           channelUrl: leads.channelUrl,
@@ -58,6 +58,15 @@ async function getData() {
           dailyLimit: gmailAccounts.dailyLimit,
         })
         .from(gmailAccounts),
+
+      db
+        .select({
+          email: sql<string>`coalesce(${messages.senderEmail}, 'Unknown')`,
+          sentCount: sql<number>`count(*)::int`,
+        })
+        .from(messages)
+        .where(isNull(messages.gmailAccountId))
+        .groupBy(sql`coalesce(${messages.senderEmail}, 'Unknown')`),
     ]);
 
     const counts = countResult?.[0] ?? { total: 0, sentCount: 0, sentToday: 0, failedCount: 0 };
@@ -66,6 +75,7 @@ async function getData() {
       list: (listResult || []) as SentMessage[],
       counts,
       inboxes: (inboxes || []) as InboxOption[],
+      historicalInboxes: (historicalInboxes || []) as HistoricalInboxOption[],
     };
   } catch (err) {
     console.error("[SentPage Error]", err);
@@ -73,12 +83,13 @@ async function getData() {
       list: [],
       counts: { total: 0, sentCount: 0, sentToday: 0, failedCount: 0 },
       inboxes: [],
+      historicalInboxes: [],
     };
   }
 }
 
 export default async function SentPage() {
-  const { list, counts, inboxes } = await getData();
+  const { list, counts, inboxes, historicalInboxes } = await getData();
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto w-full">
@@ -164,6 +175,7 @@ export default async function SentPage() {
         initialData={list}
         total={counts.total}
         inboxes={inboxes}
+        historicalInboxes={historicalInboxes}
       />
     </div>
   );

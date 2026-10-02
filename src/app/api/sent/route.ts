@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "../../../db/client";
 import { messages, leads, campaigns, gmailAccounts } from "../../../db/schema";
-import { eq, desc, lt, and, ilike, or, sql } from "drizzle-orm";
+import { eq, desc, lt, and, ilike, or, sql, isNull } from "drizzle-orm";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -24,8 +24,20 @@ export async function GET(req: NextRequest) {
     if (!isPaginated && lastId > 0) {
       conditions.push(lt(messages.id, lastId));
     }
-    if (accountId && accountId !== "ALL" && !isNaN(parseInt(accountId, 10))) {
-      conditions.push(eq(messages.gmailAccountId, parseInt(accountId, 10)));
+    if (accountId && accountId !== "ALL") {
+      if (accountId.startsWith("HISTORICAL:")) {
+        const histEmail = accountId.replace("HISTORICAL:", "").trim();
+        conditions.push(
+          or(
+            eq(messages.senderEmail, histEmail),
+            and(isNull(messages.gmailAccountId), eq(sql<string>`coalesce(${messages.senderEmail}, '')`, histEmail))
+          )
+        );
+      } else if (accountId === "HISTORICAL") {
+        conditions.push(isNull(messages.gmailAccountId));
+      } else if (!isNaN(parseInt(accountId, 10))) {
+        conditions.push(eq(messages.gmailAccountId, parseInt(accountId, 10)));
+      }
     }
     if (q) {
       conditions.push(
@@ -52,7 +64,7 @@ export async function GET(req: NextRequest) {
           threadId: messages.threadId,
           error: messages.error,
           personalizationStatus: messages.personalizationStatus,
-          senderEmail: gmailAccounts.email,
+          senderEmail: sql<string>`coalesce(${messages.senderEmail}, ${gmailAccounts.email})`,
           gmailAccountId: messages.gmailAccountId,
           channelTitle: leads.channelTitle,
           channelUrl: leads.channelUrl,

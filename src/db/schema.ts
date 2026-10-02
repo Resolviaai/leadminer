@@ -411,6 +411,7 @@ export const messages = pgTable(
     leadId: bigint('lead_id', { mode: 'number' }).notNull().references(() => leads.id, { onDelete: 'restrict' }),
     campaignId: bigint('campaign_id', { mode: 'number' }).notNull().references(() => campaigns.id, { onDelete: 'restrict' }),
     gmailAccountId: bigint('gmail_account_id', { mode: 'number' }).references(() => gmailAccounts.id, { onDelete: 'set null' }),
+    senderEmail: varchar('sender_email', { length: 255 }),
     templateId: bigint('template_id', { mode: 'number' }).references(() => templates.id, { onDelete: 'restrict' }),
     contactId: bigint('contact_id', { mode: 'number' }).references(() => contacts.id, { onDelete: 'set null' }),
     recipientEmail: varchar('recipient_email', { length: 255 }).notNull(),
@@ -438,6 +439,7 @@ export const messages = pgTable(
     index('idx_messages_contact_id').on(table.contactId),
     index('idx_messages_rfc822_id').on(table.rfc822MessageId),
     index('idx_messages_sent_at').on(table.sentAt),
+    index('idx_messages_sender_email').on(table.senderEmail),
   ]
 );
 
