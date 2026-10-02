@@ -392,5 +392,20 @@ All development activities, audits, architectural decisions, and milestones are 
   - Production build: 33/33 routes compiled.
   - Production deployment to Vercel: Succeeded (`https://leadminer-app.vercel.app/`).
 
+---
+
+## Session 14 — Team Telegram Alerts Integration
+
+- **User Request:**
+  - Forward bot notifications (`@LeadMinerAlerts_bot`) to both the user and their co-founder with zero loopholes, zero code bloat, and minimal maintenance.
+- **Architectural Solution:**
+  - Configured a private Telegram team group (`LeadMiner Alerts`) containing both co-founders and `@LeadMinerAlerts_bot`.
+  - Extracted group Chat ID `-5340614517` via Telegram Bot API `getUpdates`.
+  - Sent live verification ping to the group (HTTP 200 OK, message delivered).
+  - Updated `TELEGRAM_CHAT_ID=-5340614517` in `.env` and Vercel Environment Variables (Production & Preview).
+  - Redeployed production application on Vercel (`https://leadminer-app.vercel.app/`).
+  - Zero code modifications required — full platform reliability preserved.
+
+
 
 
