@@ -48,6 +48,66 @@ interface Props {
   googleRedirectUri: string;
 }
 
+function GmailIcon({ className = "w-5 h-5", isDisconnected = false }: { className?: string; isDisconnected?: boolean }) {
+  if (isDisconnected) {
+    return (
+      <svg viewBox="0 0 24 24" className={`${className} text-text-muted opacity-60`} fill="currentColor">
+        <path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.272H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L5.455 4.64 12 9.548l6.545-4.91 1.528-1.145C21.69 2.28 24 3.434 24 5.457z" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" className={className} xmlns="http://www.w3.org/2000/svg">
+      <path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.272H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L5.455 4.64 12 9.548l6.545-4.91 1.528-1.145C21.69 2.28 24 3.434 24 5.457z" fill="#EA4335" />
+      <path d="M0 5.457v13.909c0 .904.732 1.636 1.636 1.636h3.819V10.364L0 6.182v-.725z" fill="#4285F4" />
+      <path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V10.364l5.455-4.182v-.725z" fill="#34A853" />
+      <path d="M18.545 4.636L12 9.545 5.455 4.636 3.927 3.491C2.309 2.277 0 3.432 0 5.455v.727l12 9 12-9v-.727c0-2.023-2.309-3.178-3.927-1.964l-1.528 1.145z" fill="#EA4335" />
+      <path d="M18.545 10.364V4.636L12 9.545l6.545 4.909v-4.09z" fill="#FBBC05" />
+    </svg>
+  );
+}
+
+function InboxAvatar({ email, isDisconnected }: { email: string; isDisconnected: boolean }) {
+  const [imgError, setImgError] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const avatarUrl = `https://unavatar.io/${encodeURIComponent(email)}?fallback=false`;
+
+  return (
+    <div
+      className={`w-10 h-10 rounded-xl relative flex items-center justify-center shrink-0 border transition-all ${
+        isDisconnected
+          ? "bg-surface-200/50 border-border/40 text-slate-400"
+          : "bg-surface-200/90 border-border/80 shadow-sm"
+      }`}
+    >
+      {!imgError ? (
+        <>
+          <img
+            src={avatarUrl}
+            alt={email}
+            onError={() => setImgError(true)}
+            onLoad={() => setImgLoaded(true)}
+            className={`w-full h-full object-cover rounded-xl transition-opacity duration-200 ${
+              imgLoaded ? "opacity-100" : "opacity-0 absolute pointer-events-none"
+            }`}
+          />
+          {imgLoaded && (
+            <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-surface-100 border border-border flex items-center justify-center shadow-xs">
+              <GmailIcon className="w-2.5 h-2.5" isDisconnected={isDisconnected} />
+            </div>
+          )}
+          {!imgLoaded && (
+            <GmailIcon className="w-5 h-5" isDisconnected={isDisconnected} />
+          )}
+        </>
+      ) : (
+        <GmailIcon className="w-5 h-5" isDisconnected={isDisconnected} />
+      )}
+    </div>
+  );
+}
+
 export function GmailAccountsClient({
   initialAccounts,
   googleClientId,
@@ -247,7 +307,6 @@ export function GmailAccountsClient({
             const warmup = acc.warmup;
             const todayTarget = warmup ? warmup.effectiveDailyLimit : (acc.dailyLimit || 25);
             const remaining = Math.max(0, todayTarget - (acc.sentToday || 0));
-            const letter = (acc.email[0] || "G").toUpperCase();
 
             return (
               <Card
@@ -261,13 +320,7 @@ export function GmailAccountsClient({
                 {/* Account Header */}
                 <div className="flex items-center justify-between gap-2.5">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div
-                      className={`w-10 h-10 rounded-xl text-white font-bold text-sm flex items-center justify-center shadow-sm shrink-0 ${
-                        isDisconnected ? "bg-slate-700 text-slate-300" : "bg-emerald-600/90"
-                      }`}
-                    >
-                      {letter}
-                    </div>
+                    <InboxAvatar email={acc.email} isDisconnected={isDisconnected} />
                     <div className="min-w-0">
                       <h2
                         className={`text-xs sm:text-sm font-semibold truncate ${
@@ -548,16 +601,18 @@ export function GmailAccountsClient({
                 <div className="space-y-1">
                   <p className="font-medium text-text-main">
                     {isPermanent
-                      ? "This will delete the account entry from LeadMiner."
+                      ? "This will permanently remove the inbox from LeadMiner."
                       : "This will revoke Google OAuth credentials on Google servers."}
                   </p>
                   <p className="text-[11px] text-text-muted">
-                    Outbound outreach from this inbox will stop immediately. Historical sent messages and audit logs will remain safely preserved in the database.
+                    {isPermanent
+                      ? "The inbox entry will be deleted. Any historical sent analytics and audit logs remain safely preserved."
+                      : "Outbound outreach from this inbox will stop immediately. You can reconnect it at any time."}
                   </p>
                 </div>
               </div>
 
-              {modalAccount.sentToday === 0 && (
+              {modalAccount.status !== "DISCONNECTED" && (
                 <label className="flex items-center gap-2 pt-2 border-t border-border/40 cursor-pointer select-none text-[11px] text-text-main">
                   <input
                     type="checkbox"
@@ -565,7 +620,7 @@ export function GmailAccountsClient({
                     onChange={(e) => setIsPermanent(e.target.checked)}
                     className="rounded border-border bg-surface-100 text-primary focus:ring-0 w-3.5 h-3.5"
                   />
-                  <span>Permanently remove inbox from list</span>
+                  <span>Permanently remove inbox (do not keep in disconnected list)</span>
                 </label>
               )}
             </div>
@@ -601,7 +656,7 @@ export function GmailAccountsClient({
                   </>
                 ) : (
                   <>
-                    <Unlink className="w-3.5 h-3.5" />
+                    {isPermanent ? <Trash2 className="w-3.5 h-3.5" /> : <Unlink className="w-3.5 h-3.5" />}
                     <span>{isPermanent ? "Delete Permanently" : "Disconnect Inbox"}</span>
                   </>
                 )}

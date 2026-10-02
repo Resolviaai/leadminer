@@ -341,24 +341,19 @@ All development activities, audits, architectural decisions, and milestones are 
     - Added test case `should permanently delete account if requested even when messages were previously sent` in `tests/unit/gmail-disconnect.test.ts`.
     - Ran Vitest: **5/5 tests passing** in `gmail-disconnect.test.ts`.
 
-- **Current Stop Point:**
-  - Modified files in working tree:
-    - `src/app/api/gmail/disconnect/route.ts` (deletion fix applied).
-    - `tests/unit/gmail-disconnect.test.ts` (unit tests passing).
-  - Ready to implement the UI update in `src/components/gmail/GmailAccountsClient.tsx` for the brand logo / profile picture and disconnect modal polish.
+  - **Frontend UI & Brand Logo / Avatar Implementation (`src/components/gmail/GmailAccountsClient.tsx`):**
+    - Built `GmailIcon`: renders the official Google Gmail multi-colored SVG logo (Red `#EA4335`, Blue `#4285F4`, Green `#34A853`, Yellow `#FBBC05`) for active inboxes, and a muted monochromatic grayscale SVG icon when disconnected.
+    - Built `InboxAvatar`: checks `https://unavatar.io/${encodeURIComponent(email)}?fallback=false`.
+      - If a public profile image exists: smoothly fades in the avatar image and overlays a mini Google Gmail badge in the bottom-right corner.
+      - If no custom avatar exists or 404s (zero extra headache / no OAuth changes): displays the crisp official Gmail SVG brand logo.
+    - Replaced the generic letter avatar box (`[ A ]`, `[ R ]`) with `<InboxAvatar email={acc.email} isDisconnected={isDisconnected} />`.
+    - Polished the Disconnect / Permanent Remove modal:
+      - When clicking the Trash icon on a disconnected account (`isDisconnected`), it directly opens the "Permanently Remove Inbox" dialog with clear explanation that historical analytics remain preserved.
+      - For active accounts clicking "Disconnect", defaults to soft disconnect with a checkbox to permanently delete.
+      - Replaced generic icon with `<Trash2 />` icon for permanent delete actions.
+  - **Full Platform Validation:**
+    - TypeScript compilation (`npx tsc --noEmit`): **0 errors**.
+    - Unit tests (`npm test`): **37/37 test suites passed, 263/263 tests passed (100%)**.
+    - Production build (`npm run build`): **33/33 routes compiled and optimized with 0 errors**.
 
-- **Exact Next Steps to Resume & Complete:**
-  1. **Update `src/components/gmail/GmailAccountsClient.tsx`:**
-     - Replace the letter avatar (`<div className="w-10 h-10 rounded-xl ...">{letter}</div>`) with an `InboxAvatar` component:
-       - Attempt to load `https://unavatar.io/${encodeURIComponent(acc.email)}?fallback=false`.
-       - If image loads: display profile image with a mini Google Gmail badge in the bottom-right corner.
-       - If image fails or 404s (zero extra headache / no OAuth changes): render the crisp official Google Gmail multi-colored SVG icon (or muted grayscale Gmail icon if `isDisconnected`).
-     - Refine disconnect/remove modal:
-       - When clicking Trash icon on disconnected account (`isDisconnected`), default directly to permanent deletion without requiring `sentToday === 0` checkbox.
-  2. **Verify Changes:**
-     - Run `npm test -- tests/unit/gmail-disconnect.test.ts`.
-     - Run `npx tsc --noEmit` to verify type safety.
-  3. **Deploy to Production:**
-     - Run `npx vercel deploy --prod -y`.
-     - Verify on live URL `https://leadminer-app.vercel.app/gmail`.
 
