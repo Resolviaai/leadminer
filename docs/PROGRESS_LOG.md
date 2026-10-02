@@ -356,4 +356,41 @@ All development activities, audits, architectural decisions, and milestones are 
     - Unit tests (`npm test`): **37/37 test suites passed, 263/263 tests passed (100%)**.
     - Production build (`npm run build`): **33/33 routes compiled and optimized with 0 errors**.
 
+---
+
+## Session 13 — Historical Sender Attribution & Multi-Inbox Sent UI
+
+- **Context & User Request:**
+  - On `/sent`, all 33 historical messages sent by the deleted account `resolviaai@gmail.com` appeared to belong to the connected inboxes because the account filter dropdown only listed active connected accounts (`All Accounts (2)`), and individual sent rows lacked explicit sender tags.
+  - The user approved:
+    1. Dedicated dropdown section for "Historical / Removed Accounts" showing `resolviaai@gmail.com (33 sent)` with an `(Archived)` badge.
+    2. Storing `sender_email` permanently on the `messages` table in PostgreSQL.
+    3. Tagging each sent email row with `From: resolviaai@gmail.com (Archived)`.
+
+- **Database Changes:**
+  - Added `sender_email VARCHAR(255)` column and index to `messages` table.
+  - Backfilled all 33 historical messages with `sender_email = 'resolviaai@gmail.com'`.
+  - Updated `src/db/schema.ts` to include `senderEmail: varchar('sender_email', { length: 255 })` and `idx_messages_sender_email`.
+
+- **Service & API Updates:**
+  - Updated `src/services/outreach/gmail.service.ts`: writes `senderEmail: account.email` upon message creation.
+  - Updated `src/app/api/sent/route.ts`:
+    - Coalesces `senderEmail: sql<string>'coalesce(messages.sender_email, gmail_accounts.email)'`.
+    - Added support for `HISTORICAL:<email>` and `HISTORICAL` accountId filters.
+  - Updated `src/app/sent/page.tsx`:
+    - Queries `historicalInboxes` from distinct historical sender emails.
+    - Passes `historicalInboxes` to `SentInfiniteList`.
+
+- **UI & Frontend Changes (`src/components/sent/SentInfiniteList.tsx`):**
+  - Account Dropdown: Added "Historical / Removed Accounts" section with `(Archived)` badge and sent count.
+  - Sent List Rows (Desktop & Mobile): Added explicit sender line `From: <email>` with amber `(Archived)` badge for removed inboxes.
+  - Email Detail View: Added `Archived / Removed Inbox` badge in sender header.
+
+- **Verification & Deployment:**
+  - TypeScript check: 0 errors.
+  - Unit tests: 263/263 tests passed.
+  - Production build: 33/33 routes compiled.
+  - Production deployment to Vercel: Succeeded (`https://leadminer-app.vercel.app/`).
+
+
 
