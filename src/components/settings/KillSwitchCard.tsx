@@ -73,7 +73,7 @@ export function KillSwitchCard({ initialActive }: Props) {
             >
               <ShieldAlert className="w-4 h-4 shrink-0" />
               <span className="tracking-tight uppercase">
-                {isActive ? 'Outreach Paused (Kill Switch Armed)' : 'Emergency Pause (Stop All Emails)'}
+                {isActive ? 'Master Outreach Switch: Paused' : 'Emergency Pause (Stop All Emails)'}
               </span>
             </div>
 

@@ -71,9 +71,9 @@ export function AppShell({ children, dryRun = true }: AppShellProps) {
         <header className="hidden md:flex h-14 border-b border-border bg-surface-100/90 backdrop-blur px-6 items-center justify-between shrink-0 relative z-40">
           <div className="flex items-center space-x-3">
             {killSwitchActive ? (
-              <div className="flex items-center space-x-2 text-xs text-rose-400 font-medium">
-                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-                <span>Outreach Paused (Kill Switch)</span>
+              <div className="flex items-center space-x-2 text-xs text-amber-400 font-medium">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                <span>Email Sending Paused</span>
               </div>
             ) : authErrorCount > 0 ? (
               <div className="flex items-center space-x-2 text-xs text-rose-400 font-medium">
@@ -88,7 +88,7 @@ export function AppShell({ children, dryRun = true }: AppShellProps) {
             )}
             <span className="text-border">|</span>
             <span className="text-xs text-text-muted">
-              {killSwitchActive ? 'Dispatch Halted' : 'Autopilot Active'}
+              {killSwitchActive ? 'Collecting Leads Only' : 'Autopilot Active'}
             </span>
           </div>
 

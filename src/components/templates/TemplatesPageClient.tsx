@@ -39,8 +39,8 @@ export function TemplatesPageClient({
           </div>
           <p className="text-xs text-text-secondary mt-0.5 leading-relaxed">
             {activeTab === "templates"
-              ? "Create and manage Spintax outreach templates. Merge tags personalize each email with verified channel data."
-              : "Stateful multi-step follow-up sequences governed by the dynamic capacity equilibrium model."}
+              ? "Write email templates with variation tags like {Hello|Hi} and {channelTitle} to personalize each email automatically."
+              : "Automated follow-up emails sent after a set number of days if a creator doesn't reply. Auto-balanced to keep your Gmail safe."}
           </p>
         </div>
 

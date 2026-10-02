@@ -120,7 +120,7 @@ export default async function SettingsPage() {
                 <span>Gemini 3.1 Flash-Lite</span>
               </span>
               <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
-                15 RPM Guard
+                Limit: 15 calls/min
               </span>
             </div>
             <div className="space-y-1">
