@@ -420,6 +420,25 @@ All development activities, audits, architectural decisions, and milestones are 
   - Updated `YOUTUBE_MAX_RESULTS_PER_SEARCH=50` in `.env` and Vercel Production & Preview.
   - Redeployed to Vercel production: YouTube discovery now fetches up to 50 channels per page (up to 100 channels per keyword) for the exact same daily quota (3.33x lead generation throughput).
 
+---
+
+## Session 16 — Email Verification Throughput Elevation (25 → 100)
+
+- **User Request:**
+  - Approved elevation of email verification batch size from 25 to 100.
+- **Root Cause & Changes:**
+  - Database had accumulated 32,763 UNKNOWN contacts and 5,093 UNQUALIFIED leads due to a tight 25-contact batch bottleneck.
+  - `src/workers/verification.worker.ts`: Raised `runVerificationBatch(limit = 100)` with `verifyBatch` concurrency elevated from 20 to 30.
+  - `src/app/api/workers/verification/route.ts`: Updated default batch size to 100 (capped at 150).
+  - `src/app/api/actions/verification/route.ts`: Updated manual UI trigger to run 100 contacts per click.
+  - `src/app/api/workers/pipeline/route.ts`: Updated dedicated pipeline verification step to 100 contacts.
+- **Verification & Deployment:**
+  - TypeScript check: 0 errors (`npx tsc --noEmit`).
+  - Unit tests: 37/37 suites passed, 263/263 tests passed (100%).
+  - Next.js production build: 33/33 routes compiled and optimized.
+  - Deployed to Vercel production (`https://leadminer-app.vercel.app/`).
+
+
 
 
 
