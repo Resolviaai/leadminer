@@ -13,8 +13,8 @@ async function handleVerification(req: NextRequest) {
 
   try {
     const url = new URL(req.url);
-    const rawBatch = parseInt(url.searchParams.get('batchSize') || '25', 10);
-    const batchSize = isNaN(rawBatch) ? 25 : Math.min(Math.max(rawBatch, 1), 50);
+    const rawBatch = parseInt(url.searchParams.get('batchSize') || '100', 10);
+    const batchSize = isNaN(rawBatch) ? 100 : Math.min(Math.max(rawBatch, 1), 150);
 
     const result = await runVerificationBatch(batchSize);
 

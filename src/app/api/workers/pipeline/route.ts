@@ -26,7 +26,7 @@ async function executeSingleStep(stepName: string) {
       result = await runDiscoveryBatch(10);
       break;
     case 'verification':
-      result = await runVerificationBatch(25);
+      result = await runVerificationBatch(100);
       break;
     case 'planner':
       result = await runPlanner();

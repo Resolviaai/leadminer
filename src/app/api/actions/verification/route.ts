@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await runVerificationBatch(25);
+    const result = await runVerificationBatch(100);
     return NextResponse.json({ success: true, result });
   } catch (error: any) {
     console.error('[Action: Verification] Error:', error.message);

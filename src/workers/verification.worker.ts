@@ -6,7 +6,7 @@ import { aggregateQualificationStatus, leadQualificationService } from '../servi
 import { opportunityPriorityEngine } from '../services/outreach/priority.engine';
 import { jobRunner } from '../services/jobs/job.runner';
 
-export async function runVerificationBatch(limit = 25): Promise<{ verified: number; qualified: number }> {
+export async function runVerificationBatch(limit = 100): Promise<{ verified: number; qualified: number }> {
   console.log(`\n======================================================`);
   console.log(`🔍 Starting Email Verification & Qualification Worker (limit=${limit})`);
   console.log(`======================================================\n`);
@@ -74,7 +74,7 @@ export async function runVerificationBatch(limit = 25): Promise<{ verified: numb
 
     // 2. Extract emails and run parallel batch verification
     const emailsToVerify = unverified.map((item) => item.email || '');
-    const verificationResults = await emailVerificationService.verifyBatch(emailsToVerify, 20);
+    const verificationResults = await emailVerificationService.verifyBatch(emailsToVerify, 30);
 
     // 3. Dynamically fetch active campaign qualification criteria
     const activeCampaign = await db
