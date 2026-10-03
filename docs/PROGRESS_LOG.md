@@ -406,6 +406,21 @@ All development activities, audits, architectural decisions, and milestones are 
   - Redeployed production application on Vercel (`https://leadminer-app.vercel.app/`).
   - Zero code modifications required — full platform reliability preserved.
 
+---
+
+## Session 15 — System Audit & YouTube Discovery Limit Elevation
+
+- **User Request:**
+  - Deep audit of platform bottlenecks, specifically investigating why Keywords showed a 30-channel cap.
+  - Requested elevation of YouTube maxResults from 15 to safe maximum (50).
+  - Requested simple, clear explanation of how Email Verification works before approving #2.
+- **Root Cause & Resolution for #1 (YouTube Limit):**
+  - Found `YOUTUBE_MAX_RESULTS_PER_SEARCH=15` in `.env` and Vercel environment variables, capping Page 1 (15) + Page 2 (15) at 30 channels.
+  - YouTube Data API v3 charges 100 units per `search.list` call regardless of whether 15 or 50 results are requested.
+  - Updated `YOUTUBE_MAX_RESULTS_PER_SEARCH=50` in `.env` and Vercel Production & Preview.
+  - Redeployed to Vercel production: YouTube discovery now fetches up to 50 channels per page (up to 100 channels per keyword) for the exact same daily quota (3.33x lead generation throughput).
+
+
 
 
 
