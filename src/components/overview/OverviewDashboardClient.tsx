@@ -5,7 +5,9 @@ import {
   RefreshCw,
   X,
   AlertTriangle,
+  Calendar,
 } from 'lucide-react';
+import { CustomDateRangeModal } from './CustomDateRangeModal';
 import {
   OverviewDashboardData,
   TimeRangeOption,
@@ -93,13 +95,6 @@ export function OverviewDashboardClient({ initialData }: OverviewDashboardClient
     fetchAnalytics(range);
   };
 
-  const handleApplyCustom = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!customStart || !customEnd) return;
-    setShowCustomModal(false);
-    fetchAnalytics('custom', customStart, customEnd);
-  };
-
   return (
     <div className="space-y-4 sm:space-y-5 max-w-[1600px] mx-auto w-full pb-16">
       {/* ─── HEADER ─── */}
@@ -136,6 +131,19 @@ export function OverviewDashboardClient({ initialData }: OverviewDashboardClient
               );
             })}
           </div>
+
+          {/* Active Custom Range Badge */}
+          {selectedRange === 'custom' && (
+            <button
+              type="button"
+              onClick={() => setShowCustomModal(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs font-mono font-medium hover:bg-primary/20 transition-all cursor-pointer shadow-sm active:scale-95"
+              title="Click to change custom date range"
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              <span>{customStart} → {customEnd}</span>
+            </button>
+          )}
 
           {/* Refresh Action */}
           <button
@@ -204,62 +212,19 @@ export function OverviewDashboardClient({ initialData }: OverviewDashboardClient
       {/* ─── 4. BOTTOM SECTION: 5 EXPANDABLE DIAGNOSTIC DRAWERS ─── */}
       <ProgressiveDisclosureSections data={data} />
 
-      {/* Custom Date Modal */}
+      {/* Custom Date Range Modal */}
       {showCustomModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="rounded-xl border border-studio-border-strong bg-surface-100 p-5 max-w-sm w-full space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between pb-2 border-b border-border">
-              <span className="text-sm font-semibold text-text-main">Custom Date Filter</span>
-              <button
-                type="button"
-                onClick={() => setShowCustomModal(false)}
-                className="text-text-muted hover:text-text-main"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleApplyCustom} className="space-y-3 text-xs">
-              <div>
-                <label className="text-text-secondary block mb-1">Start Date</label>
-                <input
-                  type="date"
-                  required
-                  value={customStart}
-                  onChange={(e) => setCustomStart(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-surface-200 px-3 py-2 text-text-main font-mono focus:outline-none focus:border-primary"
-                />
-              </div>
-
-              <div>
-                <label className="text-text-secondary block mb-1">End Date</label>
-                <input
-                  type="date"
-                  required
-                  value={customEnd}
-                  onChange={(e) => setCustomEnd(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-surface-200 px-3 py-2 text-text-main font-mono focus:outline-none focus:border-primary"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCustomModal(false)}
-                  className="px-3 py-2 rounded-lg text-xs text-text-muted hover:text-text-main"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-primary hover:bg-brand-hover text-white transition-colors"
-                >
-                  Apply Filter
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <CustomDateRangeModal
+          initialStart={customStart}
+          initialEnd={customEnd}
+          onClose={() => setShowCustomModal(false)}
+          onApply={(start, end) => {
+            setCustomStart(start);
+            setCustomEnd(end);
+            setShowCustomModal(false);
+            fetchAnalytics('custom', start, end);
+          }}
+        />
       )}
     </div>
   );

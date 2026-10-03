@@ -4,6 +4,7 @@
 
 @layer base {
   :root {
+    color-scheme: dark;
     --background: 0 0% 8.6%; /* #161616 Supabase Dark 1 */
     --foreground: 0 0% 93%; /* #EDEDED Supabase Dark 12 */
 
@@ -36,6 +37,7 @@
   }
 
   .dark {
+    color-scheme: dark;
     --background: 0 0% 8.6%;
     --foreground: 0 0% 93%;
     --card: 0 0% 11%;
@@ -62,6 +64,7 @@
   }
 
   html {
+    color-scheme: dark;
     font-size: 14px; /* Scale to match 90% zoom — 16px × 0.875 ≈ 14px */
     overscroll-behavior-y: none;
     -webkit-font-smoothing: antialiased;
