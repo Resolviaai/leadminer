@@ -33,6 +33,10 @@ export interface ExtractedEmail {
   confidence: number;
   contextSnippet?: string;
   possibleDomainTypo?: boolean;
+  wasRepaired?: boolean;
+  repairedFrom?: string;
+  repairCode?: string;
+  rawContextSnippet?: string;
 }
 
 // Backward-compatible categorizer
@@ -154,13 +158,29 @@ const SYSTEM_DISCARD_PREFIXES = new Set([
 const FILE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.mp4', '.mp3', '.pdf'];
 
 const KNOWN_TYPO_DOMAINS: Record<string, string> = {
+  // Gmail common typos (transpositions, deletions, additions)
   'gmial.com': 'gmail.com',
   'gmai.com': 'gmail.com',
   'gamil.com': 'gmail.com',
+  'gmaill.com': 'gmail.com',
+  'gmal.com': 'gmail.com',
+  'gmali.com': 'gmail.com',
+  'gmaik.com': 'gmail.com',
   'gmail.con': 'gmail.com',
+  'gmail.cmo': 'gmail.com',
+  'gmail.cm': 'gmail.com',
+  'gmail.om': 'gmail.com',
+  'gmqil.com': 'gmail.com',
+  'gmsil.com': 'gmail.com',
+  'gmaul.com': 'gmail.com',
+  // Outlook / Hotmail / Yahoo / Proton
   'outlok.com': 'outlook.com',
+  'outloo.com': 'outlook.com',
   'hotmial.com': 'hotmail.com',
   'yaho.com': 'yahoo.com',
+  'yahou.com': 'yahoo.com',
+  'protonmai.com': 'protonmail.com',
+  'prton.me': 'proton.me',
 };
 
 export class EmailExtractor {
@@ -225,6 +245,9 @@ export class EmailExtractor {
       /\b([a-zA-Z0-9._%+-]+)\s*(?:@|\[at\]|\(at\)|\s+at\s+)\s*(gmail|yahoo|hotmail|outlook|icloud|protonmail)\b(?!\.[a-zA-Z]{2,})/gi,
       (_match, user, provider) => `${user}@${provider}.com`
     );
+
+    // 9. Comma before common TLD in domain (e.g. "@gmail,com" -> "@gmail.com")
+    t = t.replace(/@([a-zA-Z0-9.-]+),(com|net|org|io|co|me)\b/gi, '@$1.$2');
 
     return t;
   }
@@ -321,6 +344,62 @@ export class EmailExtractor {
         cleaned = cleaned.slice(0, -1);
       }
 
+      // Extract 150-char surrounding context window for provenance and scoring BEFORE mutations
+      let contextSnippet: string | undefined;
+      const idx = normalized.indexOf(cleaned);
+      if (idx !== -1) {
+        const start = Math.max(0, idx - 75);
+        const end = Math.min(normalized.length, idx + cleaned.length + 75);
+        contextSnippet = normalized.slice(start, end).trim();
+      }
+
+      const rawCandidate = cleaned;
+      let wasRepaired = false;
+      let repairCode: string | undefined;
+
+      // Strict boundary check: exactly 1 '@' symbol
+      const atParts = cleaned.split('@');
+      if (atParts.length === 2) {
+        const [localPart, rawDomain] = atParts;
+        let domainPart = rawDomain;
+
+        // 1. Repair consecutive dots in domain only for recognized mail provider domains (e.g. gmail..com -> gmail.com)
+        const normalizedDomainCandidate = domainPart.replace(/\.+/g, '.').toLowerCase();
+        const isKnownProviderDoubleDot =
+          domainPart.includes('..') &&
+          /^(gmail|yahoo|outlook|hotmail|icloud|proton|protonmail)\.[a-zA-Z]{2,}$/i.test(normalizedDomainCandidate);
+
+        if (isKnownProviderDoubleDot) {
+          domainPart = normalizedDomainCandidate;
+          wasRepaired = true;
+          repairCode = 'DOMAIN_DOUBLE_DOT_FIX';
+        }
+
+        // 2. Repair comma in domain only for recognized mail providers (e.g. gmail,com -> gmail.com)
+        const normalizedCommaCandidate = domainPart.replace(/,/g, '.').toLowerCase();
+        const isKnownProviderComma =
+          domainPart.includes(',') &&
+          /^(gmail|yahoo|outlook|hotmail|icloud|proton|protonmail)\.[a-zA-Z]{2,}$/i.test(normalizedCommaCandidate);
+
+        if (isKnownProviderComma) {
+          domainPart = normalizedCommaCandidate;
+          wasRepaired = true;
+          repairCode = 'DOMAIN_COMMA_FIX';
+        }
+
+        // 3. Domain typo dictionary repair (Gmail + major providers)
+        const cleanDomain = domainPart.replace(/^\.+|\.+$/g, '').toLowerCase();
+        if (KNOWN_TYPO_DOMAINS[cleanDomain]) {
+          domainPart = KNOWN_TYPO_DOMAINS[cleanDomain];
+          wasRepaired = true;
+          repairCode = domainPart.includes('gmail.com') ? 'GMAIL_DOMAIN_TYPO' : 'PROVIDER_DOMAIN_TYPO';
+        }
+
+        if (wasRepaired) {
+          cleaned = `${localPart}@${domainPart}`;
+        }
+      }
+
       if (seenEmails.has(cleaned)) continue;
 
       // Reject file extensions (e.g. image@2x.png)
@@ -328,7 +407,7 @@ export class EmailExtractor {
         continue;
       }
 
-      // Structural validation
+      // Structural validation on the cleaned/repaired address
       if (!this.isValidEmailStructure(cleaned)) {
         continue;
       }
@@ -340,28 +419,15 @@ export class EmailExtractor {
         continue;
       }
 
-      // Check domain typo flag (e.g. gmial.com)
-      const possibleDomainTypo = Boolean(KNOWN_TYPO_DOMAINS[domain]);
-
-      // Extract 150-char surrounding context window for provenance and scoring
-      let contextSnippet: string | undefined;
-      const idx = normalized.indexOf(cleaned);
-      if (idx !== -1) {
-        const start = Math.max(0, idx - 75);
-        const end = Math.min(normalized.length, idx + cleaned.length + 75);
-        contextSnippet = normalized.slice(start, end).trim();
-      }
-
       const { role, priorityScore } = classifyEmailRole(cleaned, contextSnippet);
       const category = categorizeEmail(cleaned);
 
-      // Base confidence score
-      let confidence = 0.85;
+      // Base confidence score: repaired emails get a conservative confidence adjustment
+      let confidence = wasRepaired ? 0.70 : 0.85;
       if (source === 'mailto') confidence = 0.98;
-      else if (source === 'contact_page') confidence = 0.95;
-      else if (source === 'video_description') confidence = 0.88;
-      else if (source === 'link_page') confidence = 0.90;
-      if (possibleDomainTypo) confidence -= 0.3;
+      else if (source === 'contact_page') confidence = wasRepaired ? 0.75 : 0.95;
+      else if (source === 'video_description') confidence = wasRepaired ? 0.70 : 0.88;
+      else if (source === 'link_page') confidence = wasRepaired ? 0.75 : 0.90;
 
       seenEmails.add(cleaned);
       results.push({
@@ -372,7 +438,11 @@ export class EmailExtractor {
         category,
         confidence: Number(confidence.toFixed(2)),
         contextSnippet,
-        possibleDomainTypo,
+        possibleDomainTypo: wasRepaired,
+        wasRepaired,
+        repairedFrom: wasRepaired ? rawCandidate : undefined,
+        repairCode,
+        rawContextSnippet: contextSnippet,
       });
     }
 

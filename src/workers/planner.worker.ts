@@ -338,6 +338,9 @@ export async function runPlanner(): Promise<PlannerResult> {
           verificationReason: contacts.verificationReason,
           confidenceScore: contacts.confidenceScore,
           priorityScore: contacts.priorityScore,
+          wasRepaired: contacts.wasRepaired,
+          repairedFrom: contacts.repairedFrom,
+          repairCode: contacts.repairCode,
           isPrimary: contacts.isPrimary,
           emailCategory: contacts.emailCategory,
           source: contacts.source,
@@ -419,6 +422,11 @@ export async function runPlanner(): Promise<PlannerResult> {
           discoveredAt: cand.discoveredAt,
           category: cand.category,
           country: cand.country,
+          emailStatus: cand.emailStatus,
+          verificationReasonCode: cand.verificationReason,
+          wasRepaired: cand.wasRepaired,
+          repairedFrom: cand.repairedFrom,
+          repairCode: cand.repairCode,
         });
 
         // GRADIENT PROGRESSION POLICY:

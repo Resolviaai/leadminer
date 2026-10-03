@@ -1,4 +1,4 @@
-import { emailExtractor, classifyEmailRole, categorizeEmail } from './email.extractor';
+import { emailExtractor, classifyEmailRole, categorizeEmail, ExtractedEmail } from './email.extractor';
 import { socialExtractor, ExtractedContactItem, ContactItemType } from './social.extractor';
 import { safeFetchHtmlStream, DomainCrawlCache } from './http-stream';
 
@@ -7,6 +7,7 @@ export interface ScrapedContacts {
   contactPageUrl?: string;
   contactFormAvailable?: boolean;
   emails: string[];
+  extractedEmailDetails?: ExtractedEmail[];
   phones: string[];
   whatsapp?: string;
   socials: {
@@ -226,6 +227,8 @@ export class WebsiteScraper {
       }
     };
 
+    if (!result.extractedEmailDetails) result.extractedEmailDetails = [];
+
     // 1. Mailto links
     const mailtoMatches = html.matchAll(/href=["']mailto:([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})["'?]/gi);
     for (const match of mailtoMatches) {
@@ -233,6 +236,17 @@ export class WebsiteScraper {
       if (!emailSet.has(email)) {
         emailSet.add(email);
         result.emails.push(email);
+        const { role, priorityScore } = classifyEmailRole(email, sourceUrl);
+        result.extractedEmailDetails.push({
+          email,
+          source: sourceLabel as any,
+          role,
+          priorityScore,
+          category: categorizeEmail(email),
+          confidence: 0.90,
+          contextSnippet: `Mailto on ${sourceUrl}`,
+          wasRepaired: false,
+        });
         addItem('EMAIL', email, email);
       }
     }
@@ -243,6 +257,7 @@ export class WebsiteScraper {
       if (!emailSet.has(item.email)) {
         emailSet.add(item.email);
         result.emails.push(item.email);
+        result.extractedEmailDetails.push(item);
         addItem('EMAIL', item.email, item.email);
       }
     }

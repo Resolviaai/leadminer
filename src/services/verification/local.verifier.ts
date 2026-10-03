@@ -207,16 +207,18 @@ export class LocalVerifier implements IEmailVerifier {
       };
     }
 
-    // 4. DNS MX Record Lookup
+    // 4. DNS MX Record Lookup with RFC 5321 Implicit MX Fallback (A & AAAA)
     try {
       const mxRecords = await this.resolveMxWithTimeout(domain, DNS_TIMEOUT);
-      if (!mxRecords || mxRecords.length === 0) {
+
+      // Explicit Null MX check (RFC 7505: single MX with exchange "." means domain refuses all email)
+      if (mxRecords.length === 1 && mxRecords[0].exchange === '.') {
         return {
           email: cleanEmail,
           status: 'INVALID',
           confidenceScore: 0.0,
-          reason: 'No DNS MX records found for domain',
-          reasonCode: 'NO_MX_RECORDS',
+          reason: 'Domain explicitly publishes Null MX record (RFC 7505 - refuses all mail)',
+          reasonCode: 'NULL_MX_REFUSES_MAIL',
           isRoleBased,
           isCommercialRole,
           provider: this.providerName,
@@ -224,35 +226,67 @@ export class LocalVerifier implements IEmailVerifier {
         };
       }
 
-      const primaryMx = mxRecords[0].exchange.toLowerCase();
-      let mxProvider = 'CUSTOM';
-      let baseConfidence = 0.70;
+      if (mxRecords.length > 0) {
+        const primaryMx = mxRecords[0].exchange.toLowerCase();
+        let mxProvider = 'CUSTOM';
+        let baseConfidence = 0.70;
 
-      if (primaryMx.includes('google.com') || primaryMx.includes('aspmx.l.google.com')) {
-        mxProvider = 'GOOGLE_WORKSPACE';
-        baseConfidence = 0.80;
-      } else if (primaryMx.includes('outlook.com') || primaryMx.includes('protection.outlook.com')) {
-        mxProvider = 'MICROSOFT_365';
-        baseConfidence = 0.80;
+        if (primaryMx.includes('google.com') || primaryMx.includes('aspmx.l.google.com')) {
+          mxProvider = 'GOOGLE_WORKSPACE';
+          baseConfidence = 0.80;
+        } else if (primaryMx.includes('outlook.com') || primaryMx.includes('protection.outlook.com')) {
+          mxProvider = 'MICROSOFT_365';
+          baseConfidence = 0.80;
+        }
+
+        let confidence = baseConfidence;
+        if (isCommercialRole) {
+          confidence = Math.min(1.0, baseConfidence + 0.05);
+        } else if (isRoleBased) {
+          confidence = Math.max(0.40, baseConfidence - 0.20);
+        }
+
+        return {
+          email: cleanEmail,
+          status: 'DOMAIN_VALID',
+          confidenceScore: parseFloat(confidence.toFixed(2)),
+          domain,
+          mxProvider,
+          reason: isRoleBased
+            ? `Valid MX host: ${mxRecords[0].exchange} (priority ${mxRecords[0].priority}) (role-based address flagged)`
+            : `Valid MX host: ${mxRecords[0].exchange} (priority ${mxRecords[0].priority})`,
+          reasonCode: isRoleBased ? 'ROLE_BASED_FLAGGED' : 'CUSTOM_DOMAIN_MX_VALID',
+          isRoleBased,
+          isCommercialRole,
+          provider: this.providerName,
+          timestamp,
+        };
       }
 
-      let confidence = baseConfidence;
-      if (isCommercialRole) {
-        confidence = Math.min(1.0, baseConfidence + 0.05);
-      } else if (isRoleBased) {
-        confidence = Math.max(0.40, baseConfidence - 0.20);
+      // No MX records found -> Check RFC 5321 implicit MX fallback (A and AAAA records)
+      const addrs = await this.resolveAddressWithTimeout(domain, 1500);
+      if (addrs.ipv4.length > 0 || addrs.ipv6.length > 0) {
+        return {
+          email: cleanEmail,
+          status: 'DOMAIN_VALID',
+          confidenceScore: isCommercialRole ? 0.55 : 0.50,
+          domain,
+          mxProvider: 'IMPLICIT_MX_HOST',
+          reason: `No MX records, but valid host address found (RFC 5321 implicit MX fallback: ${addrs.ipv4[0] || addrs.ipv6[0]})`,
+          reasonCode: 'IMPLICIT_MX_FALLBACK',
+          isRoleBased,
+          isCommercialRole,
+          provider: this.providerName,
+          timestamp,
+        };
       }
 
       return {
         email: cleanEmail,
-        status: 'DOMAIN_VALID',
-        confidenceScore: parseFloat(confidence.toFixed(2)),
-        domain,
-        mxProvider,
-        reason: isRoleBased
-          ? `Valid MX host: ${mxRecords[0].exchange} (priority ${mxRecords[0].priority}) (role-based address flagged)`
-          : `Valid MX host: ${mxRecords[0].exchange} (priority ${mxRecords[0].priority})`,
-        reasonCode: isRoleBased ? 'ROLE_BASED_FLAGGED' : 'CUSTOM_DOMAIN_MX_VALID',
+        status: 'INVALID',
+        confidenceScore: 0.0,
+        reason: 'Domain has no DNS MX, A, or AAAA mail delivery records',
+        reasonCode: 'NO_MAIL_RECORDS',
         isRoleBased,
         isCommercialRole,
         provider: this.providerName,
@@ -343,6 +377,21 @@ export class LocalVerifier implements IEmailVerifier {
         }
       });
     });
+  }
+
+  private async resolveAddressWithTimeout(domain: string, timeoutMs: number): Promise<{ ipv4: string[]; ipv6: string[] }> {
+    const resolve4Promise = new Promise<string[]>((resolve) => {
+      dns.resolve4(domain, (err, addrs) => resolve(err ? [] : addrs || []));
+    });
+    const resolve6Promise = new Promise<string[]>((resolve) => {
+      dns.resolve6(domain, (err, addrs) => resolve(err ? [] : addrs || []));
+    });
+    const timerPromise = new Promise<{ ipv4: string[]; ipv6: string[] }>((resolve) => {
+      setTimeout(() => resolve({ ipv4: [], ipv6: [] }), timeoutMs);
+    });
+
+    const workPromise = Promise.all([resolve4Promise, resolve6Promise]).then(([ipv4, ipv6]) => ({ ipv4, ipv6 }));
+    return Promise.race([workPromise, timerPromise]);
   }
 }
 

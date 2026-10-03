@@ -32,6 +32,13 @@ export interface PriorityCandidate {
   previousCampaignReplies?: number;
   hasActiveSiblingContact?: boolean;
   isSecondaryContact?: boolean;
+
+  // Verification & Provenance Signals
+  emailStatus?: string | null;
+  verificationReasonCode?: string | null;
+  wasRepaired?: boolean;
+  repairedFrom?: string | null;
+  repairCode?: string | null;
 }
 
 export interface FactorBreakdown {
@@ -103,10 +110,27 @@ export class OpportunityPriorityEngine {
     score: number
   ): { tier: OpportunityTier; reason: string } {
     // 1. Hard-negative boundary (A6)
-    if (candidate.confidenceScore === 0 && (candidate.attemptCount ?? 0) >= 3) {
+    // ONLY assign A6 for confirmed hard negatives (invalid syntax, disposable, no mail records/NXDOMAIN, null MX, hard bounce, suppression).
+    // DNS timeouts or unresolved candidates with attempts >= 3 are NOT hard negatives; they fall into A5 (reserve).
+    const HARD_NEGATIVE_CODES = new Set([
+      'SYNTAX_INVALID',
+      'DISPOSABLE_DOMAIN',
+      'NO_MAIL_RECORDS',
+      'DOMAIN_NOT_FOUND',
+      'NULL_MX_REFUSES_MAIL',
+      'HARD_BOUNCE',
+      'SUPPRESSED',
+      'UNSUBSCRIBED',
+    ]);
+
+    const isHardNegative =
+      candidate.emailStatus === 'INVALID' ||
+      (candidate.verificationReasonCode && HARD_NEGATIVE_CODES.has(candidate.verificationReasonCode));
+
+    if (isHardNegative) {
       return {
         tier: 'A6',
-        reason: 'Zero verification confidence after multiple attempts',
+        reason: `Definitive hard-negative verification: ${candidate.verificationReasonCode || candidate.emailStatus || 'INVALID'}`,
       };
     }
 
@@ -120,34 +144,33 @@ export class OpportunityPriorityEngine {
     }
 
     // 3. Sendable Gradient (A1 - A4)
-    // A1 requires BOTH high verification confidence (>= 0.85) AND high score (>= 75)
+    // Note: Repaired emails stack two uncertainties (regex guess + unconfirmed mailbox).
+    // They are capped at Tier A4 so literal creator emails (A1-A3) are dispatched first.
+    let derivedTier: OpportunityTier = 'A4';
+    let derivedReason = 'Acceptable fallback opportunity: weaker evidence/relevance, but no negative flags';
+
     if (candidate.confidenceScore >= 0.85 && score >= 75) {
+      derivedTier = 'A1';
+      derivedReason = 'Top opportunity: strong verification evidence + high contact relevance';
+    } else if (candidate.confidenceScore >= 0.65 && score >= 60) {
+      derivedTier = 'A2';
+      derivedReason = 'Strong opportunity: verified or major provider infrastructure with good relevance';
+    } else if (candidate.confidenceScore >= 0.50 && score >= 45) {
+      derivedTier = 'A3';
+      derivedReason = 'Good usable opportunity: valid domain with acceptable relevance';
+    }
+
+    // Cap repaired candidates at A4
+    if (candidate.wasRepaired && (derivedTier === 'A1' || derivedTier === 'A2' || derivedTier === 'A3')) {
       return {
-        tier: 'A1',
-        reason: 'Top opportunity: strong verification evidence + high contact relevance',
+        tier: 'A4',
+        reason: `Repaired typo domain candidate (repaired from "${candidate.repairedFrom || 'unknown'}"): capped at Tier A4 pending verified mailbox delivery`,
       };
     }
 
-    // A2: Strong evidence (>= 0.65) and solid relevance (score >= 60)
-    if (candidate.confidenceScore >= 0.65 && score >= 60) {
-      return {
-        tier: 'A2',
-        reason: 'Strong opportunity: verified or major provider infrastructure with good relevance',
-      };
-    }
-
-    // A3: Usable evidence (>= 0.50) with acceptable relevance (score >= 45)
-    if (candidate.confidenceScore >= 0.50 && score >= 45) {
-      return {
-        tier: 'A3',
-        reason: 'Good usable opportunity: valid domain with acceptable relevance',
-      };
-    }
-
-    // A4: Weaker evidence or fallback, but no hard-negative evidence
     return {
-      tier: 'A4',
-      reason: 'Acceptable fallback opportunity: weaker evidence/relevance, but no negative flags',
+      tier: derivedTier,
+      reason: derivedReason,
     };
   }
 
@@ -300,6 +323,15 @@ export class OpportunityPriorityEngine {
         name: 'secondary_contact_stagger',
         deduction: 25,
         reason: 'Secondary contact on lead - staggered behind primary email',
+      });
+    }
+
+    // Repaired typo domain candidate provisional deduction
+    if (candidate.wasRepaired) {
+      penalties.push({
+        name: 'repaired_email_provisional',
+        deduction: 10,
+        reason: 'Typo-repaired domain pending verified mailbox delivery',
       });
     }
 

@@ -85,13 +85,16 @@ describe('Email Extractor', () => {
     expect(emails).toContain('team@agency.co');
   });
 
-  it('should flag possibleDomainTypo without dropping the email', () => {
+  it('should repair possibleDomainTypo with full provenance without dropping the email', () => {
     const text = 'Direct email: partnerships@gmial.com';
     const results = emailExtractor.extractEmails(text);
     expect(results).toHaveLength(1);
-    expect(results[0].email).toBe('partnerships@gmial.com');
+    expect(results[0].email).toBe('partnerships@gmail.com');
+    expect(results[0].wasRepaired).toBe(true);
+    expect(results[0].repairedFrom).toBe('partnerships@gmial.com');
+    expect(results[0].repairCode).toBe('GMAIL_DOMAIN_TYPO');
     expect(results[0].possibleDomainTypo).toBe(true);
-    expect(results[0].confidence).toBeLessThan(0.7);
+    expect(results[0].confidence).toBeLessThanOrEqual(0.75);
   });
 
   it('should extract explicit mailto: links with high confidence', () => {

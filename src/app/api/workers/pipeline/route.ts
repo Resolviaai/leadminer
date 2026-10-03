@@ -95,10 +95,10 @@ async function executePipeline() {
     };
   }
 
-  // 3. Verify extracted contact emails & auto-qualify eligible leads (lean batch: 25 contacts)
+  // 3. Verify extracted contact emails & auto-qualify eligible leads (batch: 100 contacts with 30 parallel DNS checks)
   try {
-    console.log('[Pipeline] Step 3/5: Running email verification batch (25 contacts)...');
-    results.verification = await runVerificationBatch(25);
+    console.log('[Pipeline] Step 3/5: Running email verification batch (100 contacts)...');
+    results.verification = await runVerificationBatch(100);
   } catch (err: any) {
     console.error('[Pipeline] Error in verification step:', err);
     results.verification = { error: err.message };

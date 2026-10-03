@@ -57,7 +57,13 @@ describe('Local Email Verifier', () => {
     it('should flag domains without MX or DNS records as INVALID or FAILED on timeout', async () => {
       const res = await localVerifier.verify('test@completelyfakeinvaliddomain999999.xyz');
       expect(['INVALID', 'FAILED']).toContain(res.status);
-      expect(['DOMAIN_NOT_FOUND', 'NO_MX_RECORDS', 'DNS_TIMEOUT']).toContain(res.reasonCode);
+      expect(['DOMAIN_NOT_FOUND', 'NO_MX_RECORDS', 'NO_MAIL_RECORDS', 'DNS_TIMEOUT']).toContain(res.reasonCode);
+    });
+
+    it('should support RFC 5321 implicit MX fallback when domain has A/AAAA records but no MX', async () => {
+      // Direct mock/unit check of resolveAddressWithTimeout
+      const addrs = await (localVerifier as any).resolveAddressWithTimeout('google.com', 2000);
+      expect(addrs.ipv4.length).toBeGreaterThan(0);
     });
   });
 

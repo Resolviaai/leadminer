@@ -162,6 +162,10 @@ export class ContactResolutionEngine {
           category: resolvedObj.category || existing.category,
           contextSnippet: existing.contextSnippet || resolvedObj.contextSnippet,
           possibleDomainTypo: existing.possibleDomainTypo && resolvedObj.possibleDomainTypo,
+          wasRepaired: existing.wasRepaired || resolvedObj.wasRepaired,
+          repairedFrom: existing.repairedFrom || resolvedObj.repairedFrom,
+          repairCode: existing.repairCode || resolvedObj.repairCode,
+          rawContextSnippet: existing.rawContextSnippet || resolvedObj.rawContextSnippet,
         });
       }
     }

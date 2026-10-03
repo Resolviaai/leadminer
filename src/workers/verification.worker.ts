@@ -18,8 +18,9 @@ export async function runVerificationBatch(limit = 100): Promise<{ verified: num
     const claimedContactIds = await db.transaction(async (tx) => {
       const candidateIdsResult = await tx.execute<{ id: number }>(sql`
         SELECT c.id FROM ${contacts} c
-        WHERE c.email_status = 'UNKNOWN' 
+        WHERE c.contact_type = 'EMAIL'
           AND c.email IS NOT NULL
+          AND c.email_status = 'UNKNOWN'
           AND (c.verification_provider IS NULL OR c.verification_provider != 'IN_PROGRESS')
         ORDER BY c.id ASC
         LIMIT ${limit}
@@ -55,6 +56,9 @@ export async function runVerificationBatch(limit = 100): Promise<{ verified: num
         isPrimary: contacts.isPrimary,
         emailCategory: contacts.emailCategory,
         source: contacts.source,
+        wasRepaired: contacts.wasRepaired,
+        repairedFrom: contacts.repairedFrom,
+        repairCode: contacts.repairCode,
         leadId: leads.id,
         channelTitle: leads.channelTitle,
         subscriberCount: leads.subscriberCount,
@@ -155,6 +159,11 @@ export async function runVerificationBatch(limit = 100): Promise<{ verified: num
         discoveredAt: item.discoveredAt,
         category: item.category,
         country: item.country,
+        emailStatus: vResult.status,
+        verificationReasonCode: vResult.reasonCode,
+        wasRepaired: item.wasRepaired ?? false,
+        repairedFrom: item.repairedFrom,
+        repairCode: item.repairCode,
       });
 
       // Checkpoint: update contact record immediately in DB
@@ -272,6 +281,7 @@ export async function reconcilePendingLeadQualifications(): Promise<number> {
         and(
           eq(leads.outreachStatus, 'UNPROCESSED'),
           eq(leads.qualificationStatus, 'DISQUALIFIED'),
+          eq(contacts.contactType, 'EMAIL'),
           inArray(contacts.emailStatus, ['VALID', 'DOMAIN_VALID', 'MAILBOX_VERIFIED']),
           isNotNull(contacts.email)
         )

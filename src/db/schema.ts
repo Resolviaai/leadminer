@@ -14,7 +14,7 @@ import {
   uniqueIndex,
   index,
 } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 
 // Enums
 export const sequenceStatusEnum = pgEnum('sequence_status', [
@@ -264,6 +264,10 @@ export const contacts = pgTable(
     opportunityTier: varchar('opportunity_tier', { length: 10 }), // 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'A6'
     priorityScore: integer('priority_score'),
     priorityFactors: jsonb('priority_factors'),
+    repairedFrom: varchar('repaired_from', { length: 255 }),
+    repairCode: varchar('repair_code', { length: 50 }),
+    wasRepaired: boolean('was_repaired').notNull().default(false),
+    rawContextSnippet: text('raw_context_snippet'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -276,6 +280,9 @@ export const contacts = pgTable(
     index('idx_contacts_opportunity_tier').on(table.opportunityTier),
     index('idx_contacts_priority_score').on(table.priorityScore),
     index('idx_contacts_confidence_score').on(table.confidenceScore),
+    index('idx_contacts_unverified_email')
+      .on(table.id)
+      .where(sql`contact_type = 'EMAIL' AND email IS NOT NULL AND email_status = 'UNKNOWN'`),
   ]
 );
 

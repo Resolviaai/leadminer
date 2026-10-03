@@ -6,8 +6,6 @@ import { youtubeDiscoveryService } from '../services/youtube/discovery.service';
 import { emailExtractor, classifyEmailRole, categorizeEmail } from '../services/extraction/email.extractor';
 import { socialExtractor } from '../services/extraction/social.extractor';
 import { contactResolutionEngine } from '../services/extraction/contact-resolution.engine';
-import { linkPageScraper } from '../services/extraction/linkpage.scraper';
-import { websiteScraper } from '../services/extraction/website.scraper';
 import { jobRunner } from '../services/jobs/job.runner';
 import { getAvailableYouTubeKeys, quotaManager } from '../services/youtube/quota';
 import { telegramService } from '../services/notifications/telegram.service';
@@ -176,26 +174,23 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
 
       console.log(`  Identified ${existingLeads.length} existing channels in database.`);
 
-      // 7. Update Provenance for Known Channels without Calling channels.list
-      for (const el of existingLeads) {
+      // 7. Bulk Update Provenance for Known Channels without Calling channels.list (P1-10 optimization)
+      if (existingLeads.length > 0) {
+        const now = new Date();
         await pool
           .insert(leadKeywordSources)
-          .values({
-            leadId: el.id,
-            keywordId: kw.id,
-            firstSeenAt: new Date(),
-            lastSeenAt: new Date(),
-          })
+          .values(
+            existingLeads.map((el) => ({
+              leadId: el.id,
+              keywordId: kw.id,
+              firstSeenAt: now,
+              lastSeenAt: now,
+            }))
+          )
           .onConflictDoUpdate({
             target: [leadKeywordSources.leadId, leadKeywordSources.keywordId],
-            set: { lastSeenAt: new Date() },
+            set: { lastSeenAt: now },
           });
-
-        // Update lead's last seen time
-        await pool
-          .update(leads)
-          .set({ updatedAt: new Date() })
-          .where(eq(leads.id, el.id));
       }
 
       // 8. Filter Genuinely New Channels for channels.list Enrichment
@@ -254,77 +249,6 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
               }
             } catch (videoErr: any) {
               console.warn(`[Discovery Worker] Error checking video descriptions for ${ch.channelId}:`, videoErr?.message);
-            }
-          }
-
-          // Stage 1.5: Budgeted Fast External Enrichment (1 hop, 2.5s timeout, 128KB max)
-          // If no clean email yet, but creator lists a Linktree, Beacons, or Website:
-          // Check it deterministically BEFORE spending Jev or Gemini AI quota!
-          if (!sufficiency.isSufficient) {
-            const externalTarget = extractedSocials.linktree || extractedSocials.beacons || extractedSocials.website || ch.website;
-            if (externalTarget) {
-              try {
-                const isLinkPage = Boolean(
-                  extractedSocials.linktree ||
-                  extractedSocials.beacons ||
-                  /linktr\.ee|beacons\.ai|stan\.store/i.test(externalTarget)
-                );
-                if (isLinkPage) {
-                  const linkResult = await linkPageScraper.scrapeLinkPage(externalTarget);
-                  if (linkResult.status === 'SUCCESS' && linkResult.emails.length > 0) {
-                    for (const item of linkResult.emails) {
-                      extractedEmails.push({
-                        email: item.email.toLowerCase(),
-                        source: 'link_page',
-                        role: (item.role as any) || 'BUSINESS',
-                        priorityScore: item.priorityScore || 85,
-                        category: item.category,
-                        confidence: item.confidence || 0.90,
-                        contextSnippet: `Link page: ${externalTarget}`,
-                      });
-                    }
-                  }
-                  extractedSocials = contactResolutionEngine.consolidateSocials([
-                    extractedSocials,
-                    {
-                      ...linkResult.socials,
-                      items: linkResult.items || [],
-                      phone: linkResult.phone,
-                      whatsapp: linkResult.whatsapp,
-                    },
-                  ]);
-                } else {
-                  const webResult = await websiteScraper.scrapeUrl(externalTarget);
-                  if (webResult.emails.length > 0) {
-                    for (const em of webResult.emails) {
-                      const { role, priorityScore } = classifyEmailRole(em, externalTarget);
-                      extractedEmails.push({
-                        email: em.toLowerCase(),
-                        source: 'contact_page',
-                        role,
-                        priorityScore,
-                        category: categorizeEmail(em),
-                        confidence: 0.92,
-                        contextSnippet: `Website: ${externalTarget}`,
-                      });
-                    }
-                  }
-                  extractedSocials = contactResolutionEngine.consolidateSocials([
-                    extractedSocials,
-                    {
-                      ...webResult.socials,
-                      items: webResult.rawItems || [],
-                      phone: webResult.phones?.[0],
-                      whatsapp: webResult.whatsapp,
-                    },
-                  ]);
-                }
-
-                // Re-evaluate sufficiency after external enrichment
-                sufficiency = contactResolutionEngine.evaluateSufficiency(extractedEmails);
-              } catch (enrichErr: any) {
-                // Gracefully fall through to AI cascade if external fetch fails/times out
-              }
             }
           }
 
@@ -459,6 +383,10 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
                   email: cleanEmail,
                   emailStatus: 'UNKNOWN',
                   emailCategory: emailObj.category || emailObj.role,
+                  wasRepaired: emailObj.wasRepaired ?? false,
+                  repairedFrom: emailObj.repairedFrom ?? null,
+                  repairCode: emailObj.repairCode ?? null,
+                  rawContextSnippet: emailObj.rawContextSnippet ?? emailObj.contextSnippet ?? null,
                 })
                 .onConflictDoNothing();
 

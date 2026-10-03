@@ -12,6 +12,10 @@ export interface ScrapedLinkPageResult {
     priorityScore?: number;
     confidence?: number;
     source?: string;
+    wasRepaired?: boolean;
+    repairedFrom?: string;
+    repairCode?: string;
+    rawContextSnippet?: string;
   }[];
   socials: Record<string, string>;
   items?: ExtractedContactItem[];
@@ -139,15 +143,20 @@ export class LinkPageScraper {
     }[] = [];
     const socials: Record<string, string> = {};
 
-    const addEmail = (rawEmail: string) => {
+    const emailMetadata = new Map<string, { wasRepaired?: boolean; repairedFrom?: string; repairCode?: string; rawContextSnippet?: string }>();
+
+    const addEmail = (rawEmail: string, meta?: { wasRepaired?: boolean; repairedFrom?: string; repairCode?: string; rawContextSnippet?: string }) => {
       let clean = safeDecodeUriComponent(rawEmail).toLowerCase().trim();
       clean = clean.replace(/^(\\u003e|u003e|>|&gt;)+/i, '').trim();
       while (clean.endsWith('.') || clean.endsWith(',')) clean = clean.slice(0, -1);
-      if (clean && !emailSet.has(clean) && clean.includes('@') && clean.includes('.')) {
+      if (clean && clean.includes('@') && clean.includes('.')) {
         const domain = clean.split('@')[1];
         const blocked = ['patreon.com', 'spotify.com', 'linktr.ee', 'beacons.ai', 'sentry.io', 'wixpress.com', 'example.com'];
         if (!blocked.includes(domain)) {
           emailSet.add(clean);
+          if (meta) {
+            emailMetadata.set(clean, meta);
+          }
         }
       }
     };
@@ -200,7 +209,12 @@ export class LinkPageScraper {
     const bodyText = $('body').text() || '';
     const extractedTextEmails = emailExtractor.extractEmails(bodyText, 'links');
     for (const item of extractedTextEmails) {
-      addEmail(item.email);
+      addEmail(item.email, {
+        wasRepaired: item.wasRepaired,
+        repairedFrom: item.repairedFrom,
+        repairCode: item.repairCode,
+        rawContextSnippet: item.rawContextSnippet || item.contextSnippet,
+      });
     }
 
     // 6. Extract socials and contact items from links on the landing page
@@ -220,6 +234,7 @@ export class LinkPageScraper {
     emails = Array.from(emailSet).map((email) => {
       const { role, priorityScore } = emailExtractor.classifyEmailRole(email, bodyText);
       const category = categorizeEmail(email);
+      const meta = emailMetadata.get(email);
       return {
         email,
         category,
@@ -227,6 +242,10 @@ export class LinkPageScraper {
         priorityScore,
         confidence: 0.92,
         source: 'link_page',
+        wasRepaired: meta?.wasRepaired ?? false,
+        repairedFrom: meta?.repairedFrom,
+        repairCode: meta?.repairCode,
+        rawContextSnippet: meta?.rawContextSnippet,
       };
     });
 

@@ -85,6 +85,8 @@ describe('Opportunity Priority Engine', () => {
     confidenceScore: 0.0,
     attemptCount: 3,
     subscriberCount: 50000,
+    emailStatus: 'INVALID',
+    verificationReasonCode: 'HARD_BOUNCE',
   };
 
   const secondaryContact: PriorityCandidate = {
@@ -177,6 +179,36 @@ describe('Opportunity Priority Engine', () => {
     it('should classify definitively bad candidate as A6 (hard negative)', () => {
       const res = opportunityPriorityEngine.scoreCandidate(hardNegativeA6);
       expect(res.opportunityTier).toBe('A6');
+    });
+
+    it('should NOT classify DNS timeout / unresolved as A6 (must fall back to A5 reserve)', () => {
+      const timeoutCandidate: PriorityCandidate = {
+        contactId: 99,
+        leadId: 990,
+        email: 'transient@slowdns.com',
+        isPrimary: true,
+        confidenceScore: 0.0,
+        attemptCount: 3,
+        emailStatus: 'UNKNOWN',
+        verificationReasonCode: 'DNS_TIMEOUT',
+      };
+      const res = opportunityPriorityEngine.scoreCandidate(timeoutCandidate);
+      expect(res.opportunityTier).toBe('A5');
+      expect(res.tierReason).toContain('reserve');
+    });
+
+    it('should cap repaired email candidates at Tier A4 even if high confidence and score', () => {
+      const repairedCandidate: PriorityCandidate = {
+        ...highTierLead,
+        contactId: 88,
+        email: 'creator@gmail.com',
+        wasRepaired: true,
+        repairedFrom: 'creator@gmial.com',
+        repairCode: 'COMMON_TYPO_DOMAIN',
+      };
+      const res = opportunityPriorityEngine.scoreCandidate(repairedCandidate);
+      expect(res.opportunityTier).toBe('A4');
+      expect(res.tierReason).toContain('capped at Tier A4');
     });
   });
 

@@ -93,6 +93,8 @@ describe('Planner Gradient Traversal & Low-Volume Integrity Suite', () => {
           confidenceScore: 0.0,
           attemptCount: 3,
           subscriberCount: 40000,
+          emailStatus: 'INVALID',
+          verificationReasonCode: 'HARD_BOUNCE',
           ...overrides,
         };
     }
