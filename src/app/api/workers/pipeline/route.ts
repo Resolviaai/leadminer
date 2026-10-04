@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { runCleanup } from '@/workers/cleanup.worker';
 import { runReplySync } from '@/workers/replies.worker';
 import { runDiscoveryBatch } from '@/workers/discovery.worker';
+import { runLinkpageEnrichmentBatch } from '@/workers/linkpage-enrichment.worker';
 import { runVerificationBatch } from '@/workers/verification.worker';
 import { runPlanner } from '@/workers/planner.worker';
 import { runDispatcher } from '@/workers/dispatcher.worker';
@@ -25,6 +26,9 @@ async function executeSingleStep(stepName: string) {
     case 'discovery':
       result = await runDiscoveryBatch(10);
       break;
+    case 'linkpage':
+      result = await runLinkpageEnrichmentBatch(20);
+      break;
     case 'verification':
       result = await runVerificationBatch(100);
       break;
@@ -35,7 +39,7 @@ async function executeSingleStep(stepName: string) {
       result = await runDispatcher(3);
       break;
     default:
-      throw new Error(`Unknown pipeline step: "${stepName}". Valid steps: cleanup, replies, discovery, verification, planner, dispatch`);
+      throw new Error(`Unknown pipeline step: "${stepName}". Valid steps: cleanup, replies, discovery, linkpage, verification, planner, dispatch`);
   }
 
   const finishedAt = new Date();
@@ -140,12 +144,37 @@ async function handlePipelineRequest(req: NextRequest) {
     return auth.response!;
   }
 
-  const step = req.nextUrl.searchParams.get('step');
+  const rawStep = req.nextUrl.searchParams.get('step');
+  const step = rawStep?.toLowerCase().trim() || null;
+
+  const getLockKeyForStep = (stepName?: string | null): number => {
+    switch (stepName) {
+      case 'dispatch':
+        return LOCK_KEYS.DISPATCHER;
+      case 'discovery':
+        return LOCK_KEYS.DISCOVERY;
+      case 'verification':
+        return LOCK_KEYS.VERIFICATION;
+      case 'linkpage':
+        return LOCK_KEYS.LINKPAGE;
+      case 'planner':
+        return LOCK_KEYS.PLANNER;
+      case 'replies':
+        return LOCK_KEYS.REPLY_SYNC;
+      case 'cleanup':
+        return LOCK_KEYS.CLEANUP;
+      default:
+        return LOCK_KEYS.DAILY_PIPELINE;
+    }
+  };
+
+  const lockKey = getLockKeyForStep(step);
+  const lockTaskName = step ? `Pipeline Step: ${step}` : 'Daily Pipeline';
 
   try {
     const lockResult = await withAdvisoryLock(
-      LOCK_KEYS.DAILY_PIPELINE,
-      step ? `Pipeline Step: ${step}` : 'Daily Pipeline',
+      lockKey,
+      lockTaskName,
       async () => {
         if (step) {
           return await executeSingleStep(step);

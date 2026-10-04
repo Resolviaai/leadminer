@@ -175,8 +175,8 @@ export class YouTubeDiscoveryService {
       if (isQuota) {
         console.warn(`[YouTube API] 403 quotaExceeded received. Marking active key exhausted.`);
         quotaManager.markActiveKeyExhausted();
-        const quota = await quotaManager.syncQuotaState();
-        return { channels: [], quotaReached: quota.generalQuotaUsedToday >= quota.generalQuotaDailyLimit };
+        await quotaManager.persistQuotaState();
+        return { channels: [], quotaReached: true };
       }
       // Refund general quota on non-quota failure (P2-15)
       await quotaManager.refundGeneralQuota(chunksCount);
@@ -184,14 +184,23 @@ export class YouTubeDiscoveryService {
     }
   }
 
-  public async getRecentVideoDescriptions(uploadsPlaylistId: string, maxResults = 5): Promise<string[]> {
-    if (!uploadsPlaylistId) return [];
+  public async getRecentVideoDescriptions(
+    uploadsPlaylistId: string,
+    maxResults = 5
+  ): Promise<{ descriptions: string[]; quotaReached: boolean }> {
+    if (!uploadsPlaylistId) return { descriptions: [], quotaReached: false };
 
     const claimed = await quotaManager.tryClaimGeneralQuota(1);
-    if (!claimed) return [];
+    if (!claimed) {
+      console.warn(`[YouTube Quota] General quota limit reached during video mining.`);
+      return { descriptions: [], quotaReached: true };
+    }
 
     const client = this.getClient();
-    if (!client) return [];
+    if (!client) {
+      await quotaManager.refundGeneralQuota(1);
+      return { descriptions: [], quotaReached: false };
+    }
 
     try {
       const res = await this.executeWithRetry(async () => {
@@ -203,16 +212,20 @@ export class YouTubeDiscoveryService {
       });
 
       const items = res.data.items || [];
-      return items
+      const descriptions = items
         .map((item) => item.snippet?.description || '')
         .filter((desc) => Boolean(desc && desc.trim().length > 0));
+      return { descriptions, quotaReached: false };
     } catch (err: any) {
       const isQuota = err?.status === 403 && (err?.message?.includes('quota') || err?.errors?.[0]?.reason === 'quotaExceeded');
       if (isQuota) {
+        console.warn(`[YouTube API] 403 quotaExceeded during video mining. Marking active key exhausted.`);
         quotaManager.markActiveKeyExhausted();
+        await quotaManager.persistQuotaState();
+        return { descriptions: [], quotaReached: true };
       }
       console.warn(`[YouTube API] Failed to fetch video descriptions for playlist ${uploadsPlaylistId}:`, err?.message);
-      return [];
+      return { descriptions: [], quotaReached: false };
     }
   }
 

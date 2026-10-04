@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runVerificationBatch } from '@/workers/verification.worker';
 import { verifyWorkerAuth } from '@/lib/worker-auth';
+import { withAdvisoryLock, LOCK_KEYS } from '@/lib/pipeline-lock';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // 60s max for Vercel Hobby plan compatibility
@@ -16,7 +17,15 @@ async function handleVerification(req: NextRequest) {
     const rawBatch = parseInt(url.searchParams.get('batchSize') || '100', 10);
     const batchSize = isNaN(rawBatch) ? 100 : Math.min(Math.max(rawBatch, 1), 150);
 
-    const result = await runVerificationBatch(batchSize);
+    const lockResult = await withAdvisoryLock(LOCK_KEYS.VERIFICATION, 'Verification Worker', async () => {
+      return await runVerificationBatch(batchSize);
+    });
+
+    if (!lockResult.executed) {
+      return NextResponse.json({ success: true, skipped: true, reason: lockResult.reason }, { status: 409 });
+    }
+
+    const result = lockResult.result;
 
     if (
       req.method === 'GET' ||

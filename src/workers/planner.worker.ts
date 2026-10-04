@@ -527,8 +527,36 @@ export async function runPlanner(): Promise<PlannerResult> {
       for (const [leadId, leadContacts] of rankedLeads) {
         if (accountNewScheduled >= slotsForNew) break;
 
-        // Primary contact first
-        leadContacts.sort((a, b) => (b.isPrimary ? 1 : 0) - (a.isPrimary ? 1 : 0));
+        // Lexicographic Contact Ranking (P7-2 fix):
+        // 1. Opportunity tier (A1 > A2 > A3 > A4)
+        // 2. Verification status strength (MAILBOX_VERIFIED > VALID > DOMAIN_VALID)
+        // 3. Calculated priority score descending
+        // 4. Primary flag as secondary tie-breaker
+        // 5. Stable contactId ascending
+        leadContacts.sort((a, b) => {
+          const tierA = TIER_ORDER[a.calculatedTier] || 99;
+          const tierB = TIER_ORDER[b.calculatedTier] || 99;
+          if (tierA !== tierB) return tierA - tierB;
+
+          const statusWeight: Record<string, number> = {
+            MAILBOX_VERIFIED: 1,
+            VALID: 2,
+            DOMAIN_VALID: 3,
+          };
+          const weightA = statusWeight[a.emailStatus || ''] || 99;
+          const weightB = statusWeight[b.emailStatus || ''] || 99;
+          if (weightA !== weightB) return weightA - weightB;
+
+          if (b.calculatedPriority !== a.calculatedPriority) {
+            return b.calculatedPriority - a.calculatedPriority;
+          }
+
+          if (b.isPrimary !== a.isPrimary) {
+            return (b.isPrimary ? 1 : 0) - (a.isPrimary ? 1 : 0);
+          }
+
+          return a.contactId - b.contactId;
+        });
 
         // Bug #16: Secondary contacts are fallback only, never parallel-spammed.
         // Pick the single best eligible contact for this lead that hasn't been contacted or scheduled.

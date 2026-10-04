@@ -365,7 +365,7 @@ export class OverviewAnalyticsService {
           (SELECT count(*)::int FROM leads WHERE discovered_at >= ${prevStartIso}::timestamptz AND discovered_at <= ${prevEndIso}::timestamptz) as unique_channels,
           (SELECT count(*)::int FROM leads WHERE discovered_at >= ${prevStartIso}::timestamptz AND discovered_at <= ${prevEndIso}::timestamptz AND description IS NOT NULL AND description != '') as enriched_channels,
           (SELECT count(*)::int FROM contacts WHERE contact_type = 'EMAIL' AND created_at >= ${prevStartIso}::timestamptz AND created_at <= ${prevEndIso}::timestamptz) as emails_found,
-          (SELECT count(*)::int FROM contacts WHERE contact_type = 'EMAIL' AND created_at >= ${prevStartIso}::timestamptz AND created_at <= ${prevEndIso}::timestamptz AND email_status = 'VALID') as valid_emails,
+          (SELECT count(*)::int FROM contacts WHERE contact_type = 'EMAIL' AND created_at >= ${prevStartIso}::timestamptz AND created_at <= ${prevEndIso}::timestamptz AND email_status IN ('VALID', 'MAILBOX_VERIFIED')) as valid_emails,
           (SELECT count(*)::int FROM contacts WHERE contact_type = 'EMAIL' AND created_at >= ${prevStartIso}::timestamptz AND created_at <= ${prevEndIso}::timestamptz AND email_status = 'DOMAIN_VALID') as domain_valid_emails,
           (SELECT count(*)::int FROM leads WHERE qualification_status = 'QUALIFIED' AND discovered_at >= ${prevStartIso}::timestamptz AND discovered_at <= ${prevEndIso}::timestamptz) as qualified_leads,
           (SELECT count(*)::int FROM messages WHERE send_status = 'SENT' AND sent_at >= ${prevStartIso}::timestamptz AND sent_at <= ${prevEndIso}::timestamptz) as sent_messages,
@@ -385,33 +385,44 @@ export class OverviewAnalyticsService {
           to_char(d.day, 'YYYY-MM-DD') as day,
           coalesce(l.discovered, 0)::int as channels_discovered,
           coalesce(c.emails, 0)::int as emails_found,
-          coalesce(c.verified, 0)::int as emails_verified,
+          coalesce(v.verified, 0)::int as emails_verified,
           coalesce(m.sent, 0)::int as messages_sent,
           coalesce(r.replies, 0)::int as replies_received
         FROM generate_series(${startIso}::date, ${endIso}::date, '1 day'::interval) d(day)
         LEFT JOIN (
-          SELECT date_trunc('day', discovered_at)::date as day, count(*)::int as discovered
+          SELECT date_trunc('day', discovered_at AT TIME ZONE 'America/New_York')::date as day, count(*)::int as discovered
           FROM leads
           WHERE discovered_at >= ${startIso}::timestamptz AND discovered_at <= ${endIso}::timestamptz
           GROUP BY 1
         ) l ON l.day = d.day::date
         LEFT JOIN (
           SELECT 
-            date_trunc('day', created_at)::date as day, 
-            count(*)::int as emails,
-            count(*) filter (where email_status IN ('VALID', 'DOMAIN_VALID'))::int as verified
+            date_trunc('day', created_at AT TIME ZONE 'America/New_York')::date as day, 
+            count(*)::int as emails
           FROM contacts
           WHERE contact_type = 'EMAIL' AND created_at >= ${startIso}::timestamptz AND created_at <= ${endIso}::timestamptz
           GROUP BY 1
         ) c ON c.day = d.day::date
         LEFT JOIN (
-          SELECT date_trunc('day', sent_at)::date as day, count(*)::int as sent
+          SELECT
+            date_trunc('day', verification_timestamp AT TIME ZONE 'America/New_York')::date as day,
+            count(*)::int as verified
+          FROM contacts
+          WHERE contact_type = 'EMAIL'
+            AND verification_timestamp IS NOT NULL
+            AND verification_timestamp >= ${startIso}::timestamptz
+            AND verification_timestamp <= ${endIso}::timestamptz
+            AND email_status IN ('VALID', 'MAILBOX_VERIFIED', 'DOMAIN_VALID')
+          GROUP BY 1
+        ) v ON v.day = d.day::date
+        LEFT JOIN (
+          SELECT date_trunc('day', sent_at AT TIME ZONE 'America/New_York')::date as day, count(*)::int as sent
           FROM messages
           WHERE send_status = 'SENT' AND sent_at >= ${startIso}::timestamptz AND sent_at <= ${endIso}::timestamptz
           GROUP BY 1
         ) m ON m.day = d.day::date
         LEFT JOIN (
-          SELECT date_trunc('day', received_at)::date as day, count(*)::int as replies
+          SELECT date_trunc('day', received_at AT TIME ZONE 'America/New_York')::date as day, count(*)::int as replies
           FROM replies
           WHERE received_at >= ${startIso}::timestamptz AND received_at <= ${endIso}::timestamptz
           GROUP BY 1

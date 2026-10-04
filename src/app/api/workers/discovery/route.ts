@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runDiscoveryBatch } from '@/workers/discovery.worker';
 import { verifyWorkerAuth } from '@/lib/worker-auth';
+import { withAdvisoryLock, LOCK_KEYS } from '@/lib/pipeline-lock';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // 60s max for Vercel Hobby plan compatibility
@@ -16,7 +17,15 @@ async function handleDiscovery(req: NextRequest) {
     const rawBatch = parseInt(url.searchParams.get('batchSize') || '10', 10);
     const batchSize = isNaN(rawBatch) ? 10 : Math.min(Math.max(rawBatch, 1), 20);
 
-    const result = await runDiscoveryBatch(batchSize);
+    const lockResult = await withAdvisoryLock(LOCK_KEYS.DISCOVERY, 'Discovery Worker', async () => {
+      return await runDiscoveryBatch(batchSize);
+    });
+
+    if (!lockResult.executed) {
+      return NextResponse.json({ success: true, skipped: true, reason: lockResult.reason }, { status: 409 });
+    }
+
+    const result = lockResult.result;
 
     if (
       req.method === 'GET' ||

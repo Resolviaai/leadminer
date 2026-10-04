@@ -280,7 +280,7 @@ export async function reconcilePendingLeadQualifications(): Promise<number> {
       .where(
         and(
           eq(leads.outreachStatus, 'UNPROCESSED'),
-          eq(leads.qualificationStatus, 'DISQUALIFIED'),
+          inArray(leads.qualificationStatus, ['DISQUALIFIED', 'UNQUALIFIED']),
           eq(contacts.contactType, 'EMAIL'),
           inArray(contacts.emailStatus, ['VALID', 'DOMAIN_VALID', 'MAILBOX_VERIFIED']),
           isNotNull(contacts.email)

@@ -27,7 +27,7 @@ jobs:
           fi
 
           # D4: Run pipeline step-by-step so each step gets an isolated 60s Vercel execution window
-          STEPS=("cleanup" "replies" "discovery" "verification" "planner" "dispatch")
+          STEPS=("cleanup" "replies" "discovery" "linkpage" "verification" "planner" "dispatch")
 
           for STEP in "${STEPS[@]}"; do
             echo ""

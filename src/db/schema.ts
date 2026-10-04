@@ -236,6 +236,24 @@ export const leadKeywordSources = pgTable(
   ]
 );
 
+// 2c. discovered_channel_staging (Zero-Waste Quota Staging)
+export const discoveredChannelStaging = pgTable(
+  'discovered_channel_staging',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    keywordId: bigint('keyword_id', { mode: 'number' }).references(() => keywords.id, { onDelete: 'cascade' }),
+    channelId: varchar('channel_id', { length: 100 }).notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('PENDING'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    processedAt: timestamp('processed_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('uq_channel_staging_keyword_channel').on(table.keywordId, table.channelId),
+    index('idx_channel_staging_status_created').on(table.status, table.createdAt),
+    index('idx_channel_staging_channel_id').on(table.channelId),
+  ]
+);
+
 // 3. contacts (Supports 1:N contacts per lead: all emails, social handles, Linktree, etc.)
 export const contacts = pgTable(
   'contacts',

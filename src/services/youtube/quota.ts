@@ -93,6 +93,9 @@ export class YouTubeQuotaManager {
             generalQuotaUsedToday: val.general_quota_used_today ?? 0,
             lastResetPt: val.last_reset_pt ?? new Date().toISOString(),
           };
+          if (Array.isArray(val.exhausted_key_indices)) {
+            this.exhaustedKeyIndices = new Set<number>(val.exhausted_key_indices);
+          }
         }
       } catch (e) {
         // If DB is offline or not yet migrated, maintain in-memory quota
@@ -117,12 +120,16 @@ export class YouTubeQuotaManager {
             SET value = jsonb_set(
               jsonb_set(
                 jsonb_set(
-                  value,
-                  '{search_calls_used_today}',
+                  jsonb_set(
+                    value,
+                    '{search_calls_used_today}',
+                    '0'::jsonb
+                  ),
+                  '{general_quota_used_today}',
                   '0'::jsonb
                 ),
-                '{general_quota_used_today}',
-                '0'::jsonb
+                '{exhausted_key_indices}',
+                '[]'::jsonb
               ),
               '{last_reset_pt}',
               to_jsonb(${this.inMemoryQuota.lastResetPt}::text)
@@ -156,6 +163,7 @@ export class YouTubeQuotaManager {
             general_quota_daily_limit: this.inMemoryQuota.generalQuotaDailyLimit,
             general_quota_used_today: this.inMemoryQuota.generalQuotaUsedToday,
             last_reset_pt: this.inMemoryQuota.lastResetPt,
+            exhausted_key_indices: Array.from(this.exhaustedKeyIndices),
           },
           description: 'YouTube API dual-bucket quota tracking (search.list 100 calls/day; general 10,000 units/day; resets midnight PT).',
         })
@@ -168,6 +176,7 @@ export class YouTubeQuotaManager {
               general_quota_daily_limit: this.inMemoryQuota.generalQuotaDailyLimit,
               general_quota_used_today: this.inMemoryQuota.generalQuotaUsedToday,
               last_reset_pt: this.inMemoryQuota.lastResetPt,
+              exhausted_key_indices: Array.from(this.exhaustedKeyIndices),
             },
             updatedAt: new Date(),
           },

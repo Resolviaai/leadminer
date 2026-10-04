@@ -1,5 +1,5 @@
 import { db } from '../db/client';
-import { keywords, leads, contacts, leadKeywordSources } from '../db/schema';
+import { keywords, leads, contacts, leadKeywordSources, discoveredChannelStaging } from '../db/schema';
 import { eq, inArray, sql } from 'drizzle-orm';
 import { env } from '../config/env';
 import { youtubeDiscoveryService } from '../services/youtube/discovery.service';
@@ -198,10 +198,26 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
       console.log(`  Enriching ${genuinelyNewChannelIds.length} genuinely new channels via channels.list...`);
 
       if (genuinelyNewChannelIds.length > 0) {
+        // Zero-Waste Staging: persist raw channel IDs so a 100-unit search is never lost on subsequent quota pause
+        try {
+          await pool
+            .insert(discoveredChannelStaging)
+            .values(
+              genuinelyNewChannelIds.map((cid) => ({
+                keywordId: kw.id,
+                channelId: cid,
+                status: 'PENDING',
+              }))
+            )
+            .onConflictDoNothing();
+        } catch (stageErr: any) {
+          console.warn(`  ⚠️ Channel staging notice:`, stageErr.message);
+        }
+
         const enrichResult = await youtubeDiscoveryService.enrichChannelsBatch(genuinelyNewChannelIds);
 
         if (enrichResult.quotaReached) {
-          console.warn(`⚠️ [YouTube Quota Reached during enrichment] Pausing batch.`);
+          console.warn(`⚠️ [YouTube Quota Reached during enrichment] Pausing batch cleanly (staged channels preserved).`);
           quotaReached = true;
           const remainingKeywords = claimedKeywords.slice(i);
           const remainingIds = remainingKeywords.map((k) => k.id);
@@ -218,6 +234,8 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
           break;
         }
 
+        let videoMiningQuotaReached = false;
+
         for (const ch of enrichResult.channels) {
           // 9. Discovery Quality Filter (Lightweight n8n Pre-Filter)
           if (ch.subscriberCount < env.MIN_DISCOVERY_SUBSCRIBERS || ch.videoCount < env.MIN_DISCOVERY_VIDEOS) {
@@ -232,10 +250,15 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
           // Video Description Mining Gate: Inspect recent videos when there is no sufficiently confident deterministic email
           let sufficiency = contactResolutionEngine.evaluateSufficiency(extractedEmails);
 
-          if (!sufficiency.isSufficient && ch.uploadsPlaylistId) {
+          if (!sufficiency.isSufficient && ch.uploadsPlaylistId && !videoMiningQuotaReached) {
             try {
-              const videoDescriptions = await youtubeDiscoveryService.getRecentVideoDescriptions(ch.uploadsPlaylistId, 5);
-              for (const vDesc of videoDescriptions) {
+              const videoResult = await youtubeDiscoveryService.getRecentVideoDescriptions(ch.uploadsPlaylistId, 5);
+              if (videoResult.quotaReached) {
+                console.warn(`⚠️ [YouTube Quota Reached during video description mining] Halting further video calls.`);
+                videoMiningQuotaReached = true;
+                quotaReached = true;
+              }
+              for (const vDesc of videoResult.descriptions) {
                 const vEmails = emailExtractor.extractEmails(vDesc, 'video_description');
                 extractedEmails.push(...vEmails);
                 const vSocials = socialExtractor.extractSocials(vDesc);
@@ -348,6 +371,7 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
                 phone: primaryPhone,
                 contactPageUrl: contactPageUrl,
                 rawPayload: ch.rawPayload,
+                refreshedAt: new Date(),
               })
               .returning({ id: leads.id });
 
@@ -363,6 +387,12 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
                 lastSeenAt: new Date(),
               })
               .onConflictDoNothing();
+
+            // Mark zero-waste staging status as PROCESSED
+            await tx
+              .update(discoveredChannelStaging)
+              .set({ status: 'PROCESSED', processedAt: new Date() })
+              .where(eq(discoveredChannelStaging.channelId, ch.channelId));
 
             // 13. Contact Extraction: Preserve ALL Discovered Emails and Links
             // Resolve, deduplicate, and prioritize candidate emails (best commercial email first)
