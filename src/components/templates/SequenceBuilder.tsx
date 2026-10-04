@@ -75,7 +75,10 @@ export function SequenceBuilder() {
     setError(null);
     try {
       const res = await fetch("/api/sequences");
-      if (!res.ok) throw new Error("Failed to load sequence configuration");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.error || `Failed to load sequence configuration (${res.status})`);
+      }
       const data = await res.json();
 
       if (data.sequence) {
@@ -135,6 +138,32 @@ export function SequenceBuilder() {
       setMetrics(data.metrics || null);
     } catch (err: any) {
       setError(err.message);
+      // Graceful fallback: populate standard 2-step sequence so the UI is never left broken/empty
+      setSteps((prev) => {
+        if (prev.length > 0) return prev;
+        return [
+          {
+            stepNumber: 1,
+            templateId: 1,
+            templateName: "Initial Pitch",
+            templateSubject: "A 30-sec video concept for {{channel_name}}",
+            templateBody: "Hey {{channel_name}},\n\nLoved your recent video! We help creators scale their views with high-retention short-form clips.\n\nCould I send over a quick 30-second concept for your channel, completely free?\n\nBest,\nTeam LeadMiner",
+            delayDays: 0,
+            delayHours: 0,
+            isExpanded: true,
+          },
+          {
+            stepNumber: 2,
+            templateId: 0,
+            templateName: "Follow-Up #1",
+            templateSubject: "",
+            templateBody: "Hey {{channel_name}},\n\nJust wanted to bump this to the top of your inbox in case it got buried. Did you have a quick moment to check out my previous note?\n\nBest,\nTeam LeadMiner",
+            delayDays: 2,
+            delayHours: 0,
+            isExpanded: true,
+          },
+        ];
+      });
     } finally {
       setLoading(false);
     }
@@ -314,9 +343,18 @@ export function SequenceBuilder() {
       </Card>
 
       {error && (
-        <div className="p-3.5 bg-destructive/10 border border-destructive/30 text-destructive text-xs rounded-xl flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>{error}</span>
+        <div className="p-3.5 bg-destructive/10 border border-destructive/30 text-destructive text-xs rounded-xl flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span className="truncate">{error}</span>
+          </div>
+          <button
+            type="button"
+            onClick={fetchSequence}
+            className="shrink-0 px-2.5 py-1 rounded-md bg-destructive/20 hover:bg-destructive/30 text-destructive text-[11px] font-medium transition-colors"
+          >
+            Retry
+          </button>
         </div>
       )}
 

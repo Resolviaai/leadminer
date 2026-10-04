@@ -12,8 +12,25 @@ export async function GET(req: NextRequest) {
       .where(eq(campaigns.status, "ACTIVE"))
       .limit(1);
 
-    const campaignId = activeCampaigns.length > 0 ? activeCampaigns[0].id : 1;
-    const { sequence, steps } = await sequenceService.getOrCreateCampaignSequence(campaignId);
+    let targetCampaign = activeCampaigns[0];
+    if (!targetCampaign) {
+      const anyCampaigns = await db.select().from(campaigns).limit(1);
+      if (anyCampaigns.length > 0) {
+        targetCampaign = anyCampaigns[0];
+      } else {
+        const [newCampaign] = await db
+          .insert(campaigns)
+          .values({
+            name: "Top Creators & Podcasters Outreach",
+            status: "ACTIVE",
+            dailyLimit: 20,
+          })
+          .returning();
+        targetCampaign = newCampaign;
+      }
+    }
+
+    const { sequence, steps } = await sequenceService.getOrCreateCampaignSequence(targetCampaign.id);
     const metrics = await sequenceService.getSequenceMetrics(sequence.id);
 
     const allTemplates = await db
@@ -31,7 +48,7 @@ export async function GET(req: NextRequest) {
       steps,
       metrics,
       templates: allTemplates,
-      campaign: activeCampaigns[0] || null,
+      campaign: targetCampaign,
     });
   } catch (err: any) {
     console.error("[sequences GET]", err);
@@ -119,9 +136,17 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    const updated = await sequenceService.getOrCreateCampaignSequence(
-      body.campaignId || 1
-    );
+    let targetCampaignId = body.campaignId ? Number(body.campaignId) : undefined;
+    if (!targetCampaignId) {
+      const [seqRecord] = await db
+        .select({ campaignId: sequences.campaignId })
+        .from(sequences)
+        .where(eq(sequences.id, Number(sequenceId)))
+        .limit(1);
+      targetCampaignId = seqRecord?.campaignId || 1;
+    }
+
+    const updated = await sequenceService.getOrCreateCampaignSequence(targetCampaignId);
     const metrics = await sequenceService.getSequenceMetrics(Number(sequenceId));
 
     return NextResponse.json({

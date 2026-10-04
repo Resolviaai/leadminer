@@ -80,76 +80,81 @@ export class SequenceService {
       };
     }
 
-    // Query send counts per step (confirmed SENT sends only, filtered by campaign)
-    const sendStats = await db
-      .select({
-        stepNumber: messages.stepNumber,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(messages)
-      .where(
-        and(
-          eq(messages.sendStatus, 'SENT'),
-          campaignId ? eq(messages.campaignId, campaignId) : undefined
+    let sendsByStep = new Map<number, number>();
+    let repliesByStep = new Map<number, number>();
+    let unsubsByStep = new Map<number, number>();
+
+    try {
+      // Query send counts per step (confirmed SENT sends only, filtered by campaign)
+      const sendStats = await db
+        .select({
+          stepNumber: messages.stepNumber,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.sendStatus, 'SENT'),
+            campaignId ? eq(messages.campaignId, campaignId) : undefined
+          )
         )
-      )
-      .groupBy(messages.stepNumber);
+        .groupBy(messages.stepNumber);
 
-    const sendsByStep = new Map<number, number>();
-    for (const s of sendStats) {
-      sendsByStep.set(s.stepNumber, s.count);
-    }
+      for (const s of sendStats) {
+        sendsByStep.set(s.stepNumber, s.count);
+      }
 
-    // Bug #17 Fix: Attribute each reply ONLY to the highest step sent on that thread before the reply arrived,
-    // rather than multiplying across all historical steps sharing that thread.
-    const replyStatsResult = await db.execute<{ step_number: number; count: number }>(sql`
-      SELECT sub.step_number, count(DISTINCT sub.reply_id)::int as count
-      FROM (
-        SELECT r.id as reply_id, (
-          SELECT m.step_number
-          FROM messages m
-          WHERE m.thread_id = r.thread_id
-            AND m.send_status = 'SENT'
-            ${campaignId ? sql`AND m.campaign_id = ${campaignId}` : sql``}
-            AND (m.sent_at IS NULL OR m.sent_at <= r.received_at + interval '5 seconds')
-          ORDER BY m.step_number DESC
-          LIMIT 1
-        ) as step_number
-        FROM replies r
-      ) sub
-      WHERE sub.step_number IS NOT NULL
-      GROUP BY sub.step_number
-    `);
+      // Bug #17 Fix: Attribute each reply ONLY to the highest step sent on that thread before the reply arrived,
+      // rather than multiplying across all historical steps sharing that thread.
+      const replyStatsResult = await db.execute<{ step_number: number; count: number }>(sql`
+        SELECT sub.step_number, count(DISTINCT sub.reply_id)::int as count
+        FROM (
+          SELECT r.id as reply_id, (
+            SELECT m.step_number
+            FROM messages m
+            WHERE m.thread_id = r.thread_id
+              AND m.send_status = 'SENT'
+              ${campaignId ? sql`AND m.campaign_id = ${campaignId}` : sql``}
+              AND (m.sent_at IS NULL OR m.sent_at <= r.received_at + interval '5 seconds')
+            ORDER BY m.step_number DESC
+            LIMIT 1
+          ) as step_number
+          FROM replies r
+        ) sub
+        WHERE sub.step_number IS NOT NULL
+        GROUP BY sub.step_number
+      `);
 
-    const repliesByStep = new Map<number, number>();
-    for (const r of replyStatsResult.rows) {
-      repliesByStep.set(Number(r.step_number), Number(r.count));
-    }
+      for (const r of replyStatsResult.rows) {
+        repliesByStep.set(Number(r.step_number), Number(r.count));
+      }
 
-    // Bug #17 Fix: Similarly for suppressions, attribute only to the last step sent to that lead.
-    const suppressionStatsResult = await db.execute<{ step_number: number; count: number }>(sql`
-      SELECT sub.step_number, count(DISTINCT sub.suppression_id)::int as count
-      FROM (
-        SELECT s.id as suppression_id, (
-          SELECT m.step_number
-          FROM messages m
-          INNER JOIN leads l ON m.lead_id = l.id
-          WHERE ((s.channel_id IS NOT NULL AND l.channel_id = s.channel_id)
-                 OR (l.email IS NOT NULL AND lower(l.email) = lower(s.email)))
-            AND m.send_status = 'SENT'
-            ${campaignId ? sql`AND m.campaign_id = ${campaignId}` : sql``}
-          ORDER BY m.step_number DESC
-          LIMIT 1
-        ) as step_number
-        FROM suppressions s
-      ) sub
-      WHERE sub.step_number IS NOT NULL
-      GROUP BY sub.step_number
-    `);
+      // Bug #17 Fix: Similarly for suppressions, attribute only to the last step sent to that lead.
+      const suppressionStatsResult = await db.execute<{ step_number: number; count: number }>(sql`
+        SELECT sub.step_number, count(DISTINCT sub.suppression_id)::int as count
+        FROM (
+          SELECT s.id as suppression_id, (
+            SELECT m.step_number
+            FROM messages m
+            INNER JOIN leads l ON m.lead_id = l.id
+            WHERE ((s.channel_id IS NOT NULL AND l.channel_id = s.channel_id)
+                   OR (s.email IS NOT NULL AND m.recipient_email IS NOT NULL AND lower(m.recipient_email) = lower(s.email)))
+              AND m.send_status = 'SENT'
+              ${campaignId ? sql`AND m.campaign_id = ${campaignId}` : sql``}
+            ORDER BY m.step_number DESC
+            LIMIT 1
+          ) as step_number
+          FROM suppressions s
+        ) sub
+        WHERE sub.step_number IS NOT NULL
+        GROUP BY sub.step_number
+      `);
 
-    const unsubsByStep = new Map<number, number>();
-    for (const u of suppressionStatsResult.rows) {
-      unsubsByStep.set(Number(u.step_number), Number(u.count));
+      for (const u of suppressionStatsResult.rows) {
+        unsubsByStep.set(Number(u.step_number), Number(u.count));
+      }
+    } catch (metricError) {
+      console.warn(`[SequenceService] Warning: Failed to fetch live send/reply stats for sequence #${sequenceId}. Falling back to cold-start priors:`, metricError);
     }
 
     let cumulativeSurvival = 1.0;
@@ -510,8 +515,23 @@ export class SequenceService {
     }
 
     // Auto-create default sequence for campaign (wrapped in transaction to prevent orphaned sequences)
-    const defaultTemplate = await db.select().from(templates).limit(1);
-    const templateId = defaultTemplate.length > 0 ? defaultTemplate[0].id : 1;
+    let defaultTemplate = await db.select().from(templates).limit(1);
+    let templateId: number;
+
+    if (defaultTemplate.length === 0) {
+      const [newTpl] = await db
+        .insert(templates)
+        .values({
+          name: 'Short-Form Viral Clipping Offer',
+          subject: '{|A 30-sec idea for {{channel_name}}|A quick idea for {{channel_name}}|One idea for {{channel_name}}|}',
+          body: 'Hey {{channel_name}},\n\nLoved your recent video! We help creators scale their views with high-retention short-form clips.\n\nCould I send over a quick 30-second concept for your channel, completely free?\n\nBest,\nTeam LeadMiner',
+          isActive: true,
+        })
+        .returning();
+      templateId = newTpl.id;
+    } else {
+      templateId = defaultTemplate[0].id;
+    }
 
     const newSeq = await db.transaction(async (tx) => {
       const insertedSeq = await tx
@@ -558,6 +578,7 @@ export class SequenceService {
         delayHours: sequenceSteps.delayHours,
         templateName: templates.name,
         templateSubject: templates.subject,
+        templateBody: templates.body,
       })
       .from(sequenceSteps)
       .leftJoin(templates, eq(sequenceSteps.templateId, templates.id))
