@@ -81,12 +81,16 @@ export async function POST(req: NextRequest) {
 
         // If template content (subject or body) is passed, update or create the template
         if (step.templateSubject !== undefined || step.templateBody !== undefined) {
+          const rawSubject = (step.templateSubject || '').trim();
+          // For Step 1 (i === 0), require a subject; for Step 2+ (i > 0), empty means in-thread bump ("Re: <Step 1>")
+          const cleanSubject = i === 0 ? (rawSubject || "Outreach Pitch") : rawSubject;
+
           if (targetTemplateId > 0) {
             await tx
               .update(templates)
               .set({
                 name: step.templateName || `Sequence Step ${i + 1}`,
-                subject: (step.templateSubject || "Follow-up").trim(),
+                subject: cleanSubject,
                 body: (step.templateBody || "").trim(),
                 updatedAt: new Date(),
               })
@@ -96,7 +100,7 @@ export async function POST(req: NextRequest) {
               .insert(templates)
               .values({
                 name: step.templateName || `Sequence Step ${i + 1}`,
-                subject: (step.templateSubject || (i === 0 ? "Outreach Pitch" : "Follow-Up")).trim(),
+                subject: cleanSubject,
                 body: (step.templateBody || "Hey {{channel_name}},\n\nFollowing up on my previous note!").trim(),
                 isActive: true,
               })

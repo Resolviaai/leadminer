@@ -9,6 +9,7 @@ import {
   sequences,
   sequenceSteps,
   leadSequenceProgress,
+  messages,
 } from '../db/schema';
 import { eq, inArray, sql, and } from 'drizzle-orm';
 import { templateEngine } from '../services/outreach/template.engine';
@@ -23,6 +24,32 @@ export interface DispatcherResult {
   failed: number;
   skipped: number;
   details?: string;
+}
+
+/**
+ * Computes 9:15 AM Eastern Time on the next day, dynamically converted to UTC.
+ */
+export function getNextMorning915ET(referenceDate = new Date()): Date {
+  const tomorrow = new Date(referenceDate.getTime() + 24 * 60 * 60 * 1000);
+  const etFormatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  });
+  const parts = etFormatter.formatToParts(tomorrow);
+  const etHour = parseInt(parts.find((p) => p.type === 'hour')?.value ?? '0', 10);
+  const etMinute = parseInt(parts.find((p) => p.type === 'minute')?.value ?? '0', 10);
+  const tomorrowUtcMinutes = tomorrow.getUTCHours() * 60 + tomorrow.getUTCMinutes();
+  const etTomorrowMinutes = etHour * 60 + etMinute;
+  let etOffsetMinutes = etTomorrowMinutes - tomorrowUtcMinutes;
+  if (etOffsetMinutes > 720) etOffsetMinutes -= 1440;
+  if (etOffsetMinutes < -720) etOffsetMinutes += 1440;
+
+  const targetUtcMinutes = 9 * 60 + 15 - etOffsetMinutes;
+  const targetUtcHours = Math.floor(targetUtcMinutes / 60);
+  const targetUtcMins = targetUtcMinutes % 60;
+  return new Date(Date.UTC(tomorrow.getUTCFullYear(), tomorrow.getUTCMonth(), tomorrow.getUTCDate(), targetUtcHours, targetUtcMins, 0));
 }
 
 /**
@@ -120,7 +147,11 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
       const remainingClaimed = claimedRows.slice(i);
       await db
         .update(scheduledEmails)
-        .set({ status: 'PENDING', updatedAt: new Date() })
+        .set({
+          status: 'PENDING',
+          attempts: sql`GREATEST(0, ${scheduledEmails.attempts} - 1)`,
+          updatedAt: new Date(),
+        })
         .where(inArray(scheduledEmails.id, remainingClaimed));
       break;
     }
@@ -149,6 +180,8 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
         sequenceId: leadSequenceProgress.sequenceId,
         threadId: leadSequenceProgress.threadId,
         lastRfc822Id: leadSequenceProgress.lastRfc822MessageId,
+        referencesChain: leadSequenceProgress.referencesChain,
+        progressStatus: leadSequenceProgress.status,
       })
       .from(scheduledEmails)
       .innerJoin(leads, eq(scheduledEmails.leadId, leads.id))
@@ -194,6 +227,17 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
       await db
         .update(scheduledEmails)
         .set({ status: 'CANCELLED', error: `Lead status is ${item.leadOutreachStatus}`, updatedAt: new Date() })
+        .where(eq(scheduledEmails.id, scheduledId));
+      skippedCount++;
+      continue;
+    }
+
+    // In-Flight Safety Check: If sequence progress is COMPLETED, CANCELLED, or PAUSED, abort!
+    if (item.progressStatus && ['COMPLETED', 'CANCELLED', 'PAUSED'].includes(item.progressStatus)) {
+      console.log(`ℹ️ [Dispatcher] Lead #${item.leadId} sequence progress is ${item.progressStatus}. Cancelling scheduled email.`);
+      await db
+        .update(scheduledEmails)
+        .set({ status: 'CANCELLED', error: `Sequence progress is ${item.progressStatus}`, updatedAt: new Date() })
         .where(eq(scheduledEmails.id, scheduledId));
       skippedCount++;
       continue;
@@ -287,16 +331,45 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
       custom_line: customLine,
     }, item.leadId);
 
-    // In-Thread Subject Bumping for Follow-Up Steps (2..N), sanitize Step 1 (P3-4)
+    // In-Thread Subject Bumping for Follow-Up Steps (2..N), sanitize Step 1 (P3-4 / Bug #1 & #2)
     let finalSubject = renderedSubject;
     if (item.stepNumber > 1) {
-      const isAlreadyRe = finalSubject.toLowerCase().startsWith('re:');
-      finalSubject = isAlreadyRe ? finalSubject : `Re: ${finalSubject}`;
+      // Look up Step 1's actual sent subject to guarantee Gmail conversation threading!
+      const step1Msg = await db
+        .select({ subject: messages.subject })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.campaignId, item.campaignId),
+            eq(messages.leadId, item.leadId),
+            eq(messages.contactId, item.contactId),
+            eq(messages.stepNumber, 1),
+            eq(messages.sendStatus, 'SENT')
+          )
+        )
+        .limit(1);
+
+      const baseSubject = (step1Msg.length > 0 && step1Msg[0].subject ? step1Msg[0].subject : renderedSubject).trim();
+      const isAlreadyRe = baseSubject.toLowerCase().startsWith('re:');
+      finalSubject = isAlreadyRe ? baseSubject : `Re: ${baseSubject}`;
     } else {
-      finalSubject = templateEngine.sanitizeSubject(finalSubject, 1);
+      finalSubject = templateEngine.sanitizeSubject(renderedSubject, 1);
     }
 
     const idempotencyKey = `camp_${item.campaignId}_lead_${item.leadId}_cnt_${item.contactId}_step_${item.stepNumber}`;
+
+    // In-flight safety re-check: Verify row wasn't cancelled right before live send
+    const [freshScheduled] = await db
+      .select({ status: scheduledEmails.status })
+      .from(scheduledEmails)
+      .where(eq(scheduledEmails.id, scheduledId))
+      .limit(1);
+
+    if (freshScheduled?.status === 'CANCELLED') {
+      console.log(`ℹ️ [Dispatcher] Scheduled email #${scheduledId} was cancelled in-flight. Aborting send.`);
+      skippedCount++;
+      continue;
+    }
 
     // Send via Gmail Service with strict inbox affinity and threading headers
     console.log(
@@ -315,6 +388,7 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
       stepNumber: item.stepNumber,
       pinnedAccountId: item.gmailAccountId,
       inReplyToRfcId: item.inReplyToRfcId || item.lastRfc822Id || undefined,
+      referencesChain: item.referencesChain || undefined,
       threadId: item.threadId || undefined,
       personalizationStatus,
       personalizationModel: modelUsed,
@@ -345,6 +419,7 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
             pinnedAccountId: item.gmailAccountId,
             threadId: sendResult.threadId || item.threadId || '',
             rfc822MessageId: sendResult.rfc822MessageId || '',
+            referencesChain: sendResult.referencesChain || item.referencesChain || undefined,
           });
         } catch (advErr: any) {
           console.warn(`  ⚠️ Could not advance sequence for Lead #${item.leadId}:`, advErr.message);
@@ -354,6 +429,43 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
       failedCount++;
       const errorMessage = sendResult.error || sendResult.skippedReason || 'Send failed';
       console.error(`  ❌ Send failed: ${errorMessage}`);
+
+      // BUG-08: Daily Quota Exhaustion Deferral
+      // If no healthy account or account daily limit hit, defer to next morning 9:15 AM ET
+      // without burning the 3-attempt strike budget!
+      if (sendResult.skippedReason === 'NO_HEALTHY_GMAIL_ACCOUNT') {
+        console.warn(`  ⚠️ Daily sending quota reached for account(s). Rescheduling to tomorrow 9:15 AM ET.`);
+        const retryTime = getNextMorning915ET();
+
+        await db
+          .update(scheduledEmails)
+          .set({
+            status: 'PENDING',
+            attempts: sql`GREATEST(0, ${scheduledEmails.attempts} - 1)`,
+            scheduledAt: retryTime,
+            scheduledDate: gmailSendingService.getPacificDateStr(retryTime),
+            deferReason: 'DAILY_QUOTA_EXHAUSTED',
+            error: 'Daily quota exhausted; deferred to next morning 9:15 AM ET',
+            updatedAt: new Date(),
+          })
+          .where(eq(scheduledEmails.id, scheduledId));
+
+        // Release any other claimed rows in this batch back to PENDING and restore attempt counts
+        const remainingClaimed = claimedRows.slice(i + 1);
+        if (remainingClaimed.length > 0) {
+          await db
+            .update(scheduledEmails)
+            .set({
+              status: 'PENDING',
+              attempts: sql`GREATEST(0, ${scheduledEmails.attempts} - 1)`,
+              updatedAt: new Date(),
+            })
+            .where(inArray(scheduledEmails.id, remainingClaimed));
+        }
+
+        // Halt rest of current dispatch batch
+        break;
+      }
 
       // Retry policy: if attempts < 3 and error is transient, postpone.
       // BUG-01: Treat post-send verification failure and unconfirmed states as terminal to prevent duplicate sends!
@@ -415,7 +527,11 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
         if (remainingClaimed.length > 0) {
           await db
             .update(scheduledEmails)
-            .set({ status: 'PENDING', updatedAt: new Date() })
+            .set({
+              status: 'PENDING',
+              attempts: sql`GREATEST(0, ${scheduledEmails.attempts} - 1)`,
+              updatedAt: new Date(),
+            })
             .where(inArray(scheduledEmails.id, remainingClaimed));
         }
 

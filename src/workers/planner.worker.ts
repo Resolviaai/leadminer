@@ -19,6 +19,7 @@ import { sequenceService } from '../services/outreach/sequence.service';
 import { warmupService } from '../services/outreach/warmup.service';
 import { outreachEligibilityEngine } from '../services/qualification/eligibility.service';
 import { opportunityPriorityEngine, TIER_ORDER, OpportunityTier } from '../services/outreach/priority.engine';
+import { telegramService } from '../services/notifications/telegram.service';
 
 export interface PlannerResult {
   scheduled: number;
@@ -79,11 +80,59 @@ export async function runPlanner(): Promise<PlannerResult> {
     };
   }
 
-  // 2. Query Active Gmail Accounts
+  // 2. Check for Pinned Inboxes with AUTH_ERROR and Pause Sequences (Bug #11)
+  const authErrorAccounts = await db
+    .select({ id: gmailAccounts.id, email: gmailAccounts.email })
+    .from(gmailAccounts)
+    .where(eq(gmailAccounts.status, 'AUTH_ERROR'));
+
+  if (authErrorAccounts.length > 0) {
+    for (const badAcc of authErrorAccounts) {
+      const pausedProgress = await db
+        .update(leadSequenceProgress)
+        .set({
+          status: 'PAUSED',
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(leadSequenceProgress.pinnedGmailAccountId, badAcc.id),
+            eq(leadSequenceProgress.status, 'ACTIVE')
+          )
+        )
+        .returning({ id: leadSequenceProgress.id });
+
+      if (pausedProgress.length > 0) {
+        console.warn(`⚠️ [Planner] Paused ${pausedProgress.length} sequences pinned to AUTH_ERROR inbox ${badAcc.email}.`);
+        await telegramService.notifyCriticalError(
+          'Inbox Auth Error - Sequences Paused',
+          `Inbox ${badAcc.email} has status AUTH_ERROR. Paused ${pausedProgress.length} active lead sequences to preserve sender identity. Please re-authenticate in settings.`
+        );
+      }
+    }
+  }
+
+  // 3. Query Active Gmail Accounts
   const activeAccounts = await db
     .select()
     .from(gmailAccounts)
     .where(eq(gmailAccounts.status, 'ACTIVE'));
+
+  // Auto-resume sequences that were paused if their pinned inbox is now ACTIVE
+  for (const account of activeAccounts) {
+    await db
+      .update(leadSequenceProgress)
+      .set({
+        status: 'ACTIVE',
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(leadSequenceProgress.pinnedGmailAccountId, account.id),
+          eq(leadSequenceProgress.status, 'PAUSED')
+        )
+      );
+  }
 
   if (activeAccounts.length === 0) {
     console.warn('⚠️ [Planner] No ACTIVE Gmail accounts connected. Cannot schedule outreach.');
@@ -224,8 +273,12 @@ export async function runPlanner(): Promise<PlannerResult> {
         `\n  • Inbox: ${account.email} | Target: ${effectiveLimit}/day | Used: ${usedSlots} | Allocated to this campaign: ${remainingSlots}`
       );
 
-      // Target Follow-up capacity for this inbox today
-      const targetFuSlots = Math.floor(remainingSlots * targetFuRatio);
+      // Bugs #5, #6, #7: Priority Quota Allocation and Isolated Offset
+      // Due follow-ups are given first priority to prevent dropping existing conversation threads,
+      // while reserving a small floor (at least 2 or 10% of remaining slots) for new leads.
+      const initialAccountScheduledToday = alreadyScheduledByAccount.get(account.id) || 0;
+      const floorNew = Math.min(remainingSlots, Math.max(2, Math.ceil(remainingSlots * 0.1)));
+      const maxAllowedFu = Math.max(0, remainingSlots - floorNew);
       let accountFuScheduled = 0;
 
       // ─────────────────────────────────────────────────────────────
@@ -274,13 +327,13 @@ export async function runPlanner(): Promise<PlannerResult> {
           })
           .sort((a, b) => b.score - a.score);
 
-        // P2-27: Strict Phi Governor — follow-ups capped strictly to targetFuSlots
-        // Unused follow-up capacity fluidly spills over into Step 1 below
-        const maxAllowedFu = Math.min(scoredFollowUps.length, targetFuSlots);
+        // Priority quota allocation: follow-ups can take up to maxAllowedFu
+        // Any unused follow-up capacity fluidly spills over into Step 1 below
+        const targetFuSlots = Math.min(scoredFollowUps.length, maxAllowedFu);
 
-        for (let i = 0; i < maxAllowedFu; i++) {
+        for (let i = 0; i < targetFuSlots; i++) {
           const item = scoredFollowUps[i];
-          const slotOffsetMinutes = (accountFuScheduled + totalScheduledNew) * 12;
+          const slotOffsetMinutes = (initialAccountScheduledToday + accountFuScheduled) * 12;
           const scheduledTime = new Date(startTime.getTime() + slotOffsetMinutes * 60 * 1000);
 
           try {
@@ -477,121 +530,63 @@ export async function runPlanner(): Promise<PlannerResult> {
         // Primary contact first
         leadContacts.sort((a, b) => (b.isPrimary ? 1 : 0) - (a.isPrimary ? 1 : 0));
 
-        for (let cIdx = 0; cIdx < leadContacts.length; cIdx++) {
-          const cand = leadContacts[cIdx];
-          if (!cand.email) continue;
-          if (contactedIds.has(cand.contactId)) continue;
-          if (alreadyScheduledContactSteps.has(`${cand.contactId}_step_1`)) continue;
+        // Bug #16: Secondary contacts are fallback only, never parallel-spammed.
+        // Pick the single best eligible contact for this lead that hasn't been contacted or scheduled.
+        const cand = leadContacts.find(
+          (c) => c.email && !contactedIds.has(c.contactId) && !alreadyScheduledContactSteps.has(`${c.contactId}_step_1`)
+        );
+        if (!cand) continue;
 
-          if (cIdx === 0) {
-            // Primary contact: schedule for today
-            if (accountNewScheduled >= slotsForNew) break;
-            const slotOffsetMinutes = (accountFuScheduled + accountNewScheduled) * 12;
-            const scheduledTime = new Date(startTime.getTime() + slotOffsetMinutes * 60 * 1000);
+        const slotOffsetMinutes = (initialAccountScheduledToday + accountFuScheduled + accountNewScheduled) * 12;
+        const scheduledTime = new Date(startTime.getTime() + slotOffsetMinutes * 60 * 1000);
 
-            try {
-              let insertedId: number | null = null;
-              // ATOMIC TRANSACTION: Insert scheduled email and leadSequenceProgress together (P2-4)
-              await db.transaction(async (tx) => {
-                const inserted = await tx
-                  .insert(scheduledEmails)
-                  .values({
-                    campaignId: campaign.id,
-                    leadId: cand.leadId,
-                    contactId: cand.contactId,
-                    gmailAccountId: account.id,
-                    stepNumber: 1,
-                    scheduledAt: scheduledTime,
-                    scheduledDate: currentPtDate,
-                    status: 'PENDING',
-                  })
-                  .onConflictDoNothing()
-                  .returning({ id: scheduledEmails.id });
+        try {
+          let insertedId: number | null = null;
+          // ATOMIC TRANSACTION: Insert scheduled email and leadSequenceProgress together (P2-4)
+          await db.transaction(async (tx) => {
+            const inserted = await tx
+              .insert(scheduledEmails)
+              .values({
+                campaignId: campaign.id,
+                leadId: cand.leadId,
+                contactId: cand.contactId,
+                gmailAccountId: account.id,
+                stepNumber: 1,
+                scheduledAt: scheduledTime,
+                scheduledDate: currentPtDate,
+                status: 'PENDING',
+              })
+              .onConflictDoNothing()
+              .returning({ id: scheduledEmails.id });
 
-                if (inserted.length > 0) {
-                  insertedId = inserted[0].id;
-                  // Initialize state machine for this lead
-                  await tx
-                    .insert(leadSequenceProgress)
-                    .values({
-                      leadId: cand.leadId,
-                      campaignId: campaign.id,
-                      contactId: cand.contactId,
-                      sequenceId: sequence.id,
-                      currentStep: 1,
-                      status: 'ACTIVE',
-                      pinnedGmailAccountId: account.id,
-                    })
-                    .onConflictDoNothing();
-                }
-              });
-
-              if (insertedId !== null) {
-                alreadyScheduledContactSteps.add(`${cand.contactId}_step_1`);
-                alreadyScheduledByAccount.set(account.id, (alreadyScheduledByAccount.get(account.id) || 0) + 1);
-                contactedIds.add(cand.contactId);
-                accountNewScheduled++;
-                totalScheduledNew++;
-              }
-            } catch (err: any) {
-              console.warn(`    ⚠️ Step 1 scheduling error for contact ${cand.contactId}:`, err.message);
-              totalSkipped++;
+            if (inserted.length > 0) {
+              insertedId = inserted[0].id;
+              // Initialize state machine for this lead
+              await tx
+                .insert(leadSequenceProgress)
+                .values({
+                  leadId: cand.leadId,
+                  campaignId: campaign.id,
+                  contactId: cand.contactId,
+                  sequenceId: sequence.id,
+                  currentStep: 1,
+                  status: 'ACTIVE',
+                  pinnedGmailAccountId: account.id,
+                })
+                .onConflictDoNothing();
             }
-          } else {
-            // Secondary contact: staggered +24h * cIdx (P1-9: Pacific Timezone)
-            const slotOffsetMinutes = (accountFuScheduled + accountNewScheduled) * 12;
-            const staggeredTime = new Date(startTime.getTime() + (cIdx * 24 * 60 + slotOffsetMinutes) * 60 * 1000);
-            const staggeredDateStr = gmailSendingService.getPacificDateStr(staggeredTime);
+          });
 
-            try {
-              let insertedSecId: number | null = null;
-              // ATOMIC TRANSACTION: Insert staggered scheduled email and progress together (P2-4)
-              await db.transaction(async (tx) => {
-                const inserted = await tx
-                  .insert(scheduledEmails)
-                  .values({
-                    campaignId: campaign.id,
-                    leadId: cand.leadId,
-                    contactId: cand.contactId,
-                    gmailAccountId: account.id,
-                    stepNumber: 1,
-                    scheduledAt: staggeredTime,
-                    scheduledDate: staggeredDateStr,
-                    status: 'PENDING',
-                  })
-                  .onConflictDoNothing()
-                  .returning({ id: scheduledEmails.id });
-
-                if (inserted.length > 0) {
-                  insertedSecId = inserted[0].id;
-                  await tx
-                    .insert(leadSequenceProgress)
-                    .values({
-                      leadId: cand.leadId,
-                      campaignId: campaign.id,
-                      contactId: cand.contactId,
-                      sequenceId: sequence.id,
-                      currentStep: 1,
-                      status: 'ACTIVE',
-                      pinnedGmailAccountId: account.id,
-                    })
-                    .onConflictDoNothing();
-                }
-              });
-
-              if (insertedSecId !== null) {
-                alreadyScheduledContactSteps.add(`${cand.contactId}_step_1`);
-                contactedIds.add(cand.contactId);
-                if (staggeredDateStr === currentPtDate) {
-                  alreadyScheduledByAccount.set(account.id, (alreadyScheduledByAccount.get(account.id) || 0) + 1);
-                  accountNewScheduled++;
-                  totalScheduledNew++;
-                }
-              }
-            } catch (err: any) {
-              console.warn(`    ⚠️ Staggered Step 1 scheduling error for secondary contact ${cand.contactId}:`, err.message);
-            }
+          if (insertedId !== null) {
+            alreadyScheduledContactSteps.add(`${cand.contactId}_step_1`);
+            alreadyScheduledByAccount.set(account.id, (alreadyScheduledByAccount.get(account.id) || 0) + 1);
+            contactedIds.add(cand.contactId);
+            accountNewScheduled++;
+            totalScheduledNew++;
           }
+        } catch (err: any) {
+          console.warn(`    ⚠️ Step 1 scheduling error for contact ${cand.contactId}:`, err.message);
+          totalSkipped++;
         }
       }
 

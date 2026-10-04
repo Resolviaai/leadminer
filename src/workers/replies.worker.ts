@@ -28,7 +28,7 @@ export function decodeGmailBody(payload: any): string {
 export type AutomatedResponseType = 'NONE' | 'HARD_BOUNCE' | 'SOFT_BOUNCE' | 'OUT_OF_OFFICE';
 
 export function classifyAutomatedResponse(
-  headers: { name?: string; value?: string }[],
+  headers: { name?: string | null; value?: string | null }[],
   fromHeader: string,
   subjectHeader: string = '',
   bodyText: string = ''
@@ -114,7 +114,7 @@ export function classifyAutomatedResponse(
   return 'NONE';
 }
 
-export function isAutomatedBounceOrDaemon(headers: { name?: string; value?: string }[], fromHeader: string): boolean {
+export function isAutomatedBounceOrDaemon(headers: { name?: string | null; value?: string | null }[], fromHeader: string): boolean {
   const subject = headers.find((h: any) => h.name?.toLowerCase() === 'subject')?.value || '';
   const result = classifyAutomatedResponse(headers, fromHeader, subject);
   return result !== 'NONE';
@@ -122,12 +122,10 @@ export function isAutomatedBounceOrDaemon(headers: { name?: string; value?: stri
 
 export async function runReplySync(): Promise<{ repliesDetected: number }> {
   console.log(`\n======================================================`);
-  console.log(`📥 Starting Reply Detection & Sync Worker`);
+  console.log(`📥 Starting Reply Detection & Sync Worker (Incremental History)`);
   console.log(`======================================================\n`);
 
-  // Decision 7: Scan active contacted/replied threads without 72h restriction
-  const REPLY_SCAN_BATCH_SIZE = 200;
-
+  // Query active sent outreach threads to build a lookup for match detection
   const recentSent = await db
     .select({
       id: messages.id,
@@ -147,65 +145,46 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
         isNotNull(messages.threadId),
         inArray(leads.outreachStatus, ['CONTACTED', 'REPLIED'])
       )
-    )
-    .orderBy(desc(messages.sentAt))
-    .limit(REPLY_SCAN_BATCH_SIZE);
+    );
 
-  // BUG-26: only create a job row when there's real work to do — prevents
-  // thousands of COMPLETED/0-item rows polluting the jobs table on idle runs.
   if (recentSent.length === 0) {
     console.log('ℹ️ No active sent threads to inspect for replies. Skipping job creation.');
     return { repliesDetected: 0 };
   }
 
-  // Real work exists — create the job row now
+  // Build thread lookup map
+  const threadMap = new Map<string, typeof recentSent[0]>();
+  for (const m of recentSent) {
+    if (m.threadId && !threadMap.has(m.threadId)) {
+      threadMap.set(m.threadId, m);
+    }
+  }
+
+  const isDryRunOrTest = env.DRY_RUN || process.env.NODE_ENV === 'test';
+
+  // Query active Gmail accounts
+  const accounts = await db
+    .select()
+    .from(gmailAccounts)
+    .where(eq(gmailAccounts.status, 'ACTIVE'));
+
+  if (accounts.length === 0) {
+    console.log('ℹ️ No active Gmail accounts for reply sync.');
+    return { repliesDetected: 0 };
+  }
+
+  if (isDryRunOrTest && !env.GOOGLE_CLIENT_ID) {
+    console.log(`[DRY RUN / TEST] Gracefully monitoring ${recentSent.length} threads in simulation mode.`);
+    return { repliesDetected: 0 };
+  }
+
   const jobId = await jobRunner.createJob('REPLY_SYNC');
+  let detected = 0;
 
   try {
-
-    console.log(`🔍 Monitoring ${recentSent.length} sent outreach threads for creator responses...`);
-
-    let detected = 0;
-
-    // 2. Check if in dry-run or test mode without live Google credentials
-    const isDryRunOrTest = env.DRY_RUN || process.env.NODE_ENV === 'test';
-
-    // 3. For each unique active gmailAccountId, initialize OAuth client
-    const accountIds = Array.from(
-      new Set(
-        recentSent
-          .map((m) => m.gmailAccountId)
-          .filter((id): id is number => id !== null && id !== undefined)
-      )
-    );
-
-    const accountsMap = new Map<number, typeof gmailAccounts.$inferSelect>();
-    if (accountIds.length > 0) {
-      try {
-        const accounts = await db
-          .select()
-          .from(gmailAccounts)
-          .where(and(inArray(gmailAccounts.id, accountIds), eq(gmailAccounts.status, 'ACTIVE')));
-
-        for (const acc of accounts) {
-          accountsMap.set(acc.id, acc);
-        }
-      } catch (e: any) {
-        console.warn('⚠️ [Reply Worker] Could not load Gmail accounts from DB:', e.message);
-      }
-    }
-
-    if (isDryRunOrTest && (!env.GOOGLE_CLIENT_ID || accountsMap.size === 0)) {
-      console.log(`[DRY RUN / TEST] Gracefully monitoring ${recentSent.length} threads in simulation mode.`);
-      await jobRunner.completeJob(jobId, 0);
-      return { repliesDetected: 0 };
-    }
-
-    // 4. Cache OAuth clients per account
-    const gmailClientsMap = new Map<number, any>();
-
-    for (const [accId, account] of accountsMap.entries()) {
+    for (const account of accounts) {
       if (!account.refreshToken) continue;
+
       try {
         const oauth2Client = new google.auth.OAuth2(
           env.GOOGLE_CLIENT_ID,
@@ -220,7 +199,7 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
           access_token: decryptedAccessToken,
         });
 
-        // Persist refreshed OAuth tokens back to gmail_accounts table with AES-256-GCM encryption
+        // Persist refreshed tokens
         oauth2Client.on('tokens', async (tokens) => {
           try {
             const updateData: { accessToken?: string; tokenExpiresAt?: Date; updatedAt: Date } = {
@@ -237,150 +216,191 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
               .update(gmailAccounts)
               .set(updateData)
               .where(eq(gmailAccounts.id, account.id));
-            console.log(`[OAuth] Refreshed and encrypted access token for ${account.email} (reply sync)`);
           } catch (tokErr: any) {
             console.warn(`[OAuth] Token persistence error for ${account.email}:`, tokErr.message);
           }
         });
 
         const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-        gmailClientsMap.set(accId, { gmail, account });
-      } catch (e: any) {
-        console.warn(`⚠️ [Reply Worker] Failed to initialize OAuth client for account ${account.email}:`, e.message);
-      }
-    }
+        let latestHistoryId: string | null = account.lastHistoryId || null;
+        let candidateMessages: { id: string; threadId?: string }[] = [];
+        let historySuccess = false;
 
-    // 5. Deduplicate thread IDs across recentSent (P3-3)
-    const seenThreads = new Set<string>();
-    const deduplicatedSent = recentSent.filter((msg) => {
-      if (!msg.threadId) return false;
-      if (seenThreads.has(msg.threadId)) return false;
-      seenThreads.add(msg.threadId);
-      return true;
-    });
+        // Fast incremental history sync if startHistoryId exists (Bugs #12 & #13)
+        if (account.lastHistoryId) {
+          try {
+            const histRes = await gmail.users.history.list({
+              userId: 'me',
+              startHistoryId: account.lastHistoryId,
+              historyTypes: ['messageAdded'],
+            });
 
-    // 6. Inspect threads for replies
-    for (const msg of deduplicatedSent) {
-      if (!msg.threadId || !msg.gmailAccountId) continue;
-
-      const clientEntry = gmailClientsMap.get(msg.gmailAccountId);
-      if (!clientEntry) continue;
-
-      const { gmail, account } = clientEntry;
-
-      try {
-        const threadRes = await gmail.users.threads.get({
-          userId: 'me',
-          id: msg.threadId,
-          format: 'full',
-          metadataHeaders: ['From', 'Date', 'Subject', 'Auto-Submitted', 'Precedence', 'X-Autoreply'],
-        });
-
-        const threadMessages = threadRes.data.messages || [];
-        const outboundTime = msg.sentAt ? new Date(msg.sentAt).getTime() : 0;
-        const accountEmailLower = account.email.toLowerCase();
-
-        for (const tm of threadMessages) {
-          if (!tm.id) continue;
-
-          const headers = tm.payload?.headers || [];
-          const fromHeader = headers.find((h: any) => h.name?.toLowerCase() === 'from')?.value || '';
-          const fromEmailLower = fromHeader.toLowerCase();
-          const subjectHeader = headers.find((h: any) => h.name?.toLowerCase() === 'subject')?.value || '';
-
-          // P1-11: Direction Check FIRST! If outbound, ignore completely.
-          const isOutbound = fromEmailLower.includes(accountEmailLower);
-          if (isOutbound) {
-            continue;
-          }
-
-          const bodyText = decodeGmailBody(tm.payload);
-          const responseType = classifyAutomatedResponse(headers, fromHeader, subjectHeader, bodyText);
-
-          // P1-12: Handle OUT_OF_OFFICE (pause 5 days, no bounce/suppression)
-          if (responseType === 'OUT_OF_OFFICE') {
-            console.log(`[OOO Handler] Out-of-office detected from ${fromHeader} on lead #${msg.leadId}. Pausing sequence +5 days.`);
-            const fiveDaysLater = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
-            await db
-              .update(scheduledEmails)
-              .set({
-                scheduledAt: fiveDaysLater,
-                scheduledDate: gmailSendingService.getPacificDateStr(fiveDaysLater),
-                updatedAt: new Date(),
-              })
-              .where(and(eq(scheduledEmails.leadId, msg.leadId), eq(scheduledEmails.status, 'PENDING')));
-            continue;
-          }
-
-          // P1-12: Handle SOFT_BOUNCE (retry 48h, no bounce/suppression)
-          if (responseType === 'SOFT_BOUNCE') {
-            console.log(`[Soft Bounce] Temporary delivery issue for lead #${msg.leadId}. Rescheduling next step +48h.`);
-            const fortyEightHoursLater = new Date(Date.now() + 48 * 60 * 60 * 1000);
-            await db
-              .update(scheduledEmails)
-              .set({
-                scheduledAt: fortyEightHoursLater,
-                scheduledDate: gmailSendingService.getPacificDateStr(fortyEightHoursLater),
-                updatedAt: new Date(),
-              })
-              .where(and(eq(scheduledEmails.leadId, msg.leadId), eq(scheduledEmails.status, 'PENDING')));
-            continue;
-          }
-
-          // P1-12: Handle HARD_BOUNCE (permanent delivery failure)
-          if (responseType === 'HARD_BOUNCE') {
-            try {
-              const bounceEmail = (msg.recipientEmail || '').toLowerCase().trim();
-              if (bounceEmail) {
-                await db
-                  .insert(suppressions)
-                  .values({
-                    email: bounceEmail,
-                    channelId: null,
-                    reason: 'BOUNCED',
-                    source: 'REPLY_DETECTOR',
-                  })
-                  .onConflictDoNothing();
-
-                await db
-                  .update(leads)
-                  .set({ outreachStatus: 'BOUNCED', suppressionStatus: true, updatedAt: new Date() })
-                  .where(eq(leads.id, msg.leadId));
-
-                await db
-                  .update(contacts)
-                  .set({ emailStatus: 'INVALID', verificationReason: 'Hard bounce detected', updatedAt: new Date() })
-                  .where(and(eq(contacts.leadId, msg.leadId), sql`lower(${contacts.email}) = ${bounceEmail}`));
-
-                await db
-                  .update(scheduledEmails)
-                  .set({ status: 'CANCELLED', error: 'Bounce detected', updatedAt: new Date() })
-                  .where(and(eq(scheduledEmails.leadId, msg.leadId), eq(scheduledEmails.status, 'PENDING')));
-
-                await sequenceService.cancelSequenceForLead(msg.leadId, 'CANCELLED_BOUNCED');
-
-                console.log(`[Bounce Handler] Lead #${msg.leadId} (${bounceEmail}) marked BOUNCED and suppressed.`);
-                await jobRunner.logEvent(jobId, 'BOUNCE_DETECTED', 'WARN', `Hard bounce for ${bounceEmail} (lead #${msg.leadId}) — suppressed and sequence cancelled.`, { leadId: msg.leadId, email: bounceEmail });
+            latestHistoryId = histRes.data.historyId || latestHistoryId;
+            const historyItems = histRes.data.history || [];
+            for (const h of historyItems) {
+              for (const mAdded of h.messagesAdded || []) {
+                if (mAdded.message?.id) {
+                  candidateMessages.push({
+                    id: mAdded.message.id,
+                    threadId: mAdded.message.threadId || undefined,
+                  });
+                }
               }
-            } catch (bounceErr: any) {
-              console.warn(`[Reply Worker] Non-fatal: bounce handling failed for lead #${msg.leadId}:`, bounceErr.message);
             }
+            historySuccess = true;
+          } catch (histErr: any) {
+            const isStale =
+              histErr?.code === 404 ||
+              histErr?.status === 404 ||
+              (histErr?.message && histErr.message.includes('History id'));
+            if (!isStale) {
+              console.warn(`[Reply Worker] History sync error for ${account.email}:`, histErr.message);
+            }
+          }
+        }
+
+        // Fallback: If no lastHistoryId or history expired (404), fetch current historyId and recent inbox messages
+        if (!historySuccess) {
+          try {
+            const profile = await gmail.users.getProfile({ userId: 'me' });
+            latestHistoryId = profile.data.historyId || null;
+
+            const listRes = await gmail.users.messages.list({
+              userId: 'me',
+              q: 'is:inbox',
+              maxResults: 50,
+            });
+            candidateMessages = (listRes.data.messages || []).map((m) => ({
+              id: m.id!,
+              threadId: m.threadId || undefined,
+            }));
+          } catch (fbErr: any) {
+            console.warn(`[Reply Worker] Fallback message fetch error for ${account.email}:`, fbErr.message);
+          }
+        }
+
+        // Process candidate messages
+        const seenMsgIds = new Set<string>();
+        for (const cand of candidateMessages) {
+          if (!cand.id || seenMsgIds.has(cand.id)) continue;
+          seenMsgIds.add(cand.id);
+
+          // If threadId is known beforehand and is not in our outreach threads, skip without network call
+          if (cand.threadId && !threadMap.has(cand.threadId)) {
             continue;
           }
 
-          // Genuine creator human reply
-          const dateHeader = headers.find((h: any) => h.name?.toLowerCase() === 'date')?.value;
-          const msgTime = Number(tm.internalDate) || (dateHeader ? new Date(dateHeader).getTime() : Date.now());
+          try {
+            const msgRes = await gmail.users.messages.get({
+              userId: 'me',
+              id: cand.id,
+              format: 'full',
+              metadataHeaders: ['From', 'Date', 'Subject', 'Auto-Submitted', 'Precedence', 'X-Autoreply'],
+            });
 
-          if (msgTime > (outboundTime - 5000)) {
+            const threadId = msgRes.data.threadId;
+            if (!threadId || !threadMap.has(threadId)) {
+              continue; // Not one of our active outreach threads
+            }
+
+            const matchedSent = threadMap.get(threadId)!;
+            const headers = msgRes.data.payload?.headers || [];
+            const fromHeader = headers.find((h: any) => h.name?.toLowerCase() === 'from')?.value || '';
+            const fromEmailLower = fromHeader.toLowerCase();
+            const accountEmailLower = account.email.toLowerCase();
+
+            // Direction Check: If sent from our own sending account, ignore
+            const isOutbound = fromEmailLower.includes(accountEmailLower);
+            if (isOutbound) {
+              continue;
+            }
+
+            const subjectHeader = headers.find((h: any) => h.name?.toLowerCase() === 'subject')?.value || '';
+            const bodyText = decodeGmailBody(msgRes.data.payload);
+            const responseType = classifyAutomatedResponse(headers, fromHeader, subjectHeader, bodyText);
+
+            // Handle OUT_OF_OFFICE (pause 5 days)
+            if (responseType === 'OUT_OF_OFFICE') {
+              console.log(`[OOO Handler] Out-of-office detected from ${fromHeader} on lead #${matchedSent.leadId}. Pausing sequence +5 days.`);
+              const fiveDaysLater = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+              await db
+                .update(scheduledEmails)
+                .set({
+                  scheduledAt: fiveDaysLater,
+                  scheduledDate: gmailSendingService.getPacificDateStr(fiveDaysLater),
+                  updatedAt: new Date(),
+                })
+                .where(and(eq(scheduledEmails.leadId, matchedSent.leadId), eq(scheduledEmails.status, 'PENDING')));
+              continue;
+            }
+
+            // Handle SOFT_BOUNCE (retry 48h)
+            if (responseType === 'SOFT_BOUNCE') {
+              console.log(`[Soft Bounce] Temporary delivery issue for lead #${matchedSent.leadId}. Rescheduling next step +48h.`);
+              const fortyEightHoursLater = new Date(Date.now() + 48 * 60 * 60 * 1000);
+              await db
+                .update(scheduledEmails)
+                .set({
+                  scheduledAt: fortyEightHoursLater,
+                  scheduledDate: gmailSendingService.getPacificDateStr(fortyEightHoursLater),
+                  updatedAt: new Date(),
+                })
+                .where(and(eq(scheduledEmails.leadId, matchedSent.leadId), eq(scheduledEmails.status, 'PENDING')));
+              continue;
+            }
+
+            // Handle HARD_BOUNCE (permanent delivery failure)
+            if (responseType === 'HARD_BOUNCE') {
+              try {
+                const bounceEmail = (matchedSent.recipientEmail || '').toLowerCase().trim();
+                if (bounceEmail) {
+                  await db
+                    .insert(suppressions)
+                    .values({
+                      email: bounceEmail,
+                      channelId: null,
+                      reason: 'BOUNCED',
+                      source: 'REPLY_DETECTOR',
+                    })
+                    .onConflictDoNothing();
+
+                  await db
+                    .update(leads)
+                    .set({ outreachStatus: 'BOUNCED', suppressionStatus: true, updatedAt: new Date() })
+                    .where(eq(leads.id, matchedSent.leadId));
+
+                  await db
+                    .update(contacts)
+                    .set({ emailStatus: 'INVALID', verificationReason: 'Hard bounce detected', updatedAt: new Date() })
+                    .where(and(eq(contacts.leadId, matchedSent.leadId), sql`lower(${contacts.email}) = ${bounceEmail}`));
+
+                  await db
+                    .update(scheduledEmails)
+                    .set({ status: 'CANCELLED', error: 'Bounce detected', updatedAt: new Date() })
+                    .where(and(eq(scheduledEmails.leadId, matchedSent.leadId), eq(scheduledEmails.status, 'PENDING')));
+
+                  await sequenceService.cancelSequenceForLead(matchedSent.leadId, 'CANCELLED_BOUNCED');
+
+                  console.log(`[Bounce Handler] Lead #${matchedSent.leadId} (${bounceEmail}) marked BOUNCED and suppressed.`);
+                  await jobRunner.logEvent(jobId, 'BOUNCE_DETECTED', 'WARN', `Hard bounce for ${bounceEmail} (lead #${matchedSent.leadId})`, { leadId: matchedSent.leadId, email: bounceEmail });
+                }
+              } catch (bounceErr: any) {
+                console.warn(`[Reply Worker] Bounce handling error for lead #${matchedSent.leadId}:`, bounceErr.message);
+              }
+              continue;
+            }
+
+            // Genuine creator human reply (Bug #14: Direction + thread match, no fragile timestamp filter)
+            const dateHeader = headers.find((h: any) => h.name?.toLowerCase() === 'date')?.value;
+            const msgTime = Number(msgRes.data.internalDate) || (dateHeader ? new Date(dateHeader).getTime() : Date.now());
             const emailMatch = fromHeader.match(/<([^>]+)>/) || [null, fromHeader.trim()];
-            const senderEmail = emailMatch[1] || msg.recipientEmail;
+            const senderEmail = emailMatch[1] || matchedSent.recipientEmail;
 
             const replyRes = await replyDetectorService.processInboundReply({
-              threadId: msg.threadId,
-              messageId: tm.id,
+              threadId: threadId,
+              messageId: cand.id,
               senderEmail,
-              snippet: tm.snippet || 'Reply received from creator',
+              snippet: msgRes.data.snippet || 'Reply received from creator',
               bodyText,
               receivedAt: new Date(msgTime),
               gmailAccountId: account.id,
@@ -388,17 +408,27 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
 
             if (replyRes.recorded) {
               detected++;
-              console.log(`  🎉 [Reply Detected] Inbound from ${senderEmail} on thread ${msg.threadId}`);
+              console.log(`  🎉 [Reply Detected] Inbound from ${senderEmail} on thread ${threadId}`);
               await jobRunner.logEvent(jobId, 'REPLY_DETECTED', 'INFO', `Detected inbound reply from ${senderEmail}`, {
-                threadId: msg.threadId,
-                messageId: tm.id,
+                threadId: threadId,
+                messageId: cand.id,
                 senderEmail,
               });
             }
+          } catch (msgErr: any) {
+            console.warn(`[Reply Worker] Failed processing message ${cand.id}:`, msgErr.message);
           }
         }
-      } catch (err: any) {
-        console.warn(`⚠️ [Reply Worker] Failed to inspect thread ${msg.threadId}:`, err.message);
+
+        // Persist updated historyId for fast incremental sync on next invocation
+        if (latestHistoryId && latestHistoryId !== account.lastHistoryId) {
+          await db
+            .update(gmailAccounts)
+            .set({ lastHistoryId: latestHistoryId, updatedAt: new Date() })
+            .where(eq(gmailAccounts.id, account.id));
+        }
+      } catch (accErr: any) {
+        console.warn(`⚠️ [Reply Worker] Failed syncing replies for account ${account.email}:`, accErr.message);
       }
     }
 
@@ -406,7 +436,7 @@ export async function runReplySync(): Promise<{ repliesDetected: number }> {
     console.log(`\n✅ Reply sync completed: ${detected} new replies detected.`);
     return { repliesDetected: detected };
   } catch (error: any) {
-    console.error('[Reply Sync Worker] Error:', error);
+    console.error('[Reply Sync Worker] Fatal error:', error);
     await jobRunner.failJob(jobId, error.message);
     return { repliesDetected: 0 };
   }

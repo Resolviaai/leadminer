@@ -100,47 +100,56 @@ export class SequenceService {
       sendsByStep.set(s.stepNumber, s.count);
     }
 
-    // Query reply counts per step (deduplicated replies, filtered by campaign)
-    const replyStats = await db
-      .select({
-        stepNumber: messages.stepNumber,
-        count: sql<number>`count(DISTINCT replies.id)::int`,
-      })
-      .from(replies)
-      .innerJoin(messages, eq(replies.threadId, messages.threadId))
-      .where(
-        and(
-          eq(messages.sendStatus, 'SENT'),
-          campaignId ? eq(messages.campaignId, campaignId) : undefined
-        )
-      )
-      .groupBy(messages.stepNumber);
+    // Bug #17 Fix: Attribute each reply ONLY to the highest step sent on that thread before the reply arrived,
+    // rather than multiplying across all historical steps sharing that thread.
+    const replyStatsResult = await db.execute<{ step_number: number; count: number }>(sql`
+      SELECT sub.step_number, count(DISTINCT sub.reply_id)::int as count
+      FROM (
+        SELECT r.id as reply_id, (
+          SELECT m.step_number
+          FROM messages m
+          WHERE m.thread_id = r.thread_id
+            AND m.send_status = 'SENT'
+            ${campaignId ? sql`AND m.campaign_id = ${campaignId}` : sql``}
+            AND (m.sent_at IS NULL OR m.sent_at <= r.received_at + interval '5 seconds')
+          ORDER BY m.step_number DESC
+          LIMIT 1
+        ) as step_number
+        FROM replies r
+      ) sub
+      WHERE sub.step_number IS NOT NULL
+      GROUP BY sub.step_number
+    `);
 
     const repliesByStep = new Map<number, number>();
-    for (const r of replyStats) {
-      repliesByStep.set(r.stepNumber, r.count);
+    for (const r of replyStatsResult.rows) {
+      repliesByStep.set(Number(r.step_number), Number(r.count));
     }
 
-    // Query bounce / unsubscribe counts per step (deduplicated suppressions, filtered by campaign)
-    const suppressionStats = await db
-      .select({
-        stepNumber: messages.stepNumber,
-        count: sql<number>`count(DISTINCT suppressions.id)::int`,
-      })
-      .from(suppressions)
-      .innerJoin(leads, eq(suppressions.channelId, leads.channelId))
-      .innerJoin(messages, eq(leads.id, messages.leadId))
-      .where(
-        and(
-          eq(messages.sendStatus, 'SENT'),
-          campaignId ? eq(messages.campaignId, campaignId) : undefined
-        )
-      )
-      .groupBy(messages.stepNumber);
+    // Bug #17 Fix: Similarly for suppressions, attribute only to the last step sent to that lead.
+    const suppressionStatsResult = await db.execute<{ step_number: number; count: number }>(sql`
+      SELECT sub.step_number, count(DISTINCT sub.suppression_id)::int as count
+      FROM (
+        SELECT s.id as suppression_id, (
+          SELECT m.step_number
+          FROM messages m
+          INNER JOIN leads l ON m.lead_id = l.id
+          WHERE ((s.channel_id IS NOT NULL AND l.channel_id = s.channel_id)
+                 OR (l.email IS NOT NULL AND lower(l.email) = lower(s.email)))
+            AND m.send_status = 'SENT'
+            ${campaignId ? sql`AND m.campaign_id = ${campaignId}` : sql``}
+          ORDER BY m.step_number DESC
+          LIMIT 1
+        ) as step_number
+        FROM suppressions s
+      ) sub
+      WHERE sub.step_number IS NOT NULL
+      GROUP BY sub.step_number
+    `);
 
     const unsubsByStep = new Map<number, number>();
-    for (const u of suppressionStats) {
-      unsubsByStep.set(u.stepNumber, u.count);
+    for (const u of suppressionStatsResult.rows) {
+      unsubsByStep.set(Number(u.step_number), Number(u.count));
     }
 
     let cumulativeSurvival = 1.0;
@@ -321,8 +330,9 @@ export class SequenceService {
     pinnedAccountId: number;
     threadId: string;
     rfc822MessageId: string;
+    referencesChain?: string;
   }): Promise<void> {
-    const { leadId, contactId, campaignId, sequenceId, stepNumber, pinnedAccountId, threadId, rfc822MessageId } =
+    const { leadId, contactId, campaignId, sequenceId, stepNumber, pinnedAccountId, threadId, rfc822MessageId, referencesChain } =
       params;
 
     // Fetch all steps for this sequence
@@ -357,6 +367,7 @@ export class SequenceService {
           nextStepDueAt: null,
           threadId,
           lastRfc822MessageId: rfc822MessageId,
+          referencesChain,
         })
         .onConflictDoUpdate({
           target: [leadSequenceProgress.contactId, leadSequenceProgress.sequenceId],
@@ -367,6 +378,7 @@ export class SequenceService {
             nextStepDueAt: null,
             threadId,
             lastRfc822MessageId: rfc822MessageId,
+            referencesChain,
             updatedAt: now,
           },
         });
@@ -392,6 +404,7 @@ export class SequenceService {
         nextStepDueAt: nextDue,
         threadId,
         lastRfc822MessageId: rfc822MessageId,
+        referencesChain,
       })
       .onConflictDoUpdate({
         target: [leadSequenceProgress.contactId, leadSequenceProgress.sequenceId],
@@ -403,6 +416,7 @@ export class SequenceService {
           nextStepDueAt: nextDue,
           threadId,
           lastRfc822MessageId: rfc822MessageId,
+          referencesChain,
           updatedAt: now,
         },
       });
@@ -437,7 +451,7 @@ export class SequenceService {
             )
           );
 
-        // 2. Cancel all pending scheduled emails for this lead
+        // 2. Cancel all pending and in-flight scheduled emails for this lead (Bug #15)
         await tx
           .update(scheduledEmails)
           .set({
@@ -448,7 +462,7 @@ export class SequenceService {
           .where(
             and(
               eq(scheduledEmails.leadId, leadId),
-              eq(scheduledEmails.status, 'PENDING')
+              inArray(scheduledEmails.status, ['PENDING', 'SENDING'])
             )
           );
       });

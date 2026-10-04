@@ -20,6 +20,7 @@ export interface SendEmailParams {
   stepNumber?: number;
   pinnedAccountId?: number;
   inReplyToRfcId?: string;
+  referencesChain?: string;
   threadId?: string;
   personalizationStatus?: 'NONE' | 'CUSTOMIZED' | 'FALLBACK' | 'FAILED';
   personalizationModel?: string;
@@ -30,6 +31,7 @@ export interface SendEmailResult {
   messageId?: string;
   threadId?: string;
   rfc822MessageId?: string;
+  referencesChain?: string;
   accountId?: number;
   senderEmail?: string;
   simulated?: boolean;
@@ -190,7 +192,7 @@ export class GmailSendingService {
         }
       }
 
-      const todayLimit = this.getTodayEffectiveLimit(account.id, account.dailyLimit);
+      const todayLimit = await warmupService.getEffectiveDailyLimit(account.id, account.dailyLimit, account.googleAccountId);
 
       const reserved = await db
         .update(gmailAccounts)
@@ -243,6 +245,7 @@ export class GmailSendingService {
     bodyText: string,
     rfcMessageId: string,
     inReplyToRfcId?: string,
+    referencesChain?: string,
     unsubscribeUrl?: string
   ): string {
     const utf8Subject = `=?utf-8?B?${Buffer.from(subject).toString('base64')}?=`;
@@ -258,6 +261,21 @@ export class GmailSendingService {
     if (inReplyToRfcId) {
       const cleanRef = inReplyToRfcId.replace(/^<|>$/g, '');
       messageParts.push(`In-Reply-To: <${cleanRef}>`);
+    }
+
+    if (referencesChain && referencesChain.trim().length > 0) {
+      const cleanRefs = referencesChain
+        .trim()
+        .split(/\s+/)
+        .map((id) => id.replace(/^<|>$/g, ''))
+        .filter((id) => id.length > 0)
+        .map((id) => `<${id}>`)
+        .join(' ');
+      if (cleanRefs.length > 0) {
+        messageParts.push(`References: ${cleanRefs}`);
+      }
+    } else if (inReplyToRfcId) {
+      const cleanRef = inReplyToRfcId.replace(/^<|>$/g, '');
       messageParts.push(`References: <${cleanRef}>`);
     }
 
@@ -350,6 +368,13 @@ export class GmailSendingService {
     const senderDomain = account.email.split('@')[1] || 'leadminer.io';
     const rfcMessageId = `${crypto.randomUUID()}@${senderDomain}`;
 
+    // RFC 5322 section 3.6.4 compliant References chain
+    const computedReferencesChain = params.referencesChain && params.referencesChain.trim().length > 0
+      ? `${params.referencesChain.trim()} <${rfcMessageId}>`
+      : params.inReplyToRfcId
+      ? `<${params.inReplyToRfcId.replace(/^<|>$/g, '')}> <${rfcMessageId}>`
+      : `<${rfcMessageId}>`;
+
     // 5. Live Gmail Send Execution (Two-Phase Commit Pattern)
     let messageRecordId: number | null = null;
     let liveSendSucceeded = false;
@@ -374,6 +399,7 @@ export class GmailSendingService {
           body: params.body,
           stepNumber: params.stepNumber || 1,
           rfc822MessageId: rfcMessageId,
+          referencesChain: computedReferencesChain,
           personalizationStatus: params.personalizationStatus || 'NONE',
           personalizationModel: params.personalizationModel,
           sendStatus: 'SENDING',
@@ -563,6 +589,18 @@ export class GmailSendingService {
             const foundSubject = headers.find((h) => h.name?.toLowerCase() === 'subject')?.value;
 
             if (foundSubject && foundSubject.trim() === params.subject.trim()) {
+              // Bug #9 Fix: Ensure this message in Gmail is NOT already attributed to an earlier step or another idempotencyKey
+              const alreadyUsedMsg = await db
+                .select({ id: messages.id, stepNumber: messages.stepNumber, idempotencyKey: messages.idempotencyKey })
+                .from(messages)
+                .where(eq(messages.messageId, msgItem.id))
+                .limit(1);
+
+              if (alreadyUsedMsg.length > 0 && alreadyUsedMsg[0].idempotencyKey !== params.idempotencyKey) {
+                // This Gmail message belongs to a previous step or different send - do NOT false match!
+                continue;
+              }
+
               const internalDate = fullMsg.data.internalDate
                 ? new Date(parseInt(fullMsg.data.internalDate, 10))
                 : new Date();
@@ -581,6 +619,7 @@ export class GmailSendingService {
                       sentAt: internalDate,
                       messageId: msgItem.id,
                       threadId: fullMsg.data.threadId || undefined,
+                      referencesChain: computedReferencesChain,
                       updatedAt: new Date(),
                     })
                     .where(eq(messages.id, messageRecordId));
@@ -598,6 +637,7 @@ export class GmailSendingService {
                   success: true,
                   messageId: msgItem.id,
                   threadId: fullMsg.data.threadId || undefined,
+                  referencesChain: computedReferencesChain,
                   accountId: account.id,
                   senderEmail: account.email,
                 };
@@ -619,6 +659,7 @@ export class GmailSendingService {
         params.body,
         rfcMessageId,
         params.inReplyToRfcId,
+        params.referencesChain,
         unsubUrl
       );
 
@@ -755,6 +796,7 @@ export class GmailSendingService {
                 sentAt: new Date(),
                 messageId: liveMessageId,
                 threadId: liveThreadId,
+                referencesChain: computedReferencesChain,
                 updatedAt: new Date(),
               })
               .where(eq(messages.id, messageRecordId));
@@ -779,6 +821,7 @@ export class GmailSendingService {
         messageId: liveMessageId,
         threadId: liveThreadId,
         rfc822MessageId: rfcMessageId,
+        referencesChain: computedReferencesChain,
         accountId: account.id,
         senderEmail: account.email,
         verified: true,
