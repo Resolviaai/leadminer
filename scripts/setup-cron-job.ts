@@ -66,10 +66,17 @@ async function setupCronJobs() {
     },
     {
       title: 'LeadMiner Autonomous Discovery',
-      path: '/api/workers/discovery?batchSize=10',
-      hours: [0, 3, 6, 9, 12, 15, 18, 21], // Every 3 hours (8 runs/day * 10 keywords = 80 search calls <= 100 quota)
+      path: '/api/workers/discovery?batchSize=3&timeout=25',
+      hours: [0, 3, 6, 9, 12, 15, 18, 21], // Every 3 hours (8 runs/day * 3 keywords = 24 search calls <= 100 quota)
       minutes: [10],
-      description: 'Continuously scrapes YouTube for new leads using keyword queue within daily quota',
+      description: 'Continuously scrapes YouTube for new leads using keyword queue within daily quota and 30s timeout',
+    },
+    {
+      title: 'LeadMiner Daily Planner',
+      path: '/api/workers/planner',
+      hours: [13], // Once daily at 13:35 UTC (5 minutes after pipeline trigger)
+      minutes: [35],
+      description: 'Guarantees daily email schedule is planned for qualified leads even if upstream pipeline encounters issues',
     },
     {
       title: 'LeadMiner Daily Autonomous Pipeline',

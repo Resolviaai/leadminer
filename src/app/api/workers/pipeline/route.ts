@@ -24,7 +24,7 @@ async function executeSingleStep(stepName: string) {
       result = await runReplySync();
       break;
     case 'discovery':
-      result = await runDiscoveryBatch(10);
+      result = await runDiscoveryBatch({ batchSize: 5, maxExecutionSeconds: 40 });
       break;
     case 'linkpage':
       result = await runLinkpageEnrichmentBatch(20);
@@ -77,26 +77,13 @@ async function executePipeline() {
     results.replies = { error: err.message };
   }
 
-  // 2. Discover new YouTube channels using keyword queue (lean batch: 10 keywords)
+  // 2. Discover new YouTube channels using keyword queue (lean batch: 3 keywords, 15s budget)
   try {
-    console.log('[Pipeline] Step 2/5: Running channel discovery batch (10 keywords)...');
-    results.discovery = await runDiscoveryBatch(10);
+    console.log('[Pipeline] Step 2/5: Running channel discovery batch (3 keywords, 15s budget)...');
+    results.discovery = await runDiscoveryBatch({ batchSize: 3, maxExecutionSeconds: 15 });
   } catch (err: any) {
     console.error('[Pipeline] Error in discovery step:', err);
     results.discovery = { error: err.message };
-  }
-
-  // Defensive elapsed time check to avoid Vercel 60s hard kill
-  const elapsedSeconds = (Date.now() - startedAt.getTime()) / 1000;
-  if (elapsedSeconds > 40) {
-    console.warn(`[Pipeline] Execution taking ${elapsedSeconds}s, skipping remaining steps to avoid Hobby timeout.`);
-    return {
-      success: false,
-      partial: true,
-      durationSeconds: Number(elapsedSeconds.toFixed(2)),
-      pipeline: results,
-      notice: 'Skipped planner and dispatch due to execution time limit. Use step-by-step triggers.',
-    };
   }
 
   // 3. Verify extracted contact emails & auto-qualify eligible leads (batch: 100 contacts with 30 parallel DNS checks)

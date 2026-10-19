@@ -14,11 +14,13 @@ async function handleDiscovery(req: NextRequest) {
 
   try {
     const url = new URL(req.url);
-    const rawBatch = parseInt(url.searchParams.get('batchSize') || '10', 10);
-    const batchSize = isNaN(rawBatch) ? 10 : Math.min(Math.max(rawBatch, 1), 20);
+    const rawBatch = parseInt(url.searchParams.get('batchSize') || '5', 10);
+    const batchSize = isNaN(rawBatch) ? 5 : Math.min(Math.max(rawBatch, 1), 20);
+    const rawTimeout = parseInt(url.searchParams.get('timeout') || url.searchParams.get('maxSeconds') || '42', 10);
+    const maxExecutionSeconds = isNaN(rawTimeout) ? 42 : Math.min(Math.max(rawTimeout, 10), 50);
 
     const lockResult = await withAdvisoryLock(LOCK_KEYS.DISCOVERY, 'Discovery Worker', async () => {
-      return await runDiscoveryBatch(batchSize);
+      return await runDiscoveryBatch({ batchSize, maxExecutionSeconds });
     });
 
     if (!lockResult.executed) {

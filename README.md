@@ -101,7 +101,7 @@ LeadMiner features **Dual-Redundancy Cloud Scheduling** to guarantee it runs eve
 You can trigger a complete pipeline execution anytime from your terminal:
 ```bash
 curl -X POST "https://leadminer-app.vercel.app/api/workers/pipeline" \
-  -H "Authorization: Bearer 7d3a8f1e5c2b9a4d6f8e0b1c3a5d7e9f" \
+  -H "Authorization: Bearer <CRON_SECRET>" \
   -H "User-Agent: vercel-cron/1.0"
 ```
 

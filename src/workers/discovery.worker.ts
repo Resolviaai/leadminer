@@ -19,9 +19,26 @@ export function calculatePriorityScore(newLeadsCount: number): number {
   return 20;                          // Very low yield (0 new leads)
 }
 
-export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SIZE): Promise<{ processed: number; leadsDiscovered: number; quotaReached: boolean }> {
+export interface DiscoveryBatchOptions {
+  batchSize?: number;
+  maxExecutionSeconds?: number;
+}
+
+export async function runDiscoveryBatch(
+  optionsOrBatchSize: number | DiscoveryBatchOptions = env.YOUTUBE_BATCH_SIZE
+): Promise<{ processed: number; leadsDiscovered: number; quotaReached: boolean; timeBudgetReached?: boolean }> {
+  const options: DiscoveryBatchOptions = typeof optionsOrBatchSize === 'number'
+    ? { batchSize: optionsOrBatchSize }
+    : (optionsOrBatchSize || {});
+
+  const batchSize = options.batchSize ?? env.YOUTUBE_BATCH_SIZE;
+  const maxExecutionSeconds = options.maxExecutionSeconds ?? 42;
+  const startTime = Date.now();
+  const deadline = startTime + maxExecutionSeconds * 1000;
+  let timeBudgetReached = false;
+
   console.log(`\n======================================================`);
-  console.log(`🚀 Starting YouTube Discovery Batch Worker (batchSize=${batchSize})`);
+  console.log(`🚀 Starting YouTube Discovery Batch Worker (batchSize=${batchSize}, maxExecutionSeconds=${maxExecutionSeconds}s)`);
   console.log(`======================================================\n`);
 
   // Mandatory API Key Guard: fail closed if no valid YouTube Data API keys configured
@@ -39,7 +56,7 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
   await jobRunner.recoverStaleJobsAndKeywords(env.WORKER_STALE_TIMEOUT_MINUTES);
 
   // 2. Register job
-  const jobId = await jobRunner.createJob('DISCOVERY_BATCH', { batchSize });
+  const jobId = await jobRunner.createJob('DISCOVERY_BATCH', { batchSize, maxExecutionSeconds });
 
   // 3. Atomically claim batch of PENDING or RETRY keywords ordered by priorityScore DESC, id ASC
   const pool = db;
@@ -84,6 +101,27 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
 
   for (let i = 0; i < claimedKeywords.length; i++) {
     const kw = claimedKeywords[i];
+
+    // Pre-keyword Time Budget Guard: If < 5s remain before deadline, stop batch early and rollback unstarted keywords
+    if (Date.now() >= deadline - 5000) {
+      console.warn(`⏱️ [Discovery Worker Time Budget] ${Math.round((Date.now() - startTime) / 1000)}s elapsed of ${maxExecutionSeconds}s. Gracefully stopping batch before keyword ${kw.id}.`);
+      timeBudgetReached = true;
+      const unstartedKeywords = claimedKeywords.slice(i);
+      const unstartedIds = unstartedKeywords.map((k) => k.id);
+      if (unstartedIds.length > 0) {
+        console.log(`  Rolling back ${unstartedIds.length} unstarted keywords to PENDING.`);
+        await pool
+          .update(keywords)
+          .set({
+            status: 'PENDING',
+            attemptCount: sql`GREATEST(0, ${keywords.attemptCount} - 1)`,
+            updatedAt: new Date(),
+          })
+          .where(inArray(keywords.id, unstartedIds));
+      }
+      break;
+    }
+
     console.log(`\n[Keyword ${kw.id}] Processing: "${kw.keyword}" (${kw.category} / ${kw.entity}) [Priority: ${kw.priorityScore}]...`);
 
     let kwNewLeadsCount = 0;
@@ -237,6 +275,13 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
         let videoMiningQuotaReached = false;
 
         for (const ch of enrichResult.channels) {
+          // Mid-Keyword Channel Time Budget Guard: If < 4s remain before deadline, pause channel processing gracefully
+          if (Date.now() >= deadline - 4000) {
+            console.warn(`⏱️ [Discovery Worker Time Budget] Time budget reaching limit (${Math.round((Date.now() - startTime) / 1000)}s / ${maxExecutionSeconds}s) during channel processing for keyword ${kw.id}. Yielding early.`);
+            timeBudgetReached = true;
+            break;
+          }
+
           // 9. Discovery Quality Filter (Lightweight n8n Pre-Filter)
           if (ch.subscriberCount < env.MIN_DISCOVERY_SUBSCRIBERS || ch.videoCount < env.MIN_DISCOVERY_VIDEOS) {
             console.log(`  ⏩ Skipping low-volume channel: "${ch.title}" (${ch.subscriberCount} subs, ${ch.videoCount} vids)`);
@@ -453,6 +498,24 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
         }
       }
 
+      if (timeBudgetReached) {
+        // Rollback current keyword and all subsequent keywords back to PENDING with attemptCount decremented
+        const remainingKeywords = claimedKeywords.slice(i);
+        const remainingIds = remainingKeywords.map((k) => k.id);
+        console.warn(`⏱️ [Discovery Worker Time Budget] Yielding early on keyword ${kw.id}. Rolling back ${remainingIds.length} keywords to PENDING.`);
+        if (remainingIds.length > 0) {
+          await pool
+            .update(keywords)
+            .set({
+              status: 'PENDING',
+              attemptCount: sql`GREATEST(0, ${keywords.attemptCount} - 1)`,
+              updatedAt: new Date(),
+            })
+            .where(inArray(keywords.id, remainingIds));
+        }
+        break;
+      }
+
       // 13. Keyword Performance Feedback Loop & Priority Re-scoring
       const newScore = calculatePriorityScore(kwNewLeadsCount);
       console.log(`  Keyword summary: ${uniqueChannelIds.length} found, ${kwNewLeadsCount} new leads, ${kwEmailsFoundCount} emails. New Priority Score: ${newScore}`);
@@ -489,12 +552,19 @@ export async function runDiscoveryBatch(batchSize: number = env.YOUTUBE_BATCH_SI
 
   if (quotaReached) {
     await jobRunner.stopJobQuota(jobId, 'YouTube API quota reached for today');
+  } else if (timeBudgetReached) {
+    await jobRunner.logEvent(jobId, 'TIME_BUDGET_REACHED', 'INFO', 'Discovery batch yielded early to prevent serverless timeout', {
+      processed: processedCount,
+      leadsDiscovered: totalNewLeadsCount,
+      elapsedSeconds: Number(((Date.now() - startTime) / 1000).toFixed(2)),
+    });
+    await jobRunner.completeJob(jobId, processedCount);
   } else {
     await jobRunner.completeJob(jobId, processedCount);
   }
 
   console.log(`\n✅ Discovery batch completed: ${processedCount} keywords processed, ${totalNewLeadsCount} new leads recorded.`);
-  return { processed: processedCount, leadsDiscovered: totalNewLeadsCount, quotaReached };
+  return { processed: processedCount, leadsDiscovered: totalNewLeadsCount, quotaReached, timeBudgetReached };
 }
 
 if (require.main === module) {

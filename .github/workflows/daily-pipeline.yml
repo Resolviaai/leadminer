@@ -28,6 +28,7 @@ jobs:
 
           # D4: Run pipeline step-by-step so each step gets an isolated 60s Vercel execution window
           STEPS=("cleanup" "replies" "discovery" "linkpage" "verification" "planner" "dispatch")
+          FAILED_STEPS=()
 
           for STEP in "${STEPS[@]}"; do
             echo ""
@@ -47,7 +48,7 @@ jobs:
 
             if [ "$HTTP_STATUS" -ne 200 ] && [ "$HTTP_STATUS" -ne 409 ]; then
               echo "❌ Step $STEP failed with HTTP status $HTTP_STATUS"
-              exit 1
+              FAILED_STEPS+=("$STEP (HTTP $HTTP_STATUS)")
             elif [ "$HTTP_STATUS" -eq 409 ]; then
               echo "⚠️ Step $STEP was skipped (lock held by another process)"
             else
@@ -59,4 +60,17 @@ jobs:
           done
 
           echo ""
+          echo "=========================================================="
+          echo "📊 Pipeline Execution Summary"
+          echo "=========================================================="
+
+          if [ ${#FAILED_STEPS[@]} -gt 0 ]; then
+            echo "❌ Pipeline completed with errors in the following step(s):"
+            for FAILED in "${FAILED_STEPS[@]}"; do
+              echo "   - $FAILED"
+            done
+            echo "Downstream planning and dispatch steps were attempted, but errors require inspection."
+            exit 1
+          fi
+
           echo "🎉 All autonomous pipeline steps finished successfully!"
