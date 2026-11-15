@@ -21,6 +21,7 @@ export const LOCK_KEYS = {
   LINKPAGE: 10006,
   PLANNER: 10007,
   CLEANUP: 10008,
+  CSV_IMPORT: 10009,
 } as const;
 
 /**

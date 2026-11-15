@@ -10,6 +10,7 @@ import {
   sequenceSteps,
   leadSequenceProgress,
   messages,
+  campaignLeads,
 } from '../db/schema';
 import { eq, inArray, sql, and } from 'drizzle-orm';
 import { templateEngine } from '../services/outreach/template.engine';
@@ -168,6 +169,8 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
         channelTitle: leads.channelTitle,
         channelUrl: leads.channelUrl,
         subscriberCount: leads.subscriberCount,
+        sourceProvider: leads.sourceProvider,
+        companyName: leads.companyName,
         website: leads.website,
         description: leads.description,
         leadOutreachStatus: leads.outreachStatus,
@@ -281,7 +284,10 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
     const template = templateRecord[0];
 
     // Gemini Personalization (if enabled and on Step 1)
-    const DEFAULT_CUSTOM_LINE = 'I really enjoy the direction of your channel content.';
+    const isYouTube = !item.sourceProvider || item.sourceProvider === 'YOUTUBE';
+    const DEFAULT_CUSTOM_LINE = isYouTube
+      ? 'I really enjoy the direction of your channel content.'
+      : 'I have been following your work and came across your profile.';
     let customLine = DEFAULT_CUSTOM_LINE;
     let personalizationStatus: 'NONE' | 'CUSTOMIZED' | 'FALLBACK' | 'FAILED' = 'NONE';
     let modelUsed: string | undefined;
@@ -289,7 +295,7 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
     if (item.enableGeminiPersonalization && item.stepNumber === 1) {
       try {
         const aiRes = await geminiService.generateCustomLine({
-          channelTitle: item.channelTitle,
+          channelTitle: item.channelTitle || item.companyName || '',
           description: item.description || undefined,
           subscriberCount: item.subscriberCount || undefined,
         });
@@ -315,17 +321,17 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
 
     // Render Template (resolves variables and applies Spintax word rotation)
     // BUG-10: pass leadId as seed so retries produce identical wording for the same lead
-    const firstName = templateEngine.extractFirstName(item.channelTitle, true);
+    const firstName = templateEngine.extractFirstName(item.channelTitle || '', true);
     const renderedSubject = templateEngine.render(template.subject, {
       first_name: firstName,
-      channel_name: item.channelTitle,
+      channel_name: item.channelTitle || undefined,
       subscriber_count: item.subscriberCount || 0,
     }, item.leadId);
 
     const renderedBody = templateEngine.render(template.body, {
       first_name: firstName,
-      channel_name: item.channelTitle,
-      channel_url: item.channelUrl,
+      channel_name: item.channelTitle || undefined,
+      channel_url: item.channelUrl || undefined,
       subscriber_count: item.subscriberCount || 0,
       website: item.website || '',
       custom_line: customLine,
@@ -406,6 +412,28 @@ export async function runDispatcher(batchLimit = 3): Promise<DispatcherResult> {
         .where(eq(scheduledEmails.id, scheduledId));
 
       console.log(`  ✅ Dispatched Step ${item.stepNumber} successfully (ID: ${sendResult.messageId || 'simulated'})`);
+
+      // Update campaign_leads status for this campaign & lead
+      if (item.campaignId && item.leadId) {
+        try {
+          await db
+            .update(campaignLeads)
+            .set({
+              status: 'CONTACTED',
+              currentStepNumber: item.stepNumber,
+              lastContactedAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(campaignLeads.campaignId, item.campaignId),
+                eq(campaignLeads.leadId, item.leadId)
+              )
+            );
+        } catch {
+          // non-fatal
+        }
+      }
 
       // Advance State Machine in Sequence Engine
       if (item.sequenceId) {

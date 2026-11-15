@@ -1,6 +1,6 @@
 import { db } from '../db/client';
 import { leads } from '../db/schema';
-import { lt, or, isNull, eq } from 'drizzle-orm';
+import { lt, or, isNull, eq, and, isNotNull } from 'drizzle-orm';
 import { YouTubeDiscoveryService } from '../services/youtube/discovery.service';
 import { YouTubeChannelDetails } from '../services/youtube/types';
 import { jobRunner } from '../services/jobs/job.runner';
@@ -23,7 +23,7 @@ export async function runYouTubeDataRefresh(batchLimit = 50): Promise<{
 }> {
   const twentyFiveDaysAgo = new Date(Date.now() - 25 * 24 * 60 * 60 * 1000);
 
-  // 1. Fetch leads requiring refresh
+  // 1. Fetch leads requiring refresh (strictly YOUTUBE leads with non-null channelId)
   const staleLeads = await db
     .select({
       id: leads.id,
@@ -32,9 +32,13 @@ export async function runYouTubeDataRefresh(batchLimit = 50): Promise<{
     })
     .from(leads)
     .where(
-      or(
-        isNull(leads.refreshedAt),
-        lt(leads.refreshedAt, twentyFiveDaysAgo)
+      and(
+        eq(leads.sourceProvider, 'YOUTUBE'),
+        isNotNull(leads.channelId),
+        or(
+          isNull(leads.refreshedAt),
+          lt(leads.refreshedAt, twentyFiveDaysAgo)
+        )
       )
     )
     .limit(batchLimit);
@@ -49,7 +53,7 @@ export async function runYouTubeDataRefresh(batchLimit = 50): Promise<{
     await jobRunner.logEvent(jobId, 'JOB_STARTED', 'INFO', `Starting YouTube 25-day data compliance refresh for ${staleLeads.length} lead(s)`);
 
     const discoveryService = new YouTubeDiscoveryService();
-    const channelIds = staleLeads.map((l) => l.channelId);
+    const channelIds = staleLeads.map((l) => l.channelId!).filter(Boolean);
 
     const { channels, quotaReached } = await discoveryService.enrichChannelsBatch(channelIds);
 
@@ -68,6 +72,7 @@ export async function runYouTubeDataRefresh(batchLimit = 50): Promise<{
     let deletedCount = 0;
 
     for (const lead of staleLeads) {
+      if (!lead.channelId) continue;
       const freshData = returnedMap.get(lead.channelId);
 
       if (freshData) {

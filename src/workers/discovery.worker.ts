@@ -207,7 +207,9 @@ export async function runDiscoveryBatch(
 
       const existingMap = new Map<string, number>();
       for (const el of existingLeads) {
-        existingMap.set(el.channelId, el.id);
+        if (el.channelId) {
+          existingMap.set(el.channelId, el.id);
+        }
       }
 
       console.log(`  Identified ${existingLeads.length} existing channels in database.`);

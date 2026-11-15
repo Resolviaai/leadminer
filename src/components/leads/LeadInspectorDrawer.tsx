@@ -46,9 +46,15 @@ export interface LeadEmailItem {
 
 export interface InspectorLead {
   id: number;
-  channelId: string;
-  channelTitle: string;
-  channelUrl: string;
+  channelId?: string | null;
+  channelTitle?: string | null;
+  channelUrl?: string | null;
+  companyName?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  sourceProvider?: string | null;
+  industry?: string | null;
+  normalizedDomain?: string | null;
   customUrl?: string | null;
   description?: string | null;
   thumbnailUrl?: string | null;
@@ -304,7 +310,7 @@ export function LeadInspectorDrawer({
       <aside
         className="fixed inset-y-0 right-0 z-50 w-full sm:max-w-md md:max-w-lg bg-surface-100 border-l border-border shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-200 ease-out"
         role="dialog"
-        aria-label={`Lead details for ${lead.channelTitle}`}
+        aria-label={`Lead details for ${lead.channelTitle || lead.companyName || 'Lead'}`}
       >
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-border flex items-start justify-between gap-3 bg-surface-200/50 shrink-0">
@@ -312,18 +318,18 @@ export function LeadInspectorDrawer({
             {lead.thumbnailUrl ? (
               <img
                 src={lead.thumbnailUrl}
-                alt={lead.channelTitle}
+                alt={lead.channelTitle || lead.companyName || 'Lead'}
                 className="w-12 h-12 rounded-xl object-cover border border-border shrink-0 bg-surface-200"
               />
             ) : (
               <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-base shrink-0">
-                {lead.channelTitle.charAt(0).toUpperCase()}
+                {(lead.channelTitle || lead.companyName || 'L').charAt(0).toUpperCase()}
               </div>
             )}
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <h2 className="text-sm sm:text-base font-semibold text-text-main truncate">
-                  {lead.channelTitle}
+                  {lead.companyName ? `${lead.companyName} (${lead.channelTitle || 'Lead'})` : (lead.channelTitle || 'Lead')}
                 </h2>
                 {lead.country && (
                   <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-5 font-mono text-text-muted gap-1">
@@ -333,15 +339,17 @@ export function LeadInspectorDrawer({
               </div>
               <div className="flex items-center gap-2 mt-0.5 text-xs text-text-muted">
                 {lead.customUrl && <span className="text-primary font-medium">{lead.customUrl}</span>}
-                <a
-                  href={lead.channelUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 hover:text-text-main transition-colors"
-                >
-                  <span>YouTube</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
+                {lead.channelUrl && (
+                  <a
+                    href={lead.channelUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 hover:text-text-main transition-colors"
+                  >
+                    <span>YouTube</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
               </div>
             </div>
           </div>

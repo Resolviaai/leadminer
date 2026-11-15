@@ -19,6 +19,7 @@ export interface ContactCandidate {
   // Lead-level attributes
   channelTitle?: string | null;
   subscriberCount?: number;
+  sourceProvider?: string | null;
   category?: string | null;
   country?: string | null;
   isSuppressed?: boolean;
@@ -265,26 +266,29 @@ export class OutreachEligibilityEngine {
       };
     }
 
-    // Lead-level criteria checks
-    const subCount = candidate.subscriberCount ?? 0;
-    if (policy.minSubscribers !== undefined && subCount < policy.minSubscribers) {
-      return {
-        eligible: false,
-        decision: 'POLICY_EXCLUDED',
-        reason: `Subscriber count (${subCount}) below minimum threshold (${policy.minSubscribers})`,
-        confidenceScore: confidence,
-        evidence,
-      };
-    }
+    // Lead-level criteria checks (subscriber bounds only enforced for YouTube leads)
+    const isYouTube = !candidate.sourceProvider || candidate.sourceProvider === 'YOUTUBE';
+    if (isYouTube) {
+      const subCount = candidate.subscriberCount ?? 0;
+      if (policy.minSubscribers !== undefined && subCount < policy.minSubscribers) {
+        return {
+          eligible: false,
+          decision: 'POLICY_EXCLUDED',
+          reason: `Subscriber count (${subCount}) below minimum threshold (${policy.minSubscribers})`,
+          confidenceScore: confidence,
+          evidence,
+        };
+      }
 
-    if (policy.maxSubscribers !== undefined && subCount > policy.maxSubscribers) {
-      return {
-        eligible: false,
-        decision: 'POLICY_EXCLUDED',
-        reason: `Subscriber count (${subCount}) exceeds maximum threshold (${policy.maxSubscribers})`,
-        confidenceScore: confidence,
-        evidence,
-      };
+      if (policy.maxSubscribers !== undefined && subCount > policy.maxSubscribers) {
+        return {
+          eligible: false,
+          decision: 'POLICY_EXCLUDED',
+          reason: `Subscriber count (${subCount}) exceeds maximum threshold (${policy.maxSubscribers})`,
+          confidenceScore: confidence,
+          evidence,
+        };
+      }
     }
 
     if (policy.categoryWhitelist && policy.categoryWhitelist.length > 0) {

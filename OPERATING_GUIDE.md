@@ -6,13 +6,28 @@
 
 ```mermaid
 flowchart LR
-  A[Keywords] --> B[Find leads] --> C[Verify] --> D[Active campaign]
-  E[Templates + sequence] --> D
-  D --> F[Gmail] --> G[Sent + replies]
-  G -->|Reply / opt-out| H[Follow-ups stop]
+  A[YouTube Keywords] --> B[Find Leads]
+  I[CSV / Excel Upload] --> J[Campaign Leads]
+  B --> C[Verify] --> J
+  J --> D[Active Campaign]
+  E[Templates + Sequence] --> D
+  D --> F[Gmail Inboxes] --> G[Sent + Replies]
+  G -->|Reply / Opt-Out| H[Follow-Ups Stop]
 ```
 
-Automation discovers and verifies leads, plans outreach daily, and dispatches due email every 15 minutes.
+Automation discovers YouTube creators and ingests bulk CSV/Excel leads, verifies email deliverability, plans multi-step sequence outreach daily, and dispatches due email every 15 minutes.
+
+## Lead Acquisition & Campaign Import (v1.5)
+
+LeadMiner supports two parallel acquisition channels feeding the same outreach engine:
+1. **Autonomous YouTube Discovery**: Continuous discovery via keywords and verification.
+2. **Spreadsheet Ingestion (CSV / XLSX / XLS)**:
+   - On **Campaigns**, click **Import Leads (CSV / Excel)**.
+   - Drag and drop your contact export (Apollo, Clay, Hunter, or custom list).
+   - The wizard automatically maps headers (`Email`, `First Name`, `Last Name`, `Company Name`, `Website`, etc.).
+   - Previews the first 5 rows and validates email syntax, detects internal duplicates, and strips formula injection characters.
+   - Enrolls leads in batches of 250 with advisory locking, respecting global suppressions and domain deduplication.
+   - View all enrolled leads and their current progression under the **Enrolled Leads** tab.
 
 ## Operating rhythm
 

@@ -1,5 +1,5 @@
 import { db } from '../../db/client';
-import { messages, replies, leads, campaigns, gmailAccounts, suppressions, scheduledEmails } from '../../db/schema';
+import { messages, replies, leads, campaigns, gmailAccounts, suppressions, scheduledEmails, campaignLeads } from '../../db/schema';
 import { eq, and, sql, inArray } from 'drizzle-orm';
 import { telegramService } from '../notifications/telegram.service';
 import { env } from '../../config/env';
@@ -126,6 +126,27 @@ export class ReplyDetectorService {
             updatedAt: new Date(),
           })
           .where(eq(leads.id, match.leadId));
+      }
+
+      // Update campaign_leads status for this specific campaign & lead
+      if (match.campaignId && match.leadId) {
+        try {
+          await db
+            .update(campaignLeads)
+            .set({
+              status: isOptOut ? 'DISQUALIFIED' : 'REPLIED',
+              disqualifiedReason: isOptOut ? 'OPT_OUT_REPLY' : null,
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(campaignLeads.campaignId, match.campaignId),
+                eq(campaignLeads.leadId, match.leadId)
+              )
+            );
+        } catch {
+          // non-fatal
+        }
       }
 
       // Automatically cancel any remaining pending scheduled emails for this lead (e.g. secondary contacts)

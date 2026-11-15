@@ -15,6 +15,7 @@ export type LeadQualificationCriteria = QualificationCriteria;
 
 export interface QualificationCandidate {
   subscriberCount: number;
+  sourceProvider?: string | null;
   email?: string | null;
   emailStatus?: string | null;
   website?: string | null;
@@ -66,13 +67,16 @@ export class LeadQualificationService {
       return { qualified: false, reason: `Email is not verified as deliverable (current status: ${candidate.emailStatus || 'UNKNOWN'})` };
     }
 
-    // 5. Subscriber count bounds
-    if (criteria.minSubscribers !== undefined && candidate.subscriberCount < criteria.minSubscribers) {
-      return { qualified: false, reason: `Subscriber count (${candidate.subscriberCount}) below minimum threshold (${criteria.minSubscribers})` };
-    }
+    // 5. Subscriber count bounds (strictly for YouTube leads; bypassed for CSV/B2B leads)
+    const isYouTube = !candidate.sourceProvider || candidate.sourceProvider === 'YOUTUBE';
+    if (isYouTube) {
+      if (criteria.minSubscribers !== undefined && candidate.subscriberCount < criteria.minSubscribers) {
+        return { qualified: false, reason: `Subscriber count (${candidate.subscriberCount}) below minimum threshold (${criteria.minSubscribers})` };
+      }
 
-    if (criteria.maxSubscribers !== undefined && candidate.subscriberCount > criteria.maxSubscribers) {
-      return { qualified: false, reason: `Subscriber count (${candidate.subscriberCount}) exceeds maximum threshold (${criteria.maxSubscribers})` };
+      if (criteria.maxSubscribers !== undefined && candidate.subscriberCount > criteria.maxSubscribers) {
+        return { qualified: false, reason: `Subscriber count (${candidate.subscriberCount}) exceeds maximum threshold (${criteria.maxSubscribers})` };
+      }
     }
 
     // 6. Category match

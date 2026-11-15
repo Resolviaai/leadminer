@@ -39,7 +39,7 @@ export async function reconcileQualifications(): Promise<{ reconciled: number; n
     number,
     {
       leadId: number;
-      title: string;
+      title: string | null;
       subs: number;
       country: string | null;
       suppressionStatus: boolean;

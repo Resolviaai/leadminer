@@ -66,7 +66,7 @@ async function handleUnsubscribe(email: string, leadIdStr?: string | null) {
       .limit(1);
 
     if (lead.length > 0) {
-      channelTitle = lead[0].channelTitle;
+      channelTitle = lead[0].channelTitle ?? 'Direct Unsubscribe';
       channelId = lead[0].channelId;
 
       await db

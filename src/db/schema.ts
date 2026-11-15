@@ -145,6 +145,16 @@ export const logLevelEnum = pgEnum('log_level', [
   'FATAL',
 ]);
 
+export const campaignLeadStatusEnum = pgEnum('campaign_lead_status', [
+  'ENROLLED',
+  'SCHEDULED',
+  'CONTACTED',
+  'REPLIED',
+  'COMPLETED',
+  'PAUSED',
+  'DISQUALIFIED',
+]);
+
 // Tables
 
 // 1. keywords
@@ -186,9 +196,15 @@ export const leads = pgTable(
   'leads',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
-    channelId: varchar('channel_id', { length: 100 }).notNull(),
-    channelUrl: varchar('channel_url', { length: 500 }).notNull(),
-    channelTitle: varchar('channel_title', { length: 500 }).notNull(),
+    channelId: varchar('channel_id', { length: 100 }), // Nullable for CSV/Excel leads
+    channelUrl: varchar('channel_url', { length: 500 }), // Nullable
+    channelTitle: varchar('channel_title', { length: 500 }), // Nullable
+    companyName: varchar('company_name', { length: 255 }),
+    firstName: varchar('first_name', { length: 255 }),
+    lastName: varchar('last_name', { length: 255 }),
+    sourceProvider: varchar('source_provider', { length: 50 }).notNull().default('YOUTUBE'),
+    industry: varchar('industry', { length: 255 }),
+    normalizedDomain: varchar('normalized_domain', { length: 255 }),
     customUrl: varchar('custom_url', { length: 255 }),
     description: text('description'),
     website: varchar('website', { length: 500 }),
@@ -216,6 +232,8 @@ export const leads = pgTable(
     index('idx_leads_source_keyword').on(table.sourceKeywordId),
     index('idx_leads_country').on(table.country),
     index('idx_leads_refreshed_at').on(table.refreshedAt),
+    index('idx_leads_source_provider').on(table.sourceProvider),
+    index('idx_leads_normalized_domain').on(table.normalizedDomain),
   ]
 );
 
@@ -402,6 +420,35 @@ export const leadSequenceProgress = pgTable(
     index('idx_lead_seq_progress_account_due').on(table.pinnedGmailAccountId, table.status, table.nextStepDueAt),
   ]
 );
+
+// 5e. campaign_leads (Campaign Membership Roster & Custom Variables)
+export const campaignLeads = pgTable(
+  'campaign_leads',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    campaignId: bigint('campaign_id', { mode: 'number' }).notNull().references(() => campaigns.id, { onDelete: 'cascade' }),
+    leadId: bigint('lead_id', { mode: 'number' }).notNull().references(() => leads.id, { onDelete: 'cascade' }),
+    primaryContactId: bigint('primary_contact_id', { mode: 'number' }).references(() => contacts.id, { onDelete: 'set null' }),
+    status: campaignLeadStatusEnum('status').notNull().default('ENROLLED'),
+    currentStepNumber: integer('current_step_number').notNull().default(1),
+    customVariables: jsonb('custom_variables').notNull().default({}),
+    disqualifiedReason: varchar('disqualified_reason', { length: 255 }),
+    enrolledAt: timestamp('enrolled_at', { withTimezone: true }).notNull().defaultNow(),
+    lastContactedAt: timestamp('last_contacted_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('uq_campaign_leads_campaign_lead').on(table.campaignId, table.leadId),
+    index('idx_campaign_leads_campaign_status').on(table.campaignId, table.status),
+    index('idx_campaign_leads_lead_id').on(table.leadId),
+    index('idx_campaign_leads_primary_contact').on(table.primaryContactId),
+    index('idx_campaign_leads_lead_contacted').on(table.leadId, table.lastContactedAt),
+  ]
+);
+
+export type CampaignLead = typeof campaignLeads.$inferSelect;
+export type NewCampaignLead = typeof campaignLeads.$inferInsert;
 
 // 6. gmail_accounts
 export const gmailAccounts = pgTable(
@@ -649,6 +696,7 @@ export const leadsRelations = relations(leads, ({ one, many }) => ({
     references: [keywords.id],
   }),
   contacts: many(contacts),
+  campaignLeads: many(campaignLeads),
   keywordSources: many(leadKeywordSources),
   messages: many(messages),
   replies: many(replies),
@@ -678,8 +726,24 @@ export const campaignsRelations = relations(campaigns, ({ one, many }) => ({
     fields: [campaigns.templateId],
     references: [templates.id],
   }),
+  campaignLeads: many(campaignLeads),
   messages: many(messages),
   scheduledEmails: many(scheduledEmails),
+}));
+
+export const campaignLeadsRelations = relations(campaignLeads, ({ one }) => ({
+  campaign: one(campaigns, {
+    fields: [campaignLeads.campaignId],
+    references: [campaigns.id],
+  }),
+  lead: one(leads, {
+    fields: [campaignLeads.leadId],
+    references: [leads.id],
+  }),
+  primaryContact: one(contacts, {
+    fields: [campaignLeads.primaryContactId],
+    references: [contacts.id],
+  }),
 }));
 
 export const messagesRelations = relations(messages, ({ one }) => ({

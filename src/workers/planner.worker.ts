@@ -11,6 +11,7 @@ import {
   sequenceSteps,
   leadSequenceProgress,
   keywords,
+  campaignLeads,
 } from '../../src/db/schema';
 import { eq, and, inArray, isNotNull, sql, notInArray, desc } from 'drizzle-orm';
 import { env } from '../config/env';
@@ -381,8 +382,8 @@ export async function runPlanner(): Promise<PlannerResult> {
         .where(eq(messages.campaignId, campaign.id));
       const contactedIds = new Set(contactedContacts.map((c) => c.contactId).filter(Boolean));
 
-      // Query Step 1 candidate leads and contacts
-      const candidates = await db
+      // Query Step 1 candidate leads (Campaign-first: prioritize leads enrolled in campaignLeads)
+      const enrolledCandidates = await db
         .select({
           leadId: leads.id,
           contactId: contacts.id,
@@ -401,6 +402,45 @@ export async function runPlanner(): Promise<PlannerResult> {
           subscriberCount: leads.subscriberCount,
           discoveredAt: leads.discoveredAt,
           country: leads.country,
+          sourceProvider: leads.sourceProvider,
+          category: keywords.category,
+          suppressionStatus: leads.suppressionStatus,
+          outreachStatus: leads.outreachStatus,
+        })
+        .from(campaignLeads)
+        .innerJoin(leads, eq(campaignLeads.leadId, leads.id))
+        .innerJoin(contacts, eq(campaignLeads.primaryContactId, contacts.id))
+        .leftJoin(keywords, eq(leads.sourceKeywordId, keywords.id))
+        .where(
+          and(
+            eq(campaignLeads.campaignId, campaign.id),
+            eq(campaignLeads.status, 'ENROLLED'),
+            eq(leads.suppressionStatus, false),
+            isNotNull(contacts.email)
+          )
+        )
+        .limit(slotsForNew * 10);
+
+      const candidates = enrolledCandidates.length > 0 ? enrolledCandidates : await db
+        .select({
+          leadId: leads.id,
+          contactId: contacts.id,
+          email: contacts.email,
+          emailStatus: contacts.emailStatus,
+          verificationReason: contacts.verificationReason,
+          confidenceScore: contacts.confidenceScore,
+          priorityScore: contacts.priorityScore,
+          wasRepaired: contacts.wasRepaired,
+          repairedFrom: contacts.repairedFrom,
+          repairCode: contacts.repairCode,
+          isPrimary: contacts.isPrimary,
+          emailCategory: contacts.emailCategory,
+          source: contacts.source,
+          channelTitle: leads.channelTitle,
+          subscriberCount: leads.subscriberCount,
+          discoveredAt: leads.discoveredAt,
+          country: leads.country,
+          sourceProvider: leads.sourceProvider,
           category: keywords.category,
           suppressionStatus: leads.suppressionStatus,
           outreachStatus: leads.outreachStatus,
@@ -602,6 +642,17 @@ export async function runPlanner(): Promise<PlannerResult> {
                   pinnedGmailAccountId: account.id,
                 })
                 .onConflictDoNothing();
+
+              // Mark campaignLeads status as SCHEDULED if pre-enrolled in this campaign
+              await tx
+                .update(campaignLeads)
+                .set({ status: 'SCHEDULED', updatedAt: new Date() })
+                .where(
+                  and(
+                    eq(campaignLeads.campaignId, campaign.id),
+                    eq(campaignLeads.leadId, cand.leadId)
+                  )
+                );
             }
           });
 

@@ -57,7 +57,7 @@ export function RunOutreachButton() {
         </>
       ) : status === 'success' ? (
         <>
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+          <CheckCircle2 className="w-3.5 h-3.5 text-success" />
           <span>Batch Sent!</span>
         </>
       ) : status === 'error' ? (

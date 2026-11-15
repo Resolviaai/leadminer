@@ -44,9 +44,15 @@ import { getCountryDisplayName, TIER_1_COUNTRY_FLAGS } from "@/config/countries"
 
 export type Lead = {
   id: number;
-  channelId: string;
-  channelTitle: string;
-  channelUrl: string;
+  channelId?: string | null;
+  channelTitle?: string | null;
+  channelUrl?: string | null;
+  companyName?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  sourceProvider?: string | null;
+  industry?: string | null;
+  normalizedDomain?: string | null;
   customUrl?: string | null;
   description?: string | null;
   thumbnailUrl?: string | null;
@@ -1231,19 +1237,19 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                   {lead.thumbnailUrl ? (
                     <img
                       src={lead.thumbnailUrl}
-                      alt={lead.channelTitle}
+                      alt={lead.channelTitle || lead.companyName || "Lead"}
                       className="w-9 h-9 rounded-lg object-cover border border-border shrink-0 bg-surface-200 mt-0.5"
                     />
                   ) : (
                     <div className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs shrink-0 mt-0.5">
-                      {lead.channelTitle.charAt(0).toUpperCase()}
+                      {(lead.channelTitle || lead.companyName || "L").charAt(0).toUpperCase()}
                     </div>
                   )}
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-semibold text-sm text-text-main leading-tight truncate">
-                        {lead.channelTitle}
+                        {lead.companyName ? `${lead.companyName} (${lead.channelTitle || 'Lead'})` : (lead.channelTitle || 'Unnamed Lead')}
                       </span>
                       {lead.country && (
                         <Badge
@@ -1254,16 +1260,18 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                           {TIER_1_COUNTRY_FLAGS[lead.country.toUpperCase()] ? `${TIER_1_COUNTRY_FLAGS[lead.country.toUpperCase()]} ${lead.country.toUpperCase()}` : lead.country.toUpperCase()}
                         </Badge>
                       )}
-                      <a
-                        href={lead.channelUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-text-muted hover:text-text-main active:scale-95 inline-flex items-center justify-center p-1.5 rounded-md min-w-[36px] min-h-[36px] hover:bg-surface-200 active:bg-surface-300 transition-all"
-                        aria-label={`Open ${lead.channelTitle} on YouTube`}
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
+                      {lead.channelUrl && (
+                        <a
+                          href={lead.channelUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-text-muted hover:text-text-main active:scale-95 inline-flex items-center justify-center p-1.5 rounded-md min-w-[36px] min-h-[36px] hover:bg-surface-200 active:bg-surface-300 transition-all"
+                          aria-label={`Open ${lead.channelTitle || 'channel'} on YouTube`}
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 mt-1 text-[11px] text-text-muted flex-wrap">
                       {lead.customUrl && <span className="text-primary font-medium">{lead.customUrl}</span>}
@@ -1530,21 +1538,21 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                         {lead.thumbnailUrl ? (
                           <img
                             src={lead.thumbnailUrl}
-                            alt={lead.channelTitle}
+                            alt={lead.channelTitle || lead.companyName || "Lead"}
                             className="w-7 h-7 rounded-md object-cover border border-border shrink-0 bg-surface-200"
                           />
                         ) : (
                           <div className="w-7 h-7 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-[11px] shrink-0">
-                            {lead.channelTitle.charAt(0).toUpperCase()}
+                            {(lead.channelTitle || lead.companyName || "L").charAt(0).toUpperCase()}
                           </div>
                         )}
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
                             <span
                               className="font-medium text-text-main truncate text-xs"
-                              title={`${lead.channelTitle} (${lead.sourceKeyword ? `kw: ${lead.sourceKeyword}` : 'autonomous'})`}
+                              title={`${lead.channelTitle || lead.companyName || 'Lead'} (${lead.sourceKeyword ? `kw: ${lead.sourceKeyword}` : 'autonomous'})`}
                             >
-                              {lead.channelTitle}
+                              {lead.companyName ? `${lead.companyName} (${lead.channelTitle || 'Lead'})` : (lead.channelTitle || 'Lead')}
                             </span>
                             {lead.country && (
                               <Badge
@@ -1555,16 +1563,18 @@ export function LeadsInfiniteList({ initialData, total: initialTotal }: Props) {
                                 {TIER_1_COUNTRY_FLAGS[lead.country.toUpperCase()] ? `${TIER_1_COUNTRY_FLAGS[lead.country.toUpperCase()]} ${lead.country.toUpperCase()}` : lead.country.toUpperCase()}
                               </Badge>
                             )}
-                            <a
-                              href={lead.channelUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="text-text-muted hover:text-text-main shrink-0 p-0.5"
-                              title={`Open ${lead.channelTitle} on YouTube`}
-                            >
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
+                            {lead.channelUrl && (
+                              <a
+                                href={lead.channelUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-text-muted hover:text-text-main shrink-0 p-0.5"
+                                title={`Open ${lead.channelTitle || 'channel'} on YouTube`}
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
                           </div>
                           {lead.customUrl && (
                             <span className="text-[10px] text-text-muted block truncate font-mono">
